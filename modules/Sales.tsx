@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { 
   Search, 
@@ -21,7 +22,12 @@ import {
   Wallet,
   Barcode,
   Scale,
-  CreditCard
+  CreditCard,
+  AlertTriangle,
+  History,
+  User,
+  Clock,
+  Image as ImageIcon
 } from 'lucide-react';
 import { Product, ProductType, Sale, Customer, AppSettings } from '../types';
 
@@ -40,6 +46,7 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
   const [selectedType, setSelectedType] = useState<ProductType | null>(null);
   const [cart, setCart] = useState<Product[]>([]);
   const [currentProduct, setCurrentProduct] = useState<Product | null>(null);
+  const [previouslySoldItem, setPreviouslySoldItem] = useState<Sale | null>(null);
   const [discount, setDiscount] = useState(0);
   const [customerInfo, setCustomerInfo] = useState({ id: '', fullName: '', phone: '', title: '', address: '' });
   const [searchCode, setSearchCode] = useState('');
@@ -63,19 +70,30 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
   } | null>(null);
 
   const handleProductSearch = () => {
+    const code = searchCode.trim().toLowerCase();
+    if (!code) return;
+
+    // 1. Aktiv stokda tapmağa çalışırıq
     const found = products.find(p => 
-      p.code.toLowerCase() === searchCode.trim().toLowerCase() && 
-      p.type === selectedType
+      p.code.toLowerCase() === code && 
+      p.type === selectedType &&
+      p.stockCount === 1
     );
 
     if (found) {
-      if (found.stockCount <= 0) {
-        alert("Bu məhsulun stoku bitib!");
-        return;
-      }
       setCurrentProduct(found);
+      setPreviouslySoldItem(null);
     } else {
-      alert(`${selectedType} qrupunda '${searchCode}' kodlu məhsul tapılmadı!`);
+      // 2. Stokda yoxdursa, satış tarixçəsində yoxlayırıq
+      const sold = sales.find(s => s.productCode.toLowerCase() === code);
+      if (sold) {
+        setPreviouslySoldItem(sold);
+        setCurrentProduct(null);
+      } else {
+        alert(`${selectedType} qrupunda '${searchCode}' kodlu aktiv məhsul tapılmadı!`);
+        setCurrentProduct(null);
+        setPreviouslySoldItem(null);
+      }
     }
   };
 
@@ -87,6 +105,7 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
       }
       setCart([...cart, currentProduct]);
       setCurrentProduct(null);
+      setPreviouslySoldItem(null);
       setSearchCode('');
       setStep(1);
     }
@@ -99,6 +118,7 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
         setCart([...cart, currentProduct]);
       }
       setCurrentProduct(null);
+      setPreviouslySoldItem(null);
       setSearchCode('');
       setStep(3);
     }
@@ -136,6 +156,7 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
       weight: Number(product.weight) || 0,
       carat: product.carat,
       supplier: product.supplier,
+      brilliant: product.brilliant,
       imageUrl: product.imageUrl
     }));
 
@@ -159,7 +180,7 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
     
     const cartIds = cart.map(p => p.id);
     setProducts(prevProducts => prevProducts.map(p => 
-      cartIds.includes(p.id) ? { ...p, stockCount: Math.max(0, p.stockCount - 1) } : p
+      cartIds.includes(p.id) ? { ...p, stockCount: 0 } : p
     ));
 
     setShowCreditModal(false);
@@ -171,6 +192,7 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
     setSelectedType(null);
     setCart([]);
     setCurrentProduct(null);
+    setPreviouslySoldItem(null);
     setDiscount(0);
     setCustomerInfo({ id: '', fullName: '', phone: '', title: '', address: '' });
     setSearchCode('');
@@ -291,7 +313,7 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
       {step === 1 && (
         <div className="flex-1 flex flex-col items-center justify-start space-y-4 md:space-y-6 animate-in zoom-in-95 duration-500 no-print">
           <div className="text-center space-y-1 mt-2">
-            <h2 className="text-xl md:text-2xl font-black text-stone-800 tracking-tighter uppercase leading-none">Kateqoriya Seçin</h2>
+            <h2 className="text-xl md:text-2xl font-black text-stone-800 tracking-tighter uppercase leading-none">Kateqoriya</h2>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-6 w-full max-w-6xl">
             {settings.productTypes.map((type) => (
@@ -303,13 +325,13 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
                 <div className="w-10 h-10 md:w-14 md:h-14 bg-stone-50 rounded-xl md:rounded-2xl flex items-center justify-center mb-2 md:mb-3 group-hover:scale-110 group-hover:bg-amber-50 transition-all">
                    <Gem className="w-5 h-5 md:w-7 md:h-7 text-amber-500" />
                 </div>
-                <span className="text-[10px] md:text-xs font-black text-stone-700 uppercase tracking-widest">{type}</span>
+                <span className="text-[10px] md:text-xs font-black text-stone-700 uppercase tracking-widest text-center px-2">{type}</span>
               </button>
             ))}
           </div>
           {cart.length > 0 && (
             <button onClick={() => setStep(3)} className="w-full sm:w-auto bg-amber-950 text-white px-12 py-4 md:py-5 rounded-2xl md:rounded-[2rem] font-black text-base md:text-lg uppercase tracking-widest flex items-center justify-center shadow-2xl mt-4 md:mt-10 hover:bg-black transition-all">
-               SƏBƏTƏ KEÇ ({cart.length}) <ArrowRight className="ml-4" />
+               ÖDƏNİŞƏ KEÇ ({cart.length}) <ArrowRight className="ml-4" />
             </button>
           )}
         </div>
@@ -323,29 +345,93 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
                 <ArrowLeft className="w-5 h-5 md:w-6 md:h-6" />
               </button>
               <div>
-                <h3 className="text-base md:text-xl font-black text-stone-900 uppercase leading-none">{selectedType} Satışı</h3>
-                <p className="text-[9px] md:text-[10px] text-stone-400 font-bold uppercase tracking-widest">Mal kodu daxil edin</p>
+                <h3 className="text-base md:text-xl font-black text-stone-900 uppercase leading-none">{selectedType}</h3>
+                <p className="text-[9px] md:text-[10px] text-stone-400 font-bold uppercase tracking-widest">Kodu daxil edin</p>
               </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-3xl md:rounded-[3rem] p-4 md:p-12 shadow-2xl border border-stone-100 flex flex-col items-center justify-start pt-8 md:pt-12 min-h-[400px]">
-            <div className="w-full max-w-2xl relative">
+          <div className="bg-white rounded-3xl md:rounded-[3rem] p-4 md:p-8 shadow-2xl border border-stone-100 flex flex-col items-center justify-start pt-8 md:pt-12 min-h-[400px] overflow-y-auto">
+            <div className="w-full max-w-2xl relative mb-6">
               <Search className="absolute left-4 md:left-6 top-1/2 -translate-y-1/2 text-stone-300 w-5 h-5 md:w-8 md:h-8" />
               <input 
                 type="text" autoFocus value={searchCode}
                 onChange={(e) => setSearchCode(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleProductSearch()}
-                placeholder="Kod daxil edin..."
+                placeholder="Məhsul kodu..."
                 className="w-full bg-stone-50 border-none rounded-2xl md:rounded-[1.5rem] py-5 md:py-7 pl-12 md:pl-16 pr-24 md:pr-40 text-lg md:text-2xl font-bold text-stone-800 focus:ring-8 focus:ring-amber-50 focus:bg-white transition-all shadow-inner"
               />
               <button onClick={handleProductSearch} className="absolute right-2 md:right-3 top-1/2 -translate-y-1/2 bg-amber-500 text-amber-950 px-4 md:px-10 py-2 md:py-4 rounded-xl font-black text-[10px] md:text-sm uppercase tracking-widest transition-all active:scale-95">
-                TAP
+                AXTAR
               </button>
             </div>
 
+            {/* BU HİSSƏ: ƏVVƏLLƏR SATILAN MƏHSUL XƏBƏRDARLIĞI */}
+            {previouslySoldItem && (
+              <div className="w-full max-w-3xl bg-red-50 border-2 md:border-4 border-white shadow-2xl rounded-3xl md:rounded-[3rem] p-6 md:p-10 flex flex-col md:flex-row items-center space-y-6 md:space-y-0 md:space-x-10 animate-in zoom-in-95">
+                 <div className="relative">
+                    <div className="w-32 h-32 md:w-48 md:h-48 bg-white rounded-2xl md:rounded-3xl flex items-center justify-center p-2 shadow-xl border-2 border-red-100 overflow-hidden group">
+                        {previouslySoldItem.imageUrl ? (
+                          <img src={previouslySoldItem.imageUrl} className="w-full h-full object-contain" />
+                        ) : (
+                          <ImageIcon className="text-red-100 w-16 h-16" />
+                        )}
+                        <div className="absolute inset-0 bg-red-600/10 flex items-center justify-center">
+                           <AlertTriangle size={64} className="text-red-600/20" />
+                        </div>
+                    </div>
+                    <div className="absolute -top-4 -right-4 bg-red-600 text-white p-2 rounded-full shadow-lg border-4 border-white">
+                       <History size={20} />
+                    </div>
+                 </div>
+
+                 <div className="flex-1 text-center md:text-left space-y-3">
+                    <div className="inline-flex items-center space-x-2 bg-red-600 text-white px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest mb-2">
+                       <X size={14} strokeWidth={3} />
+                       <span>BU KOD ARTIQ SATILIB</span>
+                    </div>
+                    <h4 className="text-2xl md:text-4xl font-black text-stone-900 uppercase tracking-tighter leading-none">{previouslySoldItem.productName}</h4>
+                    
+                    <div className="grid grid-cols-2 gap-4 py-4 border-y border-red-100">
+                       <div className="flex items-center space-x-3">
+                          <div className="p-2 bg-white rounded-lg text-red-500 shadow-sm"><User size={16}/></div>
+                          <div className="text-left">
+                             <p className="text-[8px] font-black text-stone-400 uppercase tracking-widest">ALAN MÜŞTƏRİ</p>
+                             <p className="text-[11px] font-black text-stone-800 uppercase">{previouslySoldItem.customerName}</p>
+                          </div>
+                       </div>
+                       <div className="flex items-center space-x-3">
+                          <div className="p-2 bg-white rounded-lg text-red-500 shadow-sm"><Clock size={16}/></div>
+                          <div className="text-left">
+                             <p className="text-[8px] font-black text-stone-400 uppercase tracking-widest">SATIŞ TARİXİ</p>
+                             <p className="text-[11px] font-black text-stone-800 uppercase">{new Date(previouslySoldItem.date).toLocaleDateString()}</p>
+                          </div>
+                       </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2">
+                       <div>
+                          <p className="text-[9px] font-black text-stone-400 uppercase">SATIŞ MƏBLƏĞİ</p>
+                          <p className="text-2xl font-black text-red-600 tracking-tighter">{previouslySoldItem.total.toLocaleString()} ₼</p>
+                       </div>
+                       <div className="text-right">
+                          <p className="text-[9px] font-black text-stone-400 uppercase">ÇƏKİ / ƏYAR</p>
+                          <p className="text-sm font-black text-stone-800 uppercase">{previouslySoldItem.weight} gr | {previouslySoldItem.carat}K</p>
+                       </div>
+                    </div>
+
+                    <button 
+                       onClick={() => {setPreviouslySoldItem(null); setSearchCode('');}} 
+                       className="w-full bg-white border border-red-100 text-stone-400 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-50 hover:text-red-500 transition-all mt-4"
+                    >
+                       Axtarışı Təmizlə
+                    </button>
+                 </div>
+              </div>
+            )}
+
             {currentProduct && (
-              <div className="w-full max-w-3xl bg-amber-50 mt-8 md:mt-12 rounded-3xl md:rounded-[3rem] p-4 md:p-10 border-2 md:border-4 border-white shadow-2xl flex flex-col md:flex-row items-center space-y-4 md:space-y-0 md:space-x-10 animate-in zoom-in-95">
+              <div className="w-full max-w-3xl bg-amber-50 mt-4 rounded-3xl md:rounded-[3rem] p-4 md:p-10 border-2 md:border-4 border-white shadow-2xl flex flex-col md:flex-row items-center space-y-4 md:space-y-0 md:space-x-10 animate-in zoom-in-95">
                  <div className="w-32 h-32 md:w-40 md:h-40 bg-white rounded-2xl md:rounded-3xl flex items-center justify-center p-2 shadow-sm border border-stone-100 overflow-hidden">
                     {currentProduct.imageUrl ? <img src={currentProduct.imageUrl} className="w-full h-full object-contain" /> : <Sparkles className="text-amber-200 w-8 h-8 md:w-12 md:h-12" />}
                  </div>
@@ -359,7 +445,7 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
                           <PackagePlus size={18} className="mr-2 md:mr-3" /> SƏBƏTƏ AT
                        </button>
                        <button onClick={directToPayment} className="flex-1 bg-amber-500 text-amber-950 py-4 md:py-5 rounded-xl md:rounded-2xl font-black text-[10px] md:text-xs uppercase hover:bg-amber-400 transition-all shadow-xl flex items-center justify-center">
-                          <CreditCard size={18} className="mr-2 md:mr-3" /> HƏMƏN ÖDƏ
+                          <CreditCard size={18} className="mr-2 md:mr-3" /> BİRDƏFƏLİK ÖDƏ
                        </button>
                     </div>
                  </div>
@@ -490,7 +576,7 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
         </div>
       )}
 
-      {/* MODALLAR (Mobil üçün optimallaşdırılmış) */}
+      {/* MODALLAR */}
       {showCustomerSelector && (
         <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-md z-[60] flex items-end md:items-center justify-center p-0 md:p-4 animate-in fade-in no-print">
            <div className="bg-white rounded-t-[2.5rem] md:rounded-[3rem] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col h-[85vh] md:h-auto md:max-h-[90vh]">

@@ -1,6 +1,11 @@
 
 export type ProductType = string;
 
+export interface ProductLog {
+  date: string;
+  action: string;
+}
+
 export interface Product {
   id: string;
   code: string;
@@ -9,11 +14,13 @@ export interface Product {
   type: ProductType;
   supplier: string; // Tədərükçü
   brilliant?: string; // Brilliant məlumatı
-  weight: number | ''; // Çəki (boş ola birər)
+  weight: number | ''; // Çəki
   supplierPrice: number;
   price: number | '';
   stockCount: number;
   imageUrl?: string;
+  purchaseDate: string; // Alış tarixi
+  logs: ProductLog[]; // Dəyişiklik tarixçəsi
 }
 
 export interface Customer {
@@ -37,21 +44,38 @@ export interface Sale {
   discount: number;
   total: number;
   date: string;
-  status: 'completed' | 'returned';
+  status: 'completed' | 'returned' | 'exchanged';
+  returnNote?: string; // Geri qaytarılma və ya dəyişdirilmə detalları
   // Snapshot fields for history
   weight?: number;
   carat?: number;
   supplier?: string;
+  brilliant?: string; // Brilliant məlumatı (tarixçə üçün)
   imageUrl?: string;
+}
+
+export interface ScrapItem {
+  name: string;
+  weight: number;
+  carat: number;
+  image: string;
+}
+
+export interface ScrapPhone {
+  number: string;
+  owner: string;
 }
 
 export interface ScrapGold {
   id: string;
   customerName: string;
-  grams: number;
-  carat: number; // Ayar
+  idCardFin: string;
+  phones: ScrapPhone[];
+  items: ScrapItem[];
   pricePerGram: number;
   totalPrice: number;
+  personImage?: string;
+  idCardImage?: string;
   isMelted: boolean;
   date: string;
 }
@@ -71,7 +95,7 @@ export enum Page {
   Sales = 'SALES',
   Stock = 'STOCK',
   Customers = 'CUSTOMERS',
-  Debt = 'DEBT',
+  SoldProducts = 'SOLD_PRODUCTS',
   Return = 'RETURN',
   Scrap = 'SCRAP',
   Settings = 'SETTINGS',

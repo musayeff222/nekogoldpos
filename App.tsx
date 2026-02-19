@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   ShoppingBag, 
@@ -10,13 +11,14 @@ import {
   BarChart3,
   Menu,
   ChevronLeft,
-  LayoutGrid
+  LayoutGrid,
+  History
 } from 'lucide-react';
 import { Page, Product, Sale, Customer, ScrapGold, AppSettings } from './types';
 import SalesModule from './modules/Sales';
 import StockModule from './modules/Stock';
 import CustomersModule from './modules/Customers';
-import DebtModule from './modules/Debt';
+import SoldProductsModule from './modules/SoldProducts';
 import ReturnsModule from './modules/Returns';
 import ScrapModule from './modules/Scrap';
 import SettingsModule from './modules/Settings';
@@ -43,9 +45,35 @@ const App: React.FC = () => {
   useEffect(() => {
     // Initial static data
     setProducts([
-      { id: '1', code: 'YZ-001', name: 'Sadə Qaşlı Üzük', carat: 22, type: 'Üzük', weight: 4.2, supplier: 'Tədərükçü A', supplierPrice: 8500, price: 10500, stockCount: 5 },
-      { id: '2', code: 'KP-023', name: 'Brilliant Sırğa', carat: 18, type: 'Sırğa', weight: 2.1, supplier: 'Tədərükçü B', supplierPrice: 15000, price: 19500, stockCount: 2, brilliant: '0.25ct VS1' },
-      { id: '3', code: 'BL-112', name: 'Burma Qolbaq', carat: 22, type: 'Qolbaq', weight: 20.0, supplier: 'Atelye X', supplierPrice: 42000, price: 46500, stockCount: 12 },
+      { 
+        id: '1', 
+        code: 'YZ-001', 
+        name: 'Sadə Qaşlı Üzük', 
+        carat: 22, 
+        type: 'Üzük', 
+        weight: 4.2, 
+        supplier: 'Tədərükçü A', 
+        supplierPrice: 8500, 
+        price: 10500, 
+        stockCount: 1,
+        purchaseDate: new Date().toISOString().split('T')[0],
+        logs: [{ date: new Date().toISOString(), action: 'Sistemə əlavə edildi' }]
+      },
+      { 
+        id: '2', 
+        code: 'KP-023', 
+        name: 'Brilliant Sırğa', 
+        carat: 18, 
+        type: 'Sırğa', 
+        weight: 2.1, 
+        supplier: 'Tədərükçü B', 
+        supplierPrice: 15000, 
+        price: 19500, 
+        stockCount: 1, 
+        brilliant: '0.25ct VS1',
+        purchaseDate: new Date().toISOString().split('T')[0],
+        logs: [{ date: new Date().toISOString(), action: 'Sistemə əlavə edildi' }]
+      },
     ]);
     setCustomers([
       { id: 'c1', fullName: 'Əhməd Yılmaz', phone: '05321234567', cashDebt: 1500, goldDebt: 2.5, address: 'Bakı ş.' },
@@ -57,7 +85,7 @@ const App: React.FC = () => {
     { id: Page.Sales, icon: <ShoppingBag size={24} />, label: 'Satış' },
     { id: Page.Stock, icon: <Package size={24} />, label: 'Stok' },
     { id: Page.Customers, icon: <UserSquare2 size={24} />, label: 'Müştərilər' },
-    { id: Page.Debt, icon: <Users size={24} />, label: 'Borclar' },
+    { id: Page.SoldProducts, icon: <History size={24} />, label: 'Satılan Mallar' },
     { id: Page.Return, icon: <RotateCcw size={24} />, label: 'Qaytarma' },
     { id: Page.Scrap, icon: <Flame size={24} />, label: 'Lom' },
     { id: Page.Reports, icon: <BarChart3 size={24} />, label: 'Hesabat' },
@@ -67,9 +95,9 @@ const App: React.FC = () => {
   const renderModule = () => {
     switch (currentPage) {
       case Page.Sales: return <SalesModule products={products} setProducts={setProducts} sales={sales} setSales={setSales} customers={customers} setCustomers={setCustomers} settings={settings} />;
-      case Page.Stock: return <StockModule products={products} setProducts={setProducts} settings={settings} />;
+      case Page.Stock: return <StockModule products={products} setProducts={setProducts} settings={settings} sales={sales} />;
       case Page.Customers: return <CustomersModule customers={customers} setCustomers={setCustomers} sales={sales} />;
-      case Page.Debt: return <DebtModule customers={customers} setCustomers={setCustomers} />;
+      case Page.SoldProducts: return <SoldProductsModule sales={sales} />;
       case Page.Return: return <ReturnsModule sales={sales} setSales={setSales} products={products} setProducts={setProducts} />;
       case Page.Scrap: return <ScrapModule scraps={scraps} setScraps={setScraps} />;
       case Page.Reports: return <ReportsModule sales={sales} products={products} scraps={scraps} customers={customers} />;
