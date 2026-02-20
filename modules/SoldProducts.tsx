@@ -22,7 +22,6 @@ import {
   Filter,
   ClipboardList,
   ArrowRightLeft,
-  // Fix: Explicitly import History icon to avoid conflict with browser's window.History
   History
 } from 'lucide-react';
 import { Sale } from '../types';
@@ -177,36 +176,66 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales }) => {
   return (
     <div className="space-y-6 md:space-y-8 pb-24 md:pb-10 animate-in fade-in duration-500">
       
-      {/* ÇAP SƏHİFƏSİ ÜÇÜN GİZLİ KONTEYNER */}
-      <div id="receipt-print" className="hidden print:block bg-white p-8 font-mono text-black">
+      {/* ÇAP SƏHİFƏSİ ÜÇÜN YENİLƏNMİŞ KONTEYNER */}
+      <div id="receipt-print" className="hidden print:block bg-white p-4 font-sans text-black">
           <div className="text-center border-b-2 border-black pb-4 mb-6">
               <h1 className="text-2xl font-black">NEKO GOLD</h1>
-              <h2 className="text-lg font-bold uppercase tracking-widest mt-1">Yenidən Sifariş Siyahısı</h2>
-              <p className="text-sm mt-2">{formatDate(printDate)} {printSupplier !== 'all' ? `| Tədarükçü: ${printSupplier}` : ''}</p>
+              <h2 className="text-lg font-bold uppercase tracking-[0.2em] mt-1">Yenidən Sifariş Siyahısı</h2>
+              <div className="flex justify-between items-center mt-3 text-xs font-bold uppercase px-2">
+                 <span>Tarix: {formatDate(printDate)}</span>
+                 {printSupplier !== 'all' && <span>Tədarükçü: {printSupplier}</span>}
+              </div>
           </div>
-          <table className="w-full text-left">
+          
+          <table className="w-full text-left border-collapse border border-black text-[10px]">
               <thead>
-                  <tr className="border-b-2 border-black">
-                      <th className="py-3 px-2 text-sm font-black uppercase">Kod</th>
-                      <th className="py-3 px-2 text-sm font-black uppercase">Məhsul Adı</th>
-                      <th className="py-3 px-2 text-sm font-black uppercase">Çəki</th>
-                      <th className="py-3 px-2 text-sm font-black uppercase">Əyar</th>
+                  <tr className="bg-stone-100">
+                      <th className="p-2 border border-black font-black uppercase text-center w-[15%]">Kod</th>
+                      <th className="p-2 border border-black font-black uppercase">Məhsul Adı</th>
+                      <th className="p-2 border border-black font-black uppercase text-center w-[12%]">Çəki</th>
+                      <th className="p-2 border border-black font-black uppercase text-center w-[10%]">Əyar</th>
+                      <th className="p-2 border border-black font-black uppercase w-[20%]">Brilliant</th>
+                      <th className="p-2 border border-black font-black uppercase text-center w-[8%]">V</th>
                   </tr>
               </thead>
-              <tbody className="divide-y divide-stone-200">
+              <tbody>
                   {orderList.map((item, idx) => (
-                      <tr key={idx}>
-                          <td className="py-3 px-2 text-sm font-bold">{item.productCode}</td>
-                          <td className="py-3 px-2 text-sm">{item.productName}</td>
-                          <td className="py-3 px-2 text-sm font-bold">{item.weight} gr</td>
-                          <td className="py-3 px-2 text-sm">{item.carat}K</td>
+                      <tr key={idx} className="border-b border-black">
+                          <td className="p-2 border border-black font-black text-center">{item.productCode}</td>
+                          <td className="p-2 border border-black font-medium">{item.productName}</td>
+                          <td className="p-2 border border-black font-black text-center">{item.weight}g</td>
+                          <td className="p-2 border border-black text-center">{item.carat}K</td>
+                          <td className="p-2 border border-black text-[8px] italic">{item.brilliant || '-'}</td>
+                          <td className="p-2 border border-black text-center">
+                              <div className="w-4 h-4 border border-stone-400 mx-auto rounded-sm"></div>
+                          </td>
                       </tr>
                   ))}
+                  {orderList.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="p-10 text-center border border-black opacity-40 font-black uppercase tracking-widest">Siyahı Boşdur</td>
+                      </tr>
+                  )}
               </tbody>
+              <tfoot>
+                  <tr className="bg-stone-50 font-black">
+                      <td colSpan={2} className="p-3 border border-black text-right uppercase">Cəmi Sifariş:</td>
+                      <td className="p-3 border border-black text-center">{orderList.length} Ədəd</td>
+                      <td className="p-3 border border-black text-right uppercase">Çəki:</td>
+                      <td colSpan={2} className="p-3 border border-black">{orderList.reduce((acc, i) => acc + (i.weight || 0), 0).toFixed(2)} gr</td>
+                  </tr>
+              </tfoot>
           </table>
-          <div className="mt-8 border-t-2 border-black pt-4 text-right">
-              <p className="text-sm font-black uppercase">Cəmi: {orderList.length} ədəd</p>
-              <p className="text-sm font-black uppercase">Ümumi Çəki: {orderList.reduce((acc, i) => acc + (i.weight || 0), 0).toFixed(2)} gr</p>
+          
+          <div className="mt-10 flex justify-between px-4">
+             <div className="text-center">
+                <div className="w-32 border-b border-black mb-1"></div>
+                <p className="text-[9px] font-black uppercase">Hazırlayan</p>
+             </div>
+             <div className="text-center">
+                <div className="w-32 border-b border-black mb-1"></div>
+                <p className="text-[9px] font-black uppercase">Tədarükçü İmza</p>
+             </div>
           </div>
       </div>
 
@@ -374,6 +403,12 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales }) => {
                                     <span className="text-[10px] font-black text-stone-500">{item.productCode}</span>
                                     <span className="w-1 h-1 bg-stone-200 rounded-full"></span>
                                     <span className="text-[10px] font-black text-amber-600">{item.weight} gr | {item.carat}K</span>
+                                    {item.brilliant && (
+                                       <>
+                                         <span className="w-1 h-1 bg-stone-200 rounded-full"></span>
+                                         <span className="text-[9px] font-bold text-amber-500 uppercase">{item.brilliant}</span>
+                                       </>
+                                    )}
                                     {item.supplier && (
                                        <span className="text-[9px] font-bold bg-stone-100 text-stone-400 px-2 py-0.5 rounded uppercase tracking-tighter ml-2">{item.supplier}</span>
                                     )}
