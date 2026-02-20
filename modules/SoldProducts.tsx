@@ -176,62 +176,60 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales }) => {
   return (
     <div className="space-y-6 md:space-y-8 pb-24 md:pb-10 animate-in fade-in duration-500">
       
-      {/* ÇAP KONTEYNERİ (Şəkilə uyğunlaşdırılmış 80mm POS format) */}
+      {/* ÇAP KONTEYNERİ (Şəkilə tam uyğunlaşdırılmış POS format) */}
       <div id="receipt-print" className="hidden print:block bg-white text-black text-center">
-          <div className="mb-4">
-              <h1 className="text-xl font-bold tracking-widest">NEKO GOLD</h1>
-              <h2 className="text-base font-bold uppercase tracking-widest mt-1">YENİDƏN SİFARİŞ</h2>
-              <h2 className="text-base font-bold uppercase tracking-[0.4em] mb-3">SİYAHISI</h2>
-              <div className="w-full border-t-2 border-black my-2"></div>
-              <div className="text-left text-[10px] font-bold uppercase px-2">
-                 TARİX: {printDate}
+          <header className="mb-4">
+              <h1 className="text-2xl font-black tracking-widest leading-none">NEKO GOLD</h1>
+              <h2 className="text-[11px] font-bold uppercase tracking-[0.2em] mt-2">YENİDƏN SİFARİŞ SİYAHISI</h2>
+              <div className="w-full border-b border-black my-3"></div>
+              <div className="text-left text-[10px] font-bold uppercase px-1">
+                 TARİX: {printDate} {printSupplier !== 'all' ? `| TOPDAN: ${printSupplier}` : ''}
               </div>
-              <div className="w-full border-t-2 border-black my-2"></div>
-          </div>
+          </header>
           
-          <table className="w-full text-center border-collapse border border-black text-[9px] font-bold">
+          <table className="w-full text-center border-collapse border border-black text-[10px] font-bold">
               <thead>
-                  <tr className="border-b border-black">
-                      <th className="p-1 border border-black uppercase w-[12%] text-[8px]">KOD</th>
-                      <th className="p-1 border border-black uppercase w-[42%] text-[8px]">MƏHSUL ADI</th>
-                      <th className="p-1 border border-black uppercase w-[12%] text-[8px]">ÇƏKİ</th>
-                      <th className="p-1 border border-black uppercase w-[10%] text-[8px]">ƏYAR</th>
-                      <th className="p-1 border border-black uppercase w-[16%] text-[8px]">BRİLLİANT</th>
-                      <th className="p-1 border border-black uppercase w-[8%] text-[8px]">V</th>
+                  <tr className="bg-stone-50">
+                      <th className="p-1 border border-black uppercase w-[15%]">KOD</th>
+                      <th className="p-1 border border-black uppercase w-[40%]">MƏHSUL ADI</th>
+                      <th className="p-1 border border-black uppercase w-[8%]">ƏYAR</th>
+                      <th className="p-1 border border-black uppercase w-[20%]">ÇƏKİ</th>
+                      <th className="p-1 border border-black uppercase w-[8%]">BR</th>
+                      <th className="p-1 border border-black uppercase w-[10%]">V</th>
                   </tr>
               </thead>
               <tbody>
                   {orderList.map((item, idx) => (
-                      <tr key={idx} className="border-b border-black h-8">
+                      <tr key={idx} className="border-b border-black min-h-[25px]">
                           <td className="p-1 border border-black">{item.productCode}</td>
-                          <td className="p-1 border border-black text-left leading-tight text-[8px]">{item.productName}</td>
-                          <td className="p-1 border border-black">{item.weight}g</td>
-                          <td className="p-1 border border-black">{item.carat}K</td>
-                          <td className="p-1 border border-black text-[7px] italic">{item.brilliant || ''}</td>
+                          <td className="p-1 border border-black text-left leading-tight text-[9px] font-medium">{item.productName}</td>
+                          <td className="p-1 border border-black">{item.carat}</td>
+                          <td className="p-1 border border-black">{item.weight}</td>
+                          <td className="p-1 border border-black text-[8px]">{item.brilliant ? '*' : ''}</td>
                           <td className="p-1 border border-black">
                               <div className="w-3 h-3 border border-black mx-auto"></div>
                           </td>
                       </tr>
                   ))}
-                  {/* CƏMİ SƏTİRİ (Şəkilə uyğun mərkəzləşdirilmiş) */}
-                  <tr className="h-8">
-                      <td colSpan={2} className="p-1 border border-black text-center uppercase text-[8px]">
+                  {/* CƏMİ SƏTİRİ (Şəkilə uyğun format) */}
+                  <tr className="border-t-2 border-black h-10 font-black">
+                      <td colSpan={2} className="p-2 border border-black text-center uppercase text-[9px]">
                         CƏMİ SİFARİŞ:
                       </td>
-                      <td className="p-1 border border-black text-center text-[8px]">
+                      <td className="p-2 border border-black text-center text-[10px]">
                         {orderList.length} ədəd
                       </td>
-                      <td className="p-1 border border-black text-center uppercase text-[8px]">
+                      <td className="p-2 border border-black text-center uppercase text-[9px]">
                         ÇƏKİ:
                       </td>
-                      <td colSpan={2} className="p-1 border border-black text-center text-[8px]">
+                      <td colSpan={2} className="p-2 border border-black text-center text-[10px]">
                         {orderList.reduce((acc, i) => acc + (i.weight || 0), 0).toFixed(2)} gr
                       </td>
                   </tr>
               </tbody>
           </table>
           
-          <div className="mt-8 flex justify-between px-6 text-[8px] font-bold uppercase">
+          <footer className="mt-8 flex justify-between px-4 text-[9px] font-black uppercase">
              <div className="flex flex-col items-center">
                 <div className="w-24 border-b border-black mb-1"></div>
                 <span>HAZIRLAYAN</span>
@@ -240,7 +238,7 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales }) => {
                 <div className="w-24 border-b border-black mb-1"></div>
                 <span>TƏDARÜKÇÜ İMZA</span>
              </div>
-          </div>
+          </footer>
       </div>
 
       {/* ÜST TABLAR (NO-PRINT) */}
@@ -424,7 +422,7 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales }) => {
                       ))}
                       {orderList.length === 0 && (
                         <div className="p-20 text-center bg-stone-50 rounded-[2rem] border-4 border-dashed border-stone-100 opacity-40">
-                           <ClipboardList size={48} className="mx-auto text-stone-200 mb-4" />
+                           <ClipboardList size={48} className="mx-auto text-stone-200 <ClipboardList size={48} className="mx-auto text-stone-200 mb-4" />
                            <p className="text-sm font-black text-stone-400 uppercase tracking-widest">Bu kriteriyalara uyğun mal tapılmadı</p>
                         </div>
                       )}
