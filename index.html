@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="az">
 <head>
@@ -13,8 +14,18 @@
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
         @media print {
-            @page { size: 80mm auto; margin: 0; }
-            html, body { height: auto !important; overflow: visible !important; background: white !important; visibility: hidden !important; }
+            @page { 
+                size: 80mm auto; 
+                margin: 0 !important; 
+            }
+            html, body { 
+                height: auto !important; 
+                overflow: visible !important; 
+                background: white !important; 
+                visibility: hidden !important; 
+                margin: 0 !important;
+                padding: 0 !important;
+            }
             #receipt-print {
                 visibility: visible !important;
                 display: block !important;
@@ -23,17 +34,32 @@
                 top: 0 !important;
                 width: 80mm !important;
                 margin: 0 !important;
-                padding: 4mm !important;
+                padding: 4mm !important; /* Kiçik daxili boşluq kağızın kəsilməməsi üçün */
                 background: white !important;
                 color: black !important;
-                font-family: 'Courier New', Courier, monospace !important;
-                font-size: 12px !important;
+                font-family: 'Courier New', Courier, monospace !important; /* Qəbz stili üçün mono font */
+                font-size: 11px !important;
                 line-height: 1.2 !important;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
             }
             #receipt-print * { visibility: visible !important; }
             .no-print { display: none !important; visibility: hidden !important; }
+            
+            table { 
+                width: 100% !important; 
+                border-collapse: collapse !important; 
+                border: 1px solid black !important;
+            }
+            th, td { 
+                border: 1px solid black !important; 
+                padding: 4px 2px !important; 
+                word-wrap: break-word !important; 
+            }
+            th {
+                font-weight: bold !important;
+                background-color: #f0f0f0 !important;
+            }
         }
         
         #receipt-print { display: none; }
