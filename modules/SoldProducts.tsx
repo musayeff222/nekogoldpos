@@ -176,13 +176,13 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales }) => {
   return (
     <div className="space-y-6 md:space-y-8 pb-24 md:pb-10 animate-in fade-in duration-500">
       
-      {/* ÇAP KONTEYNERİ (Yeni Dizayn) */}
+      {/* ÇAP KONTEYNERİ (Yeni Qəbz Dizaynı) */}
       <div id="receipt-print" className="hidden print:block bg-white text-black">
           <header className="text-center mb-6">
               <h1 className="brand-font text-3xl font-black mb-1">NEKO GOLD</h1>
               <h2 className="text-sm font-bold tracking-widest mb-4">YENİDƏN SİFARİŞ SİYAHISI</h2>
               <div className="text-left text-xs border-b border-black pb-1 mb-4">
-                  <span>TARİX: {printDate} {printSupplier !== 'all' ? `| TƏD: ${printSupplier}` : ''}</span>
+                  <span>TARİX: {formatDate(printDate)} {printSupplier !== 'all' ? `| TƏD: ${printSupplier}` : ''}</span>
               </div>
           </header>
 
@@ -191,27 +191,30 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales }) => {
                   <thead>
                       <tr>
                           <th style={{ width: '15%' }}>KOD</th>
-                          <th style={{ width: '40%' }}>MƏHSUL ADI</th>
+                          <th style={{ width: '38%' }}>MƏHSUL ADI</th>
                           <th style={{ width: '8%' }}>ƏYAR</th>
-                          <th style={{ width: '20%' }}>ÇƏKİ</th>
-                          <th style={{ width: '8%' }}>BR</th>
-                          <th style={{ width: '10%' }}>V</th>
+                          <th style={{ width: '18%' }}>ÇƏKİ</th>
+                          <th style={{ width: '10%' }}>BR</th>
+                          <th style={{ width: '11%' }}>V</th>
                       </tr>
                   </thead>
                   <tbody>
                       {orderList.map((item, idx) => (
                           <tr key={idx}>
                               <td>{item.productCode}</td>
-                              <td style={{ textAlign: 'left' }}>{item.productName}</td>
+                              <td style={{ textAlign: 'left', fontWeight: 'bold' }}>{item.productName}</td>
                               <td>{item.carat}</td>
-                              <td>{item.weight}</td>
+                              <td style={{ fontWeight: 'bold' }}>{item.weight}g</td>
                               <td>{item.brilliant ? '*' : ''}</td>
-                              <td><div className="w-3 h-3 border border-black mx-auto"></div></td>
+                              <td>
+                                  {/* Kalem ilə quş işarəsi qoymaq üçün boşluq */}
+                                  <div style={{ width: '15px', height: '15px', border: '1px solid #ccc', margin: 'auto' }}></div>
+                              </td>
                           </tr>
                       ))}
-                      {/* Empty row for spacing if needed */}
-                      {orderList.length < 5 && Array.from({ length: 2 }).map((_, i) => (
-                        <tr key={`empty-${i}`} style={{ height: '20px' }}>
+                      {/* Əgər siyahı qısadırsa, əlavə boş sətirlər */}
+                      {orderList.length < 3 && Array.from({ length: 3 - orderList.length }).map((_, i) => (
+                        <tr key={`empty-${i}`} style={{ height: '25px' }}>
                           <td></td><td></td><td></td><td></td><td></td><td></td>
                         </tr>
                       ))}
@@ -219,26 +222,27 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales }) => {
               </table>
           </section>
 
-          <footer className="mb-8">
+          <section className="mb-8">
               <div className="flex justify-between items-center text-xs border-b border-black pb-2">
                   <div className="flex flex-col">
-                      <span className="uppercase text-[10px]">CƏMİ SİFARİŞ:</span>
+                      <span className="uppercase text-[9px]">CƏMİ SİFARİŞ:</span>
                       <span className="text-sm font-bold">{orderList.length} ədəd</span>
                   </div>
                   <div className="flex flex-row items-end gap-2">
-                      <span className="uppercase text-[10px]">ÇƏKİ:</span>
-                      <span className="text-sm font-bold">{orderList.reduce((acc, i) => acc + (i.weight || 0), 0).toFixed(2)} gr</span>
+                      <span className="uppercase text-[9px]">ÇƏKİ:</span>
+                      <span className="text-sm font-bold">{orderList.reduce((acc, i) => acc + (Number(i.weight) || 0), 0).toFixed(2)} gr</span>
                   </div>
               </div>
-              <div className="mt-10 flex justify-between px-2 text-[10px] font-bold uppercase">
-                  <div className="flex flex-col items-center">
-                    <div className="w-20 border-b border-black mb-1"></div>
-                    <span>HAZIRLAYAN</span>
-                  </div>
-                  <div className="flex flex-col items-center">
-                    <div className="w-20 border-b border-black mb-1"></div>
-                    <span>TƏDARÜKÇÜ</span>
-                  </div>
+          </section>
+
+          <footer className="mt-12 flex justify-between px-2 text-[10px] font-bold uppercase">
+              <div className="flex flex-col items-center">
+                  <div className="w-24 border-b border-black mb-1"></div>
+                  <span>HAZIRLAYAN</span>
+              </div>
+              <div className="flex flex-col items-center">
+                  <div className="w-24 border-b border-black mb-1"></div>
+                  <span>TƏDARÜKÇÜ</span>
               </div>
           </footer>
       </div>
@@ -394,11 +398,11 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales }) => {
                 <div className="space-y-4">
                    <div className="flex justify-between items-center px-4">
                       <h4 className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em]">Seçilmiş Mallar ({orderList.length})</h4>
-                      <p className="text-[10px] font-black text-amber-600 uppercase">Cəmi Çəki: {orderList.reduce((a,i)=>a+(i.weight||0), 0).toFixed(2)} gr</p>
+                      <p className="text-[10px] font-black text-amber-600 uppercase">Cəmi Çəki: {orderList.reduce((a,i)=>a+(Number(i.weight)||0), 0).toFixed(2)} gr</p>
                    </div>
                    <div className="grid grid-cols-1 gap-3">
                       {orderList.map((item, idx) => (
-                        <div key={idx} className="flex items-center justify-between p-4 bg-white border-2 border-stone-100 rounded-[1.5rem] hover:border-amber-200 transition-all group shadow-sm">
+                        <div key={item.id} className="flex items-center justify-between p-4 bg-white border-2 border-stone-100 rounded-[1.5rem] hover:border-amber-200 transition-all group shadow-sm">
                            <div className="flex items-center space-x-4">
                               <div className="w-10 h-10 bg-stone-50 rounded-xl flex items-center justify-center text-amber-500 font-black text-[10px] uppercase border border-stone-200">{item.productCode.slice(0,2)}</div>
                               <div>
