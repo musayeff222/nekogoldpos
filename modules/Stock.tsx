@@ -46,6 +46,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [lastAddedProduct, setLastAddedProduct] = useState<Product | null>(null);
   
   // Təkrarlanan kod üçün xəta halları
   const [duplicateInStock, setDuplicateInStock] = useState<Product | null>(null);
@@ -71,6 +72,8 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     imageUrl: '',
     purchaseDate: new Date().toISOString().split('T')[0]
   });
+
+  const [autoPrint, setAutoPrint] = useState(true);
 
   const [editForm, setEditForm] = useState<Partial<Product>>({});
 
@@ -160,6 +163,15 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     };
 
     setProducts(prev => [productToAdd, ...prev]);
+    setLastAddedProduct(productToAdd);
+    
+    // Trigger print if autoPrint is enabled
+    if (autoPrint) {
+      setTimeout(() => {
+          window.print();
+      }, 100);
+    }
+
     setIsAddingNew(false);
     resetForm();
     setActiveFolder(productToAdd.type);
@@ -367,8 +379,46 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                   <div className="flex items-center justify-center space-x-2"><input type="number" required value={newProduct.price} onChange={(e) => setNewProduct({...newProduct, price: e.target.value})} className="w-full max-w-[200px] bg-white border-2 border-amber-200 rounded-xl py-2 px-4 font-black text-2xl text-amber-900 outline-none text-center shadow-sm" /><span className="text-lg font-black text-amber-300">₼</span></div>
                 </div>
 
+                <div className="flex items-center space-x-2 bg-stone-50 p-3 rounded-2xl border border-stone-100">
+                  <input 
+                    type="checkbox" 
+                    id="autoPrint" 
+                    checked={autoPrint} 
+                    onChange={(e) => setAutoPrint(e.target.checked)} 
+                    className="w-5 h-5 accent-amber-500 rounded cursor-pointer"
+                  />
+                  <label htmlFor="autoPrint" className="text-[10px] font-black text-stone-600 uppercase cursor-pointer select-none">Avtomatik Etiket Çapı</label>
+                </div>
+
                 <div className="flex space-x-4 pt-1">
                    <button type="button" onClick={() => { setIsAddingNew(false); resetForm(); }} className="flex-1 py-4 rounded-xl font-black text-stone-400 uppercase text-[10px] border border-stone-200 hover:bg-stone-50 transition-all tracking-widest">İMTİNA</button>
+                   <button 
+                    type="button"
+                    onClick={() => {
+                      // We need to construct a temporary product object to print
+                      const tempProduct: Product = {
+                        id: 'temp',
+                        code: newProduct.code,
+                        name: newProduct.name,
+                        carat: Number(newProduct.carat),
+                        type: newProduct.type,
+                        supplier: newProduct.supplier,
+                        brilliant: newProduct.brilliant || undefined,
+                        weight: newProduct.weight === '' ? 0 : Number(newProduct.weight),
+                        price: newProduct.price === '' ? 0 : Number(newProduct.price),
+                        imageUrl: newProduct.imageUrl,
+                        supplierPrice: 0,
+                        stockCount: 1,
+                        purchaseDate: newProduct.purchaseDate,
+                        logs: []
+                      };
+                      setLastAddedProduct(tempProduct);
+                      setTimeout(() => window.print(), 100);
+                    }}
+                    className="flex-1 py-4 rounded-xl font-black text-amber-600 uppercase text-[10px] border border-amber-200 hover:bg-amber-50 transition-all tracking-widest flex items-center justify-center"
+                   >
+                     <Tag className="mr-2 w-4 h-4" /> ÇAP ET
+                   </button>
                    <button 
                     form="ultraCompactForm" 
                     type="submit" 
@@ -466,12 +516,61 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                   </div>
                </form>
             </main>
-            <footer className="px-8 py-6 border-t border-stone-100 bg-stone-50/50 flex space-x-4"><button type="button" onClick={() => setShowDetailModal(false)} className="flex-1 px-8 py-4 rounded-xl font-black text-stone-400 uppercase tracking-widest text-[11px] border border-stone-200 hover:bg-white transition-all">Ləğv Et</button><button form="fullEditForm" type="submit" className="flex-[2] px-8 py-4 bg-amber-500 text-stone-950 rounded-xl font-black uppercase tracking-widest text-xs shadow-xl">Yadda Saxla</button></footer>
+            <footer className="px-8 py-6 border-t border-stone-100 bg-stone-50/50 flex space-x-4">
+              <button 
+                type="button" 
+                onClick={() => {
+                  setLastAddedProduct(selectedProduct);
+                  setTimeout(() => window.print(), 100);
+                }} 
+                className="px-6 py-4 bg-white border border-stone-200 rounded-xl font-black text-stone-600 hover:bg-stone-50 transition-all uppercase text-[10px] flex items-center"
+              >
+                <Tag className="mr-2 w-4 h-4" /> ETİKET ÇAP ET
+              </button>
+              <button type="button" onClick={() => setShowDetailModal(false)} className="flex-1 px-8 py-4 rounded-xl font-black text-stone-400 uppercase tracking-widest text-[11px] border border-stone-200 hover:bg-white transition-all">Ləğv Et</button>
+              <button form="fullEditForm" type="submit" className="flex-[2] px-8 py-4 bg-amber-500 text-stone-950 rounded-xl font-black uppercase tracking-widest text-xs shadow-xl">Yadda Saxla</button>
+            </footer>
           </div>
         </div>
       )}
 
       {zoomedImage && <div className="fixed inset-0 bg-stone-950/95 z-[110] flex items-center justify-center p-4 cursor-zoom-out" onClick={() => setZoomedImage(null)}><img src={zoomedImage} className="max-w-full max-h-full object-contain drop-shadow-2xl animate-in zoom-in-95" alt="Zoomed product" /></div>}
+      
+      {/* LABEL PRINT CONTAINER */}
+      <LabelPrint product={lastAddedProduct} />
+    </div>
+  );
+};
+
+const LabelPrint: React.FC<{ product: Product | null }> = ({ product }) => {
+  if (!product) return null;
+  
+  return (
+    <div id="label-print" className="flex flex-row w-full h-full">
+      {/* Left Part (approx 50%) */}
+      <div className="w-1/2 flex flex-col justify-between py-1 pr-2 border-r border-dashed border-stone-300">
+        <div className="text-[12px] font-black tracking-tight">NEKO GOLD</div>
+        <div className="flex items-baseline space-x-2 mt-auto">
+          <span className="text-[18px] font-black leading-none">{product.code}</span>
+          <span className="text-[12px] font-bold leading-none">{product.weight.toFixed(2)}</span>
+        </div>
+      </div>
+      
+      {/* Right Part (approx 50%) */}
+      <div className="w-1/2 flex flex-col justify-between py-1 pl-2 text-right">
+        <div className="space-y-0">
+          <div className="text-[10px] font-black uppercase leading-none truncate">
+            {product.supplier} {product.carat}
+          </div>
+          <div className="text-[8px] font-bold leading-none mt-1">
+            {product.brilliant ? `Br.${product.brilliant}` : ''}
+          </div>
+        </div>
+        <div className="mt-auto flex items-baseline justify-end space-x-1">
+          <span className="text-[22px] font-black leading-none">{product.price.toLocaleString()}</span>
+          <span className="text-[10px] font-bold">AZN</span>
+        </div>
+      </div>
     </div>
   );
 };
