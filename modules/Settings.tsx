@@ -402,17 +402,44 @@ const SettingsModule: React.FC<SettingsProps> = ({ settings, setSettings }) => {
           <h3 className="text-xl font-black text-stone-900 uppercase">Çap Ayarları</h3>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-stone-400 uppercase tracking-widest ml-4">Printer Adı / Yolu</label>
-            <input 
-              type="text" 
-              value={localSettings.printerPath}
-              onChange={(e) => setLocalSettings({...localSettings, printerPath: e.target.value})}
-              placeholder="Məs: Zebra ZD220"
-              className="w-full bg-stone-50 border-2 border-stone-100 rounded-2xl py-4 px-6 font-black text-xl"
-            />
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-stone-400 uppercase tracking-widest ml-4">Qəbz Printeri (Receipt)</label>
+              <input 
+                type="text" 
+                value={localSettings.receiptPrinterPath}
+                onChange={(e) => setLocalSettings({...localSettings, receiptPrinterPath: e.target.value})}
+                placeholder="Məs: Epson TM-T20"
+                className="w-full bg-stone-50 border-2 border-stone-100 rounded-2xl py-4 px-6 font-black text-xl"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-stone-400 uppercase tracking-widest ml-4">Etiket Printeri (Label)</label>
+              <input 
+                type="text" 
+                value={localSettings.labelPrinterPath}
+                onChange={(e) => setLocalSettings({...localSettings, labelPrinterPath: e.target.value})}
+                placeholder="Məs: Zebra ZD220"
+                className="w-full bg-stone-50 border-2 border-stone-100 rounded-2xl py-4 px-6 font-black text-xl"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-stone-400 uppercase tracking-widest ml-4">Qəbz Mətni Qalınlığı (Font Weight)</label>
+              <select 
+                value={localSettings.receiptFontWeight}
+                onChange={(e) => setLocalSettings({...localSettings, receiptFontWeight: e.target.value})}
+                className="w-full bg-stone-50 border-2 border-stone-100 rounded-2xl py-4 px-6 font-black text-xl outline-none"
+              >
+                <option value="normal">Normal</option>
+                <option value="500">Orta (500)</option>
+                <option value="600">Qalın (600)</option>
+                <option value="700">Çox Qalın (700)</option>
+                <option value="800">Ekstra Qalın (800)</option>
+                <option value="900">Maksimum Qalın (900)</option>
+              </select>
+            </div>
           </div>
-          <div className="flex flex-col justify-center space-y-2">
+          <div className="flex flex-col justify-start space-y-2">
             <div className="flex items-center space-x-3 ml-4">
               <input 
                 type="checkbox" 
@@ -435,7 +462,15 @@ const SettingsModule: React.FC<SettingsProps> = ({ settings, setSettings }) => {
                   <code className="block mt-1 p-2 bg-white border border-amber-200 rounded text-amber-600 font-mono">--kiosk --kiosk-printing</code>
                 </li>
                 <li><strong>Apply</strong> və <strong>OK</strong> düymələrinə basın.</li>
-                <li>Windows ayarlarında Zebra printerinizi <strong>Default Printer</strong> (Susmaya görə printer) olaraq təyin edin.</li>
+                <li>Windows ayarlarında əsas istifadə etdiyiniz printeri <strong>Default Printer</strong> olaraq təyin edin.</li>
+                <li><strong>İki Printer İstifadəsi:</strong> Əgər həm etiket, həm də qəbz printerini eyni vaxtda səssiz istifadə etmək istəyirsinizsə:
+                  <ul className="list-disc ml-6 mt-1 space-y-1">
+                    <li>Windows-da "Let Windows manage my default printer" seçimini <strong>DEAKTİV</strong> edin.</li>
+                    <li>Chrome-un kiosk rejimi adətən <strong>Default Printer</strong>-i istifadə edir.</li>
+                    <li>İki fərqli printer üçün ən yaxşı üsul: Əsas printeri (məsələn, Etiket) Windows-da "Default" təyin edin. Qəbz üçün isə çap pəncərəsi açıldıqda bir dəfə həmin printeri seçin (Chrome sessiya boyu sonuncu seçimi xatırlayır).</li>
+                    <li>Tam avtomatlaşdırılmış (pəncərəsiz) iki fərqli printer üçün kənar proqram təminatı (məs: QZ Tray) tələb oluna bilər.</li>
+                  </ul>
+                </li>
                 <li>İndi Chrome-u həmin qısayol ilə açdıqda, çap düyməsini basan kimi pəncərə açılmadan birbaşa çap ediləcək.</li>
               </ol>
             </div>

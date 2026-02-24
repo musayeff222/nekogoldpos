@@ -56,7 +56,9 @@ const App: React.FC = () => {
       ]
     },
     silentPrinting: false,
-    printerPath: ''
+    receiptPrinterPath: '',
+    labelPrinterPath: '',
+    receiptFontWeight: '600'
   });
 
   useEffect(() => {

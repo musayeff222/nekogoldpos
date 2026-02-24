@@ -107,7 +107,9 @@ export interface AppSettings {
   pricePerGram: number; // 1 Qramın qiyməti
   labelConfig: LabelConfig;
   silentPrinting: boolean;
-  printerPath: string;
+  receiptPrinterPath: string;
+  labelPrinterPath: string;
+  receiptFontWeight: string;
 }
 
 export enum Page {

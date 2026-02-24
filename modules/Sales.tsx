@@ -261,7 +261,7 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
       {/* ÇAP KONTEYNERİ (PORTAL) */}
       {lastTransaction && createPortal(
         <div id="receipt-print">
-            <div className="receipt-content" style={{ background: 'white', color: 'black' }}>
+            <div className="receipt-content" style={{ background: 'white', color: 'black', fontWeight: settings.receiptFontWeight }}>
                 <div style={{ textAlign: 'center', marginBottom: '15px' }}>
                     <h1 style={{ fontSize: '22px', fontWeight: 'bold', margin: '0' }}>NEKO GOLD</h1>
                     <p style={{ margin: '2px 0', fontSize: '10px', textTransform: 'uppercase' }}>Zərgərlik Satış Mərkəzi</p>
