@@ -34,7 +34,6 @@
             }
             #receipt-print, #label-print {
                 visibility: visible !important;
-                display: block !important;
                 position: absolute !important;
                 left: 0 !important;
                 top: 0 !important;
@@ -44,6 +43,7 @@
                 print-color-adjust: exact !important;
             }
             #receipt-print {
+                display: block !important;
                 width: 80mm !important;
                 padding: 5mm 2mm !important;
                 font-family: 'Courier New', Courier, monospace !important;
@@ -51,7 +51,8 @@
                 line-height: 1.2 !important;
             }
             #label-print {
-                width: 80mm !important; /* Standard label printer width or similar */
+                display: flex !important;
+                width: 80mm !important;
                 height: 25mm !important;
                 padding: 2mm !important;
                 font-family: Arial, sans-serif !important;

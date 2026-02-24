@@ -1,5 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Folder, 
   Edit2, 
@@ -536,8 +537,11 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
 
       {zoomedImage && <div className="fixed inset-0 bg-stone-950/95 z-[110] flex items-center justify-center p-4 cursor-zoom-out" onClick={() => setZoomedImage(null)}><img src={zoomedImage} className="max-w-full max-h-full object-contain drop-shadow-2xl animate-in zoom-in-95" alt="Zoomed product" /></div>}
       
-      {/* LABEL PRINT CONTAINER */}
-      <LabelPrint product={lastAddedProduct} />
+      {/* LABEL PRINT CONTAINER (PORTAL) */}
+      {lastAddedProduct && createPortal(
+        <LabelPrint product={lastAddedProduct} />,
+        document.body
+      )}
     </div>
   );
 };

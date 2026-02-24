@@ -1,5 +1,6 @@
 
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Search, 
   CheckCircle2, 
@@ -257,9 +258,9 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
   return (
     <div className="max-w-7xl mx-auto h-full flex flex-col space-y-4 animate-in fade-in duration-700">
       
-      {/* ÇAP KONTEYNERİ */}
-      <div id="receipt-print">
-          {lastTransaction && (
+      {/* ÇAP KONTEYNERİ (PORTAL) */}
+      {lastTransaction && createPortal(
+        <div id="receipt-print">
             <div className="receipt-content" style={{ background: 'white', color: 'black' }}>
                 <div style={{ textAlign: 'center', marginBottom: '15px' }}>
                     <h1 style={{ fontSize: '22px', fontWeight: 'bold', margin: '0' }}>NEKO GOLD</h1>
@@ -306,8 +307,9 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
                     <p style={{ fontWeight: 'bold' }}>Təşəkkür edirik!</p>
                 </div>
             </div>
-          )}
-      </div>
+        </div>,
+        document.body
+      )}
 
       {step === 1 && (
         <div className="flex-1 flex flex-col space-y-4 md:space-y-6 animate-in slide-in-from-right-12 duration-500 no-print">
