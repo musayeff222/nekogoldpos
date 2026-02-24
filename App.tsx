@@ -31,12 +31,13 @@ const App: React.FC = () => {
   const [sales, setSales] = useState<Sale[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [scraps, setScraps] = useState<ScrapGold[]>([]);
+  const [cart, setCart] = useState<Product[]>([]);
   const [settings, setSettings] = useState<AppSettings>({
     deleteCode: '1234',
     adminPassword: 'admin',
     printerName: 'Epson POS-80',
     shopName: 'NEKO GOLD',
-    productTypes: ['Üzük', 'Sırğa', 'Boyunbağı', 'Qolbaq', 'Dəst', 'Zəncir', 'Set', 'Saat', 'Külçə', 'Digər'],
+    productTypes: ['Üzük', 'Sırğa', 'Boyunbağı', 'Qolbaq', 'Dəst', 'Zəncir', 'Set', 'Saat', 'Sep', 'Külçə', 'Digər'],
     suppliers: ['Tədərükçü A', 'Tədərükçü B', 'Atelye X'],
     carats: [14, 18, 22, 24],
     pricePerGram: 400
@@ -47,7 +48,7 @@ const App: React.FC = () => {
     setProducts([
       { 
         id: '1', 
-        code: 'YZ-001', 
+        code: 'U001', 
         name: 'Sadə Qaşlı Üzük', 
         carat: 22, 
         type: 'Üzük', 
@@ -61,7 +62,7 @@ const App: React.FC = () => {
       },
       { 
         id: '2', 
-        code: 'KP-023', 
+        code: 'S023', 
         name: 'Brilliant Sırğa', 
         carat: 18, 
         type: 'Sırğa', 
@@ -71,6 +72,62 @@ const App: React.FC = () => {
         price: 19500, 
         stockCount: 1, 
         brilliant: '0.25ct VS1',
+        purchaseDate: new Date().toISOString().split('T')[0],
+        logs: [{ date: new Date().toISOString(), action: 'Sistemə əlavə edildi' }]
+      },
+      { 
+        id: '3', 
+        code: 'SP102', 
+        name: 'İtalyan Sep', 
+        carat: 14, 
+        type: 'Sep', 
+        weight: 12.5, 
+        supplier: 'Tədərükçü A', 
+        supplierPrice: 25000, 
+        price: 32000, 
+        stockCount: 1,
+        purchaseDate: new Date().toISOString().split('T')[0],
+        logs: [{ date: new Date().toISOString(), action: 'Sistemə əlavə edildi' }]
+      },
+      { 
+        id: '4', 
+        code: 'ST005', 
+        name: 'Rolex Qızıl Saat', 
+        carat: 18, 
+        type: 'Saat', 
+        weight: 85.0, 
+        supplier: 'Atelye X', 
+        supplierPrice: 120000, 
+        price: 155000, 
+        stockCount: 1,
+        purchaseDate: new Date().toISOString().split('T')[0],
+        logs: [{ date: new Date().toISOString(), action: 'Sistemə əlavə edildi' }]
+      },
+      { 
+        id: '5', 
+        code: 'Q044', 
+        name: 'Cartier Qolbaq', 
+        carat: 22, 
+        type: 'Qolbaq', 
+        weight: 18.2, 
+        supplier: 'Tədərükçü B', 
+        supplierPrice: 45000, 
+        price: 58000, 
+        stockCount: 1,
+        purchaseDate: new Date().toISOString().split('T')[0],
+        logs: [{ date: new Date().toISOString(), action: 'Sistemə əlavə edildi' }]
+      },
+      { 
+        id: '6', 
+        code: 'B009', 
+        name: 'Mirvari Boyunbağı', 
+        carat: 14, 
+        type: 'Boyunbağı', 
+        weight: 6.8, 
+        supplier: 'Tədərükçü A', 
+        supplierPrice: 12000, 
+        price: 16500, 
+        stockCount: 1,
         purchaseDate: new Date().toISOString().split('T')[0],
         logs: [{ date: new Date().toISOString(), action: 'Sistemə əlavə edildi' }]
       },
@@ -94,7 +151,7 @@ const App: React.FC = () => {
 
   const renderModule = () => {
     switch (currentPage) {
-      case Page.Sales: return <SalesModule products={products} setProducts={setProducts} sales={sales} setSales={setSales} customers={customers} setCustomers={setCustomers} settings={settings} />;
+      case Page.Sales: return <SalesModule products={products} setProducts={setProducts} sales={sales} setSales={setSales} customers={customers} setCustomers={setCustomers} settings={settings} cart={cart} setCart={setCart} />;
       case Page.Stock: return <StockModule products={products} setProducts={setProducts} settings={settings} sales={sales} />;
       case Page.Customers: return <CustomersModule customers={customers} setCustomers={setCustomers} sales={sales} />;
       case Page.SoldProducts: return <SoldProductsModule sales={sales} />;
@@ -113,8 +170,12 @@ const App: React.FC = () => {
         <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="absolute -right-3 top-20 bg-amber-500 text-amber-950 w-6 h-6 rounded-full flex items-center justify-center shadow-lg hover:bg-amber-400 z-20">
           {isSidebarOpen ? <ChevronLeft size={14} strokeWidth={3} /> : <Menu size={14} strokeWidth={3} />}
         </button>
-        <div className={`mb-10 px-4 text-center ${isSidebarOpen ? 'opacity-100' : 'opacity-0 h-0 overflow-hidden'}`}>
-          <h1 className="text-amber-500 font-black text-2xl tracking-tighter">NEKO GOLD</h1>
+        <div className={`mb-10 px-4 text-center transition-all duration-300 ${isSidebarOpen ? 'opacity-100' : 'opacity-100'}`}>
+          {isSidebarOpen ? (
+            <h1 className="text-amber-500 font-black text-2xl tracking-tighter">NEKO GOLD</h1>
+          ) : (
+            <div className="w-10 h-10 rounded-xl gold-gradient flex items-center justify-center text-amber-950 font-black shadow-lg mx-auto">NG</div>
+          )}
         </div>
         <nav className="flex-1 w-full px-3 space-y-2 overflow-y-auto scrollbar-hide">
           {navItems.map((item) => (
@@ -153,14 +214,6 @@ const App: React.FC = () => {
 
       {/* MAIN CONTENT AREA */}
       <main className="flex-1 h-full overflow-y-auto bg-stone-50 scrollbar-hide pb-20 md:pb-0">
-        <header className="h-16 md:h-20 border-b border-stone-200 flex items-center justify-between px-4 md:px-8 bg-white/80 backdrop-blur-md sticky top-0 z-40 no-print">
-          <h2 className="text-lg md:text-xl font-black text-stone-800 tracking-tight">
-            {navItems.find(i => i.id === currentPage)?.label}
-          </h2>
-          <div className="flex items-center space-x-3">
-             <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl gold-gradient flex items-center justify-center text-amber-950 font-black shadow-lg">NG</div>
-          </div>
-        </header>
         <div className="p-4 md:p-8">
           {renderModule()}
         </div>

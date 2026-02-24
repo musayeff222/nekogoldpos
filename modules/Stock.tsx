@@ -74,6 +74,28 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
 
   const [editForm, setEditForm] = useState<Partial<Product>>({});
 
+  const getPrefix = (type: string) => {
+    switch (type) {
+      case 'Üzük': return 'U';
+      case 'Sırğa': return 'S';
+      case 'Saat': return 'ST';
+      case 'Sep': return 'SP';
+      case 'Boyunbağı': return 'B';
+      case 'Qolbaq': return 'Q';
+      case 'Dəst': return 'D';
+      case 'Zəncir': return 'Z';
+      case 'Set': return 'SET';
+      case 'Külçə': return 'K';
+      default: return '';
+    }
+  };
+
+  useEffect(() => {
+    if (isAddingNew && !newProduct.code) {
+      setNewProduct(prev => ({ ...prev, code: getPrefix(prev.type) }));
+    }
+  }, [newProduct.type, isAddingNew]);
+
   // Yalnız stokda olan (1 ədəd) məhsulları süzgəcdən keçiririk
   const activeProducts = products.filter(p => p.stockCount === 1);
 
@@ -112,9 +134,17 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     e.preventDefault();
     if (!newProduct.code || !newProduct.name || duplicateInStock || duplicateInSales) return;
 
+    const prefix = getPrefix(newProduct.type);
+    let finalCode = newProduct.code.trim();
+    
+    // Əgər istifadəçi prefixi yazmayıbsa, biz əlavə edirik (amma adətən inputda olacaq)
+    if (prefix && !finalCode.startsWith(prefix)) {
+        finalCode = prefix + finalCode;
+    }
+
     const productToAdd: Product = {
       id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
-      code: newProduct.code.trim(),
+      code: finalCode,
       name: newProduct.name.trim(),
       carat: Number(newProduct.carat),
       type: newProduct.type,
@@ -136,9 +166,10 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
   };
 
   const resetForm = () => {
+    const defaultType = settings.productTypes[0] || '';
     setNewProduct({
-      code: '', name: '', carat: 583,
-      type: settings.productTypes[0] || '', supplier: settings.suppliers[0] || '',
+      code: getPrefix(defaultType), name: '', carat: 583,
+      type: defaultType, supplier: settings.suppliers[0] || '',
       brilliant: '', weight: '', price: '', imageUrl: '',
       purchaseDate: new Date().toISOString().split('T')[0]
     });
@@ -223,8 +254,8 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
 
   if (isAddingNew) {
     return (
-      <div className="flex flex-col animate-in slide-in-from-right duration-300 min-h-full -mt-4 md:-mt-8">
-        <div className="bg-white rounded-3xl shadow-2xl border border-stone-100 flex flex-col overflow-hidden max-h-[calc(100vh-100px)]">
+      <div className="flex flex-col animate-in slide-in-from-right duration-300 min-h-full">
+        <div className="bg-white rounded-3xl shadow-2xl border border-stone-100 flex flex-col overflow-hidden max-h-[calc(100vh-48px)]">
             <div className="flex items-center justify-between p-4 border-b border-stone-50 bg-stone-50/30">
               <div className="flex items-center space-x-4">
                   <button onClick={() => { setIsAddingNew(false); resetForm(); }} className="p-2.5 bg-white border border-stone-200 rounded-xl text-stone-400 hover:text-stone-900 transition-all shadow-sm active:scale-95"><ArrowLeft size={18} /></button>
@@ -303,7 +334,18 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   <div className="space-y-1"><label className="text-[9px] font-black text-stone-400 uppercase ml-2">Məhsul Kodu</label><input type="text" required value={newProduct.code} onChange={(e) => setNewProduct({...newProduct, code: e.target.value})} className={`w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 font-bold text-base text-stone-800 focus:border-amber-400 outline-none ${(duplicateInStock || duplicateInSales) ? 'border-red-300 bg-red-50' : ''}`} placeholder="YZ-101" /></div>
                   <div className="space-y-1"><label className="text-[9px] font-black text-stone-400 uppercase ml-2">Məhsul Adı</label><input type="text" required value={newProduct.name} onChange={(e) => setNewProduct({...newProduct, name: e.target.value})} className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 font-bold text-base text-stone-800 focus:border-amber-400 outline-none" placeholder="Üzük" /></div>
-                  <div className="space-y-1"><label className="text-[9px] font-black text-stone-400 uppercase ml-2">Kateqoriya</label><select value={newProduct.type} onChange={(e) => setNewProduct({...newProduct, type: e.target.value})} className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 font-bold text-base text-stone-800 outline-none cursor-pointer">{settings.productTypes.map(t => <option key={t}>{t}</option>)}</select></div>
+                  <div className="space-y-1"><label className="text-[9px] font-black text-stone-400 uppercase ml-2">Kateqoriya</label><select value={newProduct.type} onChange={(e) => {
+                    const newType = e.target.value;
+                    const oldPrefix = getPrefix(newProduct.type);
+                    const newPrefix = getPrefix(newType);
+                    let currentCode = newProduct.code;
+                    
+                    if (oldPrefix && currentCode.startsWith(oldPrefix)) {
+                        currentCode = currentCode.substring(oldPrefix.length);
+                    }
+                    
+                    setNewProduct({...newProduct, type: newType, code: newPrefix + currentCode});
+                  }} className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 font-bold text-base text-stone-800 outline-none cursor-pointer">{settings.productTypes.map(t => <option key={t}>{t}</option>)}</select></div>
                   <div className="space-y-1"><label className="text-[9px] font-black text-stone-400 uppercase ml-2">Tədarükçü</label><select value={newProduct.supplier} onChange={(e) => setNewProduct({...newProduct, supplier: e.target.value})} className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 font-bold text-base text-stone-800 outline-none cursor-pointer">{settings.suppliers.map(s => <option key={s}>{s}</option>)}</select></div>
                   <div className="space-y-1 md:col-span-2">
                     <label className="text-[9px] font-black text-stone-400 uppercase ml-2">Əyar</label>

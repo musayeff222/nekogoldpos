@@ -39,12 +39,12 @@ interface SalesProps {
   customers: Customer[];
   setCustomers: React.Dispatch<React.SetStateAction<Customer[]>>;
   settings: AppSettings;
+  cart: Product[];
+  setCart: React.Dispatch<React.SetStateAction<Product[]>>;
 }
 
-const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSales, customers, setCustomers, settings }) => {
+const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSales, customers, setCustomers, settings, cart, setCart }) => {
   const [step, setStep] = useState(1);
-  const [selectedType, setSelectedType] = useState<ProductType | null>(null);
-  const [cart, setCart] = useState<Product[]>([]);
   const [currentProduct, setCurrentProduct] = useState<Product | null>(null);
   const [previouslySoldItem, setPreviouslySoldItem] = useState<Sale | null>(null);
   const [discount, setDiscount] = useState(0);
@@ -76,8 +76,8 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
     // 1. Aktiv stokda tapmağa çalışırıq
     const found = products.find(p => 
       p.code.toLowerCase() === code && 
-      p.type === selectedType &&
-      p.stockCount === 1
+      p.stockCount === 1 &&
+      !cart.some(item => item.id === p.id)
     );
 
     if (found) {
@@ -90,7 +90,7 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
         setPreviouslySoldItem(sold);
         setCurrentProduct(null);
       } else {
-        alert(`${selectedType} qrupunda '${searchCode}' kodlu aktiv məhsul tapılmadı!`);
+        alert(`'${searchCode}' kodlu aktiv məhsul tapılmadı!`);
         setCurrentProduct(null);
         setPreviouslySoldItem(null);
       }
@@ -189,7 +189,6 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
 
   const resetForm = () => {
     setStep(1);
-    setSelectedType(null);
     setCart([]);
     setCurrentProduct(null);
     setPreviouslySoldItem(null);
@@ -311,44 +310,22 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
       </div>
 
       {step === 1 && (
-        <div className="flex-1 flex flex-col items-center justify-start space-y-4 md:space-y-6 animate-in zoom-in-95 duration-500 no-print">
-          <div className="text-center space-y-1 mt-2">
-            <h2 className="text-xl md:text-2xl font-black text-stone-800 tracking-tighter uppercase leading-none">Kateqoriya</h2>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-6 w-full max-w-6xl">
-            {settings.productTypes.map((type) => (
-              <button
-                key={type}
-                onClick={() => { setSelectedType(type); setStep(2); }}
-                className="group h-32 md:h-40 flex flex-col items-center justify-center rounded-3xl md:rounded-[2.5rem] bg-white border border-stone-200 hover:border-amber-400 hover:shadow-2xl transition-all duration-300 active:scale-95 shadow-md"
-              >
-                <div className="w-10 h-10 md:w-14 md:h-14 bg-stone-50 rounded-xl md:rounded-2xl flex items-center justify-center mb-2 md:mb-3 group-hover:scale-110 group-hover:bg-amber-50 transition-all">
-                   <Gem className="w-5 h-5 md:w-7 md:h-7 text-amber-500" />
-                </div>
-                <span className="text-[10px] md:text-xs font-black text-stone-700 uppercase tracking-widest text-center px-2">{type}</span>
-              </button>
-            ))}
-          </div>
-          {cart.length > 0 && (
-            <button onClick={() => setStep(3)} className="w-full sm:w-auto bg-amber-950 text-white px-12 py-4 md:py-5 rounded-2xl md:rounded-[2rem] font-black text-base md:text-lg uppercase tracking-widest flex items-center justify-center shadow-2xl mt-4 md:mt-10 hover:bg-black transition-all">
-               ÖDƏNİŞƏ KEÇ ({cart.length}) <ArrowRight className="ml-4" />
-            </button>
-          )}
-        </div>
-      )}
-
-      {step === 2 && (
         <div className="flex-1 flex flex-col space-y-4 md:space-y-6 animate-in slide-in-from-right-12 duration-500 no-print">
           <div className="flex items-center justify-between bg-white p-3 md:p-4 rounded-2xl md:rounded-[2rem] shadow-xl border border-stone-100">
             <div className="flex items-center space-x-3 md:space-x-4">
-              <button onClick={() => setStep(1)} className="p-3 md:p-4 bg-stone-50 hover:bg-stone-100 rounded-xl md:rounded-2xl text-stone-400 transition-all">
-                <ArrowLeft className="w-5 h-5 md:w-6 md:h-6" />
-              </button>
+              <div className="p-3 md:p-4 bg-amber-50 rounded-xl md:rounded-2xl text-amber-500">
+                <Barcode className="w-5 h-5 md:w-6 md:h-6" />
+              </div>
               <div>
-                <h3 className="text-base md:text-xl font-black text-stone-900 uppercase leading-none">{selectedType}</h3>
+                <h3 className="text-base md:text-xl font-black text-stone-900 uppercase leading-none">Məhsul Axtarışı</h3>
                 <p className="text-[9px] md:text-[10px] text-stone-400 font-bold uppercase tracking-widest">Kodu daxil edin</p>
               </div>
             </div>
+            {cart.length > 0 && (
+              <button onClick={() => setStep(3)} className="bg-amber-950 text-white px-6 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center hover:bg-black transition-all">
+                SƏBƏT ({cart.length}) <ArrowRight className="ml-2 w-4 h-4" />
+              </button>
+            )}
           </div>
 
           <div className="bg-white rounded-3xl md:rounded-[3rem] p-4 md:p-8 shadow-2xl border border-stone-100 flex flex-col items-center justify-start pt-8 md:pt-12 min-h-[400px] overflow-y-auto">
