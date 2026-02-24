@@ -424,8 +424,21 @@ const SettingsModule: React.FC<SettingsProps> = ({ settings, setSettings }) => {
               <label htmlFor="silentPrinting" className="text-sm font-black text-stone-800 uppercase cursor-pointer">Səssiz Çap (Silent Printing)</label>
             </div>
             <p className="text-[10px] text-stone-400 font-bold italic ml-4 leading-normal">
-              * Diqqət: Səssiz çap üçün Chrome brauzerini "--kiosk --kiosk-printing" parametrləri ilə başlatmalısınız.
+              * Diqqət: Səssiz çap üçün Chrome brauzerini xüsusi parametrlərlə başlatmalısınız.
             </p>
+            <div className="mt-4 p-4 bg-amber-50 rounded-2xl border border-amber-100 space-y-3">
+              <h4 className="text-[10px] font-black text-amber-800 uppercase tracking-widest">Səssiz Çapın Qurulması (Addım-addım):</h4>
+              <ol className="text-[10px] text-stone-600 font-bold space-y-2 list-decimal ml-4">
+                <li>Bütün açıq Chrome pəncərələrini tamamilə bağlayın.</li>
+                <li>Masaüstündəki <strong>Chrome qısayoluna</strong> (shortcut) sağ klikləyin və <strong>Properties</strong> (Xüsusiyyətlər) seçin.</li>
+                <li><strong>Target</strong> (Hədəf) bölməsindəki yazının sonuna bir boşluq qoyaraq aşağıdakı kodu əlavə edin:
+                  <code className="block mt-1 p-2 bg-white border border-amber-200 rounded text-amber-600 font-mono">--kiosk --kiosk-printing</code>
+                </li>
+                <li><strong>Apply</strong> və <strong>OK</strong> düymələrinə basın.</li>
+                <li>Windows ayarlarında Zebra printerinizi <strong>Default Printer</strong> (Susmaya görə printer) olaraq təyin edin.</li>
+                <li>İndi Chrome-u həmin qısayol ilə açdıqda, çap düyməsini basan kimi pəncərə açılmadan birbaşa çap ediləcək.</li>
+              </ol>
+            </div>
           </div>
         </div>
       </div>
