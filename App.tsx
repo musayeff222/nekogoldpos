@@ -54,7 +54,9 @@ const App: React.FC = () => {
         { id: '7', field: 'price', x: 55, y: 60, fontSize: 22, visible: true, bold: true },
         { id: '8', field: 'currency', x: 85, y: 65, fontSize: 10, visible: true, bold: true },
       ]
-    }
+    },
+    silentPrinting: false,
+    printerPath: ''
   });
 
   useEffect(() => {

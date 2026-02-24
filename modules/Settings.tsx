@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Shield, Key, Save, List, Star, Calculator, Plus, X, User, Tag, Move, Type as TypeIcon, Eye, EyeOff, Bold, ChevronUp, ChevronDown, Printer } from 'lucide-react';
+import { Shield, Key, Save, List, Star, Calculator, Plus, X, User, Tag, Move, Type as TypeIcon, Eye, EyeOff, Bold, ChevronUp, ChevronDown, Printer, Download, Upload, Settings2 } from 'lucide-react';
 import { AppSettings, LabelElement, Product } from '../types';
 import { LabelPrint } from '../components/LabelPrint';
 
@@ -17,6 +17,7 @@ const SettingsModule: React.FC<SettingsProps> = ({ settings, setSettings }) => {
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
   const [testProduct, setTestProduct] = useState<Product | null>(null);
   const designerRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSave = () => {
     setSettings(localSettings);
@@ -70,6 +71,37 @@ const SettingsModule: React.FC<SettingsProps> = ({ settings, setSettings }) => {
     
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const handleExport = () => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(localSettings.labelConfig, null, 2));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", "label_config.json");
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+  };
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const config = JSON.parse(event.target?.result as string);
+        if (config.elements && Array.isArray(config.elements)) {
+          setLocalSettings(prev => ({ ...prev, labelConfig: config }));
+          alert("Dizayn uğurla yükləndi.");
+        } else {
+          alert("Yanlış fayl formatı.");
+        }
+      } catch (err) {
+        alert("Fayl oxunarkən xəta baş verdi.");
+      }
+    };
+    reader.readAsText(file);
   };
 
   const handleTestPrint = () => {
@@ -219,13 +251,30 @@ const SettingsModule: React.FC<SettingsProps> = ({ settings, setSettings }) => {
             <Tag className="text-amber-500" size={32} />
             <h3 className="text-xl font-black text-stone-900 uppercase">Etiket Dizayneri (Zebra Style)</h3>
           </div>
-          <button 
-            onClick={handleTestPrint}
-            className="bg-stone-900 text-amber-500 px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center space-x-2 hover:bg-black transition-all shadow-lg"
-          >
-            <Printer size={16} />
-            <span>Test Çapı</span>
-          </button>
+          <div className="flex items-center space-x-2">
+            <button 
+              onClick={handleExport}
+              className="p-3 bg-stone-100 text-stone-600 rounded-xl hover:bg-stone-200 transition-all"
+              title="Dizaynı Export Et"
+            >
+              <Download size={20} />
+            </button>
+            <button 
+              onClick={() => fileInputRef.current?.click()}
+              className="p-3 bg-stone-100 text-stone-600 rounded-xl hover:bg-stone-200 transition-all"
+              title="Dizaynı Import Et"
+            >
+              <Upload size={20} />
+            </button>
+            <input type="file" ref={fileInputRef} onChange={handleImport} accept=".json" className="hidden" />
+            <button 
+              onClick={handleTestPrint}
+              className="bg-stone-900 text-amber-500 px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center space-x-2 hover:bg-black transition-all shadow-lg"
+            >
+              <Printer size={16} />
+              <span>Test Çapı</span>
+            </button>
+          </div>
         </div>
         
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -343,6 +392,40 @@ const SettingsModule: React.FC<SettingsProps> = ({ settings, setSettings }) => {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-[2rem] border border-stone-100 shadow-2xl overflow-hidden p-8 md:p-12 space-y-8">
+        <div className="flex items-center space-x-4">
+          <Settings2 className="text-amber-500" size={32} />
+          <h3 className="text-xl font-black text-stone-900 uppercase">Çap Ayarları</h3>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-stone-400 uppercase tracking-widest ml-4">Printer Adı / Yolu</label>
+            <input 
+              type="text" 
+              value={localSettings.printerPath}
+              onChange={(e) => setLocalSettings({...localSettings, printerPath: e.target.value})}
+              placeholder="Məs: Zebra ZD220"
+              className="w-full bg-stone-50 border-2 border-stone-100 rounded-2xl py-4 px-6 font-black text-xl"
+            />
+          </div>
+          <div className="flex flex-col justify-center space-y-2">
+            <div className="flex items-center space-x-3 ml-4">
+              <input 
+                type="checkbox" 
+                id="silentPrinting"
+                checked={localSettings.silentPrinting}
+                onChange={(e) => setLocalSettings({...localSettings, silentPrinting: e.target.checked})}
+                className="w-6 h-6 accent-amber-500 rounded cursor-pointer"
+              />
+              <label htmlFor="silentPrinting" className="text-sm font-black text-stone-800 uppercase cursor-pointer">Səssiz Çap (Silent Printing)</label>
+            </div>
+            <p className="text-[10px] text-stone-400 font-bold italic ml-4 leading-normal">
+              * Diqqət: Səssiz çap üçün Chrome brauzerini "--kiosk --kiosk-printing" parametrləri ilə başlatmalısınız.
+            </p>
           </div>
         </div>
       </div>

@@ -106,6 +106,8 @@ export interface AppSettings {
   carats: number[];
   pricePerGram: number; // 1 Qramın qiyməti
   labelConfig: LabelConfig;
+  silentPrinting: boolean;
+  printerPath: string;
 }
 
 export enum Page {
