@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Shield, Key, Save, List, Star, Calculator, Plus, X, User, Tag, Move, Type as TypeIcon, Eye, EyeOff, Bold, ChevronUp, ChevronDown } from 'lucide-react';
-import { AppSettings, LabelElement } from '../types';
+import { createPortal } from 'react-dom';
+import { Shield, Key, Save, List, Star, Calculator, Plus, X, User, Tag, Move, Type as TypeIcon, Eye, EyeOff, Bold, ChevronUp, ChevronDown, Printer } from 'lucide-react';
+import { AppSettings, LabelElement, Product } from '../types';
+import { LabelPrint } from '../components/LabelPrint';
 
 interface SettingsProps {
   settings: AppSettings;
@@ -13,6 +15,7 @@ const SettingsModule: React.FC<SettingsProps> = ({ settings, setSettings }) => {
   const [newSupplier, setNewSupplier] = useState('');
   const [newCarat, setNewCarat] = useState('');
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
+  const [testProduct, setTestProduct] = useState<Product | null>(null);
   const designerRef = useRef<HTMLDivElement>(null);
 
   const handleSave = () => {
@@ -67,6 +70,28 @@ const SettingsModule: React.FC<SettingsProps> = ({ settings, setSettings }) => {
     
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const handleTestPrint = () => {
+    const sampleProduct: Product = {
+      id: 'test',
+      code: 'U001',
+      name: 'Test Məhsul',
+      carat: 750,
+      type: 'Üzük',
+      supplier: 'ITALIYA',
+      weight: 10.15,
+      supplierPrice: 0,
+      price: 5500,
+      stockCount: 1,
+      purchaseDate: new Date().toISOString(),
+      logs: [],
+      brilliant: '0.03ct'
+    };
+    setTestProduct(sampleProduct);
+    setTimeout(() => {
+      window.print();
+    }, 100);
   };
 
   const addType = () => {
@@ -189,9 +214,18 @@ const SettingsModule: React.FC<SettingsProps> = ({ settings, setSettings }) => {
       </div>
 
       <div className="bg-white rounded-[2rem] border border-stone-100 shadow-2xl overflow-hidden p-8 md:p-12 space-y-8">
-        <div className="flex items-center space-x-4">
-          <Tag className="text-amber-500" size={32} />
-          <h3 className="text-xl font-black text-stone-900 uppercase">Etiket Dizayneri (Zebra Style)</h3>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <Tag className="text-amber-500" size={32} />
+            <h3 className="text-xl font-black text-stone-900 uppercase">Etiket Dizayneri (Zebra Style)</h3>
+          </div>
+          <button 
+            onClick={handleTestPrint}
+            className="bg-stone-900 text-amber-500 px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center space-x-2 hover:bg-black transition-all shadow-lg"
+          >
+            <Printer size={16} />
+            <span>Test Çapı</span>
+          </button>
         </div>
         
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -343,6 +377,11 @@ const SettingsModule: React.FC<SettingsProps> = ({ settings, setSettings }) => {
       <button onClick={handleSave} className="w-full bg-amber-600 text-white py-6 rounded-3xl font-black text-xl hover:bg-amber-700 shadow-2xl active:scale-95 transition-all">
         AYARLARI YADDA SAXLA
       </button>
+
+      {testProduct && createPortal(
+        <LabelPrint product={testProduct} settings={localSettings} />,
+        document.body
+      )}
     </div>
   );
 };

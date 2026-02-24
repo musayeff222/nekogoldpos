@@ -32,6 +32,7 @@ import {
   User
 } from 'lucide-react';
 import { Product, ProductType, AppSettings, ProductLog, Sale } from '../types';
+import { LabelPrint } from '../components/LabelPrint';
 
 interface StockProps {
   products: Product[];
@@ -542,58 +543,6 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
         <LabelPrint product={lastAddedProduct} settings={settings} />,
         document.body
       )}
-    </div>
-  );
-};
-
-const LabelPrint: React.FC<{ product: Product | null, settings: AppSettings }> = ({ product, settings }) => {
-  if (!product) return null;
-  
-  const { labelConfig } = settings;
-  
-  return (
-    <div 
-      id="label-print" 
-      className="relative bg-white overflow-hidden"
-      style={{ 
-        width: `${labelConfig.width}mm`, 
-        height: `${labelConfig.height}mm`,
-      }}
-    >
-      {labelConfig.elements.map(el => {
-        if (!el.visible) return null;
-        
-        let content = '';
-        switch(el.field) {
-          case 'shopName': content = settings.shopName; break;
-          case 'code': content = product.code; break;
-          case 'weight': content = product.weight.toString(); break;
-          case 'price': content = (Number(product.price) || 0).toLocaleString(); break;
-          case 'carat': content = product.carat.toString(); break;
-          case 'supplier': content = product.supplier; break;
-          case 'brilliant': content = product.brilliant || ''; break;
-          case 'currency': content = 'AZN'; break;
-        }
-        
-        if (!content && el.field !== 'currency' && el.field !== 'shopName') return null;
-
-        return (
-          <div
-            key={el.id}
-            className="absolute whitespace-nowrap"
-            style={{
-              left: `${el.x}%`,
-              top: `${el.y}%`,
-              fontSize: `${el.fontSize}px`,
-              fontWeight: el.bold ? 'black' : 'normal',
-              fontFamily: 'Arial, sans-serif',
-              lineHeight: 1
-            }}
-          >
-            {content}
-          </div>
-        );
-      })}
     </div>
   );
 };
