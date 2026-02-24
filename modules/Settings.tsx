@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { Shield, Key, Save, List, Star, Calculator, Plus, X, User } from 'lucide-react';
-import { AppSettings } from '../types';
+import React, { useState, useRef, useEffect } from 'react';
+import { Shield, Key, Save, List, Star, Calculator, Plus, X, User, Tag, Move, Type as TypeIcon, Eye, EyeOff, Bold, ChevronUp, ChevronDown } from 'lucide-react';
+import { AppSettings, LabelElement } from '../types';
 
 interface SettingsProps {
   settings: AppSettings;
@@ -12,10 +12,61 @@ const SettingsModule: React.FC<SettingsProps> = ({ settings, setSettings }) => {
   const [newType, setNewType] = useState('');
   const [newSupplier, setNewSupplier] = useState('');
   const [newCarat, setNewCarat] = useState('');
+  const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
+  const designerRef = useRef<HTMLDivElement>(null);
 
   const handleSave = () => {
     setSettings(localSettings);
     alert("Ayarlar uğurla yadda saxlanıldı.");
+  };
+
+  const updateLabelElement = (id: string, updates: Partial<LabelElement>) => {
+    setLocalSettings(prev => ({
+      ...prev,
+      labelConfig: {
+        ...prev.labelConfig,
+        elements: prev.labelConfig.elements.map(el => el.id === id ? { ...el, ...updates } : el)
+      }
+    }));
+  };
+
+  const handleDrag = (e: React.MouseEvent | React.TouchEvent, id: string) => {
+    if (!designerRef.current) return;
+    
+    const rect = designerRef.current.getBoundingClientRect();
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    
+    const x = ((clientX - rect.left) / rect.width) * 100;
+    const y = ((clientY - rect.top) / rect.height) * 100;
+    
+    // Clamp values
+    const clampedX = Math.max(0, Math.min(90, x));
+    const clampedY = Math.max(0, Math.min(90, y));
+    
+    updateLabelElement(id, { x: clampedX, y: clampedY });
+  };
+
+  const onMouseDown = (id: string) => {
+    setSelectedElementId(id);
+    
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!designerRef.current) return;
+      const rect = designerRef.current.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * 100;
+      const y = ((e.clientY - rect.top) / rect.height) * 100;
+      const clampedX = Math.max(0, Math.min(95, x));
+      const clampedY = Math.max(0, Math.min(95, y));
+      updateLabelElement(id, { x: clampedX, y: clampedY });
+    };
+    
+    const handleMouseUp = () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+    
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
   };
 
   const addType = () => {
@@ -130,6 +181,131 @@ const SettingsModule: React.FC<SettingsProps> = ({ settings, setSettings }) => {
                 <div key={c} className="bg-amber-50 text-amber-700 px-3 py-1.5 rounded-lg text-[10px] font-black border border-amber-200 flex items-center">
                   {c}K
                   <button onClick={() => removeItem('carats', c)} className="ml-2 text-amber-300 hover:text-red-500"><X size={12} /></button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-[2rem] border border-stone-100 shadow-2xl overflow-hidden p-8 md:p-12 space-y-8">
+        <div className="flex items-center space-x-4">
+          <Tag className="text-amber-500" size={32} />
+          <h3 className="text-xl font-black text-stone-900 uppercase">Etiket Dizayneri (Zebra Style)</h3>
+        </div>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          {/* Visual Designer */}
+          <div className="lg:col-span-7 space-y-4">
+            <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest ml-2">Vizual Maket (Sürükləyərək yerini dəyiş)</p>
+            <div 
+              ref={designerRef}
+              className="relative bg-white border-2 border-stone-200 rounded-xl shadow-inner overflow-hidden"
+              style={{ 
+                aspectRatio: `${localSettings.labelConfig.width} / ${localSettings.labelConfig.height}`,
+                width: '100%'
+              }}
+            >
+              {/* Zebra Pattern Mockup background */}
+              <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'linear-gradient(45deg, #000 25%, transparent 25%, transparent 75%, #000 75%, #000), linear-gradient(45deg, #000 25%, transparent 25%, transparent 75%, #000 75%, #000)', backgroundSize: '20px 20px', backgroundPosition: '0 0, 10px 10px' }}></div>
+              
+              {localSettings.labelConfig.elements.map(el => (
+                el.visible && (
+                  <div
+                    key={el.id}
+                    onMouseDown={() => onMouseDown(el.id)}
+                    className={`absolute cursor-move select-none p-1 border border-transparent hover:border-amber-400 hover:bg-amber-50/50 rounded transition-colors ${selectedElementId === el.id ? 'border-amber-500 bg-amber-50/80 z-10' : ''}`}
+                    style={{
+                      left: `${el.x}%`,
+                      top: `${el.y}%`,
+                      fontSize: `${el.fontSize}px`,
+                      fontWeight: el.bold ? 'black' : 'normal',
+                      fontFamily: 'Arial, sans-serif'
+                    }}
+                  >
+                    {el.field === 'shopName' ? localSettings.shopName : 
+                     el.field === 'code' ? 'U001' : 
+                     el.field === 'weight' ? '10.15' : 
+                     el.field === 'price' ? '5500' : 
+                     el.field === 'carat' ? '750' : 
+                     el.field === 'supplier' ? 'ITALIYA' : 
+                     el.field === 'brilliant' ? 'Br.0.03ct' : 
+                     el.field === 'currency' ? 'AZN' : ''}
+                  </div>
+                )
+              ))}
+            </div>
+            <div className="flex justify-between text-[10px] font-bold text-stone-400 uppercase px-2">
+              <span>En: {localSettings.labelConfig.width}mm</span>
+              <span>Hündürlük: {localSettings.labelConfig.height}mm</span>
+            </div>
+          </div>
+
+          {/* Element Controls */}
+          <div className="lg:col-span-5 space-y-4">
+            <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest ml-2">Elementlərin Ayarları</p>
+            <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 scrollbar-hide">
+              {localSettings.labelConfig.elements.map(el => (
+                <div 
+                  key={el.id} 
+                  onClick={() => setSelectedElementId(el.id)}
+                  className={`p-4 rounded-2xl border transition-all ${selectedElementId === el.id ? 'bg-amber-50 border-amber-300 shadow-md' : 'bg-stone-50 border-stone-100 hover:border-stone-200'}`}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center space-x-2">
+                      <div className={`p-1.5 rounded-lg ${el.visible ? 'bg-amber-500 text-white' : 'bg-stone-200 text-stone-400'}`}>
+                        <TypeIcon size={14} />
+                      </div>
+                      <span className="text-[10px] font-black text-stone-800 uppercase">{el.field}</span>
+                    </div>
+                    <div className="flex items-center space-x-1">
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); updateLabelElement(el.id, { visible: !el.visible }); }}
+                        className={`p-1.5 rounded-lg transition-colors ${el.visible ? 'text-amber-600 hover:bg-amber-100' : 'text-stone-300 hover:bg-stone-100'}`}
+                      >
+                        {el.visible ? <Eye size={16} /> : <EyeOff size={16} />}
+                      </button>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); updateLabelElement(el.id, { bold: !el.bold }); }}
+                        className={`p-1.5 rounded-lg transition-colors ${el.bold ? 'text-amber-600 bg-amber-100' : 'text-stone-300 hover:bg-stone-100'}`}
+                      >
+                        <Bold size={16} />
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {selectedElementId === el.id && (
+                    <div className="grid grid-cols-2 gap-3 animate-in fade-in slide-in-from-top-2">
+                      <div className="space-y-1">
+                        <label className="text-[8px] font-black text-stone-400 uppercase ml-1">Ölçü (px)</label>
+                        <div className="flex items-center space-x-1">
+                          <input 
+                            type="number" 
+                            value={el.fontSize} 
+                            onChange={(e) => updateLabelElement(el.id, { fontSize: Number(e.target.value) })}
+                            className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs font-bold outline-none"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[8px] font-black text-stone-400 uppercase ml-1">Pozisiya (X, Y %)</label>
+                        <div className="flex items-center space-x-1">
+                          <input 
+                            type="number" 
+                            value={Math.round(el.x)} 
+                            onChange={(e) => updateLabelElement(el.id, { x: Number(e.target.value) })}
+                            className="w-1/2 bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs font-bold outline-none"
+                          />
+                          <input 
+                            type="number" 
+                            value={Math.round(el.y)} 
+                            onChange={(e) => updateLabelElement(el.id, { y: Number(e.target.value) })}
+                            className="w-1/2 bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs font-bold outline-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

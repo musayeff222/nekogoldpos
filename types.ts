@@ -80,6 +80,22 @@ export interface ScrapGold {
   date: string;
 }
 
+export interface LabelElement {
+  id: string;
+  field: 'shopName' | 'code' | 'weight' | 'price' | 'carat' | 'supplier' | 'brilliant' | 'currency';
+  x: number; // percentage
+  y: number; // percentage
+  fontSize: number; // px
+  visible: boolean;
+  bold: boolean;
+}
+
+export interface LabelConfig {
+  width: number; // mm
+  height: number; // mm
+  elements: LabelElement[];
+}
+
 export interface AppSettings {
   deleteCode: string;
   adminPassword: string;
@@ -89,6 +105,7 @@ export interface AppSettings {
   suppliers: string[];
   carats: number[];
   pricePerGram: number; // 1 Qramın qiyməti
+  labelConfig: LabelConfig;
 }
 
 export enum Page {

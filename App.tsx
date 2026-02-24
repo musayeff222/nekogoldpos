@@ -40,7 +40,21 @@ const App: React.FC = () => {
     productTypes: ['Üzük', 'Sırğa', 'Boyunbağı', 'Qolbaq', 'Dəst', 'Zəncir', 'Set', 'Saat', 'Sep', 'Külçə', 'Digər'],
     suppliers: ['Tədərükçü A', 'Tədərükçü B', 'Atelye X'],
     carats: [14, 18, 22, 24],
-    pricePerGram: 400
+    pricePerGram: 400,
+    labelConfig: {
+      width: 80,
+      height: 25,
+      elements: [
+        { id: '1', field: 'shopName', x: 5, y: 10, fontSize: 14, visible: true, bold: true },
+        { id: '2', field: 'code', x: 5, y: 50, fontSize: 20, visible: true, bold: true },
+        { id: '3', field: 'weight', x: 35, y: 55, fontSize: 14, visible: true, bold: true },
+        { id: '4', field: 'supplier', x: 55, y: 10, fontSize: 10, visible: true, bold: true },
+        { id: '5', field: 'carat', x: 75, y: 10, fontSize: 10, visible: true, bold: true },
+        { id: '6', field: 'brilliant', x: 55, y: 30, fontSize: 8, visible: true, bold: true },
+        { id: '7', field: 'price', x: 55, y: 60, fontSize: 22, visible: true, bold: true },
+        { id: '8', field: 'currency', x: 85, y: 65, fontSize: 10, visible: true, bold: true },
+      ]
+    }
   });
 
   useEffect(() => {

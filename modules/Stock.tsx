@@ -539,42 +539,61 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
       
       {/* LABEL PRINT CONTAINER (PORTAL) */}
       {lastAddedProduct && createPortal(
-        <LabelPrint product={lastAddedProduct} />,
+        <LabelPrint product={lastAddedProduct} settings={settings} />,
         document.body
       )}
     </div>
   );
 };
 
-const LabelPrint: React.FC<{ product: Product | null }> = ({ product }) => {
+const LabelPrint: React.FC<{ product: Product | null, settings: AppSettings }> = ({ product, settings }) => {
   if (!product) return null;
   
+  const { labelConfig } = settings;
+  
   return (
-    <div id="label-print" className="flex flex-row w-full h-full">
-      {/* Left Part (approx 50%) */}
-      <div className="w-1/2 flex flex-col justify-between py-1 pr-2 border-r border-dashed border-stone-300">
-        <div className="text-[12px] font-black tracking-tight">NEKO GOLD</div>
-        <div className="flex items-baseline space-x-2 mt-auto">
-          <span className="text-[18px] font-black leading-none">{product.code}</span>
-          <span className="text-[12px] font-bold leading-none">{product.weight.toFixed(2)}</span>
-        </div>
-      </div>
-      
-      {/* Right Part (approx 50%) */}
-      <div className="w-1/2 flex flex-col justify-between py-1 pl-2 text-right">
-        <div className="space-y-0">
-          <div className="text-[10px] font-black uppercase leading-none truncate">
-            {product.supplier} {product.carat}
+    <div 
+      id="label-print" 
+      className="relative bg-white overflow-hidden"
+      style={{ 
+        width: `${labelConfig.width}mm`, 
+        height: `${labelConfig.height}mm`,
+      }}
+    >
+      {labelConfig.elements.map(el => {
+        if (!el.visible) return null;
+        
+        let content = '';
+        switch(el.field) {
+          case 'shopName': content = settings.shopName; break;
+          case 'code': content = product.code; break;
+          case 'weight': content = product.weight.toString(); break;
+          case 'price': content = (Number(product.price) || 0).toLocaleString(); break;
+          case 'carat': content = product.carat.toString(); break;
+          case 'supplier': content = product.supplier; break;
+          case 'brilliant': content = product.brilliant || ''; break;
+          case 'currency': content = 'AZN'; break;
+        }
+        
+        if (!content && el.field !== 'currency' && el.field !== 'shopName') return null;
+
+        return (
+          <div
+            key={el.id}
+            className="absolute whitespace-nowrap"
+            style={{
+              left: `${el.x}%`,
+              top: `${el.y}%`,
+              fontSize: `${el.fontSize}px`,
+              fontWeight: el.bold ? 'black' : 'normal',
+              fontFamily: 'Arial, sans-serif',
+              lineHeight: 1
+            }}
+          >
+            {content}
           </div>
-          <div className="text-[8px] font-bold leading-none mt-1">
-            {product.brilliant ? `Br.${product.brilliant}` : ''}
-          </div>
-        </div>
-        <div className="mt-auto flex items-baseline justify-end space-x-1">
-          <span className="text-[22px] font-black leading-none">{product.price.toLocaleString()}</span>
-          <span className="text-[10px] font-bold">AZN</span>
-        </div>
-      </div>
+        );
+      })}
     </div>
   );
 };
