@@ -26,6 +26,7 @@ import {
   Layers,
   ShoppingBag,
   Zap,
+  Printer,
   Box,
   Maximize2,
   AlertCircle,
@@ -76,8 +77,43 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
   });
 
   const [autoPrint, setAutoPrint] = useState(true);
+  const [bulkPricePerGram, setBulkPricePerGram] = useState<number | ''>('');
+  const [bulkPrintList, setBulkPrintList] = useState<Product[]>([]);
 
   const [editForm, setEditForm] = useState<Partial<Product>>({});
+
+  const handleBulkPrint = () => {
+    if (!bulkPricePerGram || !activeFolder) return;
+    
+    const pricePerGram = Number(bulkPricePerGram);
+    const productsInFolder = products.filter(p => p.type === activeFolder);
+    
+    // Update products in state
+    const updatedProducts = products.map(p => {
+      if (p.type === activeFolder) {
+        const newPrice = Math.round((Number(p.weight) * pricePerGram) / 10) * 10;
+        return { ...p, price: newPrice };
+      }
+      return p;
+    });
+    
+    setProducts(updatedProducts);
+    
+    // Prepare for printing
+    const printList = productsInFolder.map(p => {
+      const newPrice = Math.round((Number(p.weight) * pricePerGram) / 10) * 10;
+      return { ...p, price: newPrice };
+    });
+    
+    setBulkPrintList(printList);
+    
+    // Trigger print
+    setTimeout(() => {
+      window.print();
+      // Clear list after print dialog closes (or shortly after)
+      setTimeout(() => setBulkPrintList([]), 1000);
+    }, 300);
+  };
 
   const getPrefix = (type: string) => {
     switch (type) {
@@ -466,7 +502,43 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
           })}
         </div>
       ) : (
-        <div className="bg-white rounded-[2.5rem] border border-stone-100 shadow-2xl overflow-hidden flex flex-col min-h-[500px]">
+        <div className="space-y-4">
+          {activeFolder && (
+            <div className="bg-white p-6 rounded-[2rem] border border-stone-100 shadow-xl flex flex-col md:flex-row items-center justify-between gap-6 animate-in slide-in-from-top-4">
+              <div className="flex items-center space-x-4">
+                <div className="w-12 h-12 bg-amber-500 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-amber-200">
+                  <Printer size={24} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-stone-900 uppercase tracking-widest">Toplu Qiymət & Çap</h3>
+                  <p className="text-[10px] font-bold text-stone-400 uppercase mt-1">Bütün "{activeFolder}" kateqoriyası üçün</p>
+                </div>
+              </div>
+              
+              <div className="flex flex-1 max-w-md items-center space-x-3">
+                <div className="relative flex-1">
+                  <Scale className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 w-4 h-4" />
+                  <input 
+                    type="number" 
+                    placeholder="1 qr Qiyməti (₼)" 
+                    value={bulkPricePerGram}
+                    onChange={(e) => setBulkPricePerGram(e.target.value === '' ? '' : Number(e.target.value))}
+                    className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-3 pl-10 pr-4 font-black text-sm outline-none focus:border-amber-400 transition-all"
+                  />
+                </div>
+                <button 
+                  onClick={handleBulkPrint}
+                  disabled={!bulkPricePerGram}
+                  className={`px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg flex items-center space-x-2 ${bulkPricePerGram ? 'bg-stone-900 text-amber-500 hover:bg-black' : 'bg-stone-100 text-stone-300 cursor-not-allowed'}`}
+                >
+                  <Zap size={16} />
+                  <span>Toplu Çap Et</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="bg-white rounded-[2.5rem] border border-stone-100 shadow-2xl overflow-hidden flex flex-col min-h-[500px]">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[800px]">
               <thead>
@@ -495,7 +567,8 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
             </table>
           </div>
         </div>
-      )}
+      </div>
+    )}
 
       {showDetailModal && selectedProduct && (
         <div className="fixed inset-0 bg-stone-950/80 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
@@ -539,8 +612,18 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
       {zoomedImage && <div className="fixed inset-0 bg-stone-950/95 z-[110] flex items-center justify-center p-4 cursor-zoom-out" onClick={() => setZoomedImage(null)}><img src={zoomedImage} className="max-w-full max-h-full object-contain drop-shadow-2xl animate-in zoom-in-95" alt="Zoomed product" /></div>}
       
       {/* LABEL PRINT CONTAINER (PORTAL) */}
-      {lastAddedProduct && createPortal(
-        <LabelPrint product={lastAddedProduct} settings={settings} />,
+      {(lastAddedProduct || bulkPrintList.length > 0) && createPortal(
+        <div id="label-print" className="bg-white">
+          {bulkPrintList.length > 0 ? (
+            bulkPrintList.map((p, idx) => (
+              <div key={p.id} className={idx < bulkPrintList.length - 1 ? 'label-page-break' : ''}>
+                <LabelPrint product={p} settings={settings} />
+              </div>
+            ))
+          ) : (
+            <LabelPrint product={lastAddedProduct} settings={settings} />
+          )}
+        </div>,
         document.body
       )}
     </div>

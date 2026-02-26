@@ -57,7 +57,11 @@
                 font-family: Arial, sans-serif !important;
                 overflow: hidden !important;
             }
-            #receipt-print *, #label-print * { visibility: visible !important; }
+            #label-print *, #label-print { visibility: visible !important; }
+            .label-page-break {
+                page-break-after: always !important;
+                break-after: page !important;
+            }
             .no-print { display: none !important; visibility: hidden !important; }
             
             .receipt-table {
