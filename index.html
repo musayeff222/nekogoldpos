@@ -35,9 +35,14 @@
             #receipt-print, #label-print {
                 visibility: visible !important;
                 background: white !important;
-                color: black !important;
+                color: #000000 !important;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
+                image-rendering: pixelated !important;
+                -webkit-font-smoothing: none !important;
+                -moz-osx-font-smoothing: grayscale !important;
+                font-smoothing: none !important;
+                text-rendering: geometricPrecision !important;
             }
             #receipt-print {
                 position: absolute !important;

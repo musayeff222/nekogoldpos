@@ -47,7 +47,10 @@ export const LabelPrint: React.FC<LabelPrintProps> = ({ product, settings }) => 
               fontSize: `${el.fontSize}px`,
               fontWeight: el.bold ? '900' : 'normal',
               fontFamily: 'Arial, sans-serif',
-              lineHeight: 1
+              lineHeight: 1,
+              color: '#000000',
+              WebkitFontSmoothing: 'none',
+              textRendering: 'geometricPrecision'
             }}
           >
             {content}
