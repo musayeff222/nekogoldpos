@@ -13,8 +13,7 @@ export const LabelPrint: React.FC<LabelPrintProps> = ({ product, settings }) => 
   
   return (
     <div 
-      id="label-print" 
-      className="relative bg-white overflow-hidden"
+      className="relative bg-white overflow-hidden label-print-item"
       style={{ 
         width: `${labelConfig.width}mm`, 
         height: `${labelConfig.height}mm`,
@@ -45,7 +44,7 @@ export const LabelPrint: React.FC<LabelPrintProps> = ({ product, settings }) => 
               left: `${el.x}%`,
               top: `${el.y}%`,
               fontSize: `${el.fontSize}px`,
-              fontWeight: el.bold ? 'black' : 'normal',
+              fontWeight: el.bold ? '900' : 'normal',
               fontFamily: 'Arial, sans-serif',
               lineHeight: 1
             }}
