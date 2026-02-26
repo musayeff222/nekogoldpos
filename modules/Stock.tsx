@@ -114,8 +114,8 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
       setTimeout(() => {
         setBulkPrintList([]);
         setBulkPricePerGram('');
-      }, 1000);
-    }, 500);
+      }, 2000);
+    }, 1000);
   };
 
   const getPrefix = (type: string) => {
@@ -211,8 +211,8 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
       setTimeout(() => {
           window.print();
           // Clear after print dialog
-          setTimeout(() => setLastAddedProduct(null), 1000);
-      }, 500);
+          setTimeout(() => setLastAddedProduct(null), 2000);
+      }, 1000);
     }
 
     setIsAddingNew(false);
@@ -458,8 +458,8 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                       setLastAddedProduct(tempProduct);
                       setTimeout(() => {
                         window.print();
-                        setTimeout(() => setLastAddedProduct(null), 1000);
-                      }, 500);
+                        setTimeout(() => setLastAddedProduct(null), 2000);
+                      }, 1000);
                     }}
                     className="flex-1 py-4 rounded-xl font-black text-amber-600 uppercase text-[10px] border border-amber-200 hover:bg-amber-50 transition-all tracking-widest flex items-center justify-center"
                    >
@@ -606,8 +606,8 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                   setLastAddedProduct(selectedProduct);
                   setTimeout(() => {
                     window.print();
-                    setTimeout(() => setLastAddedProduct(null), 1000);
-                  }, 500);
+                    setTimeout(() => setLastAddedProduct(null), 2000);
+                  }, 1000);
                 }} 
                 className="px-6 py-4 bg-white border border-stone-200 rounded-xl font-black text-stone-600 hover:bg-stone-50 transition-all uppercase text-[10px] flex items-center"
               >

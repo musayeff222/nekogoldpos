@@ -17,6 +17,7 @@ export const LabelPrint: React.FC<LabelPrintProps> = ({ product, settings }) => 
       style={{ 
         width: `${labelConfig.width}mm`, 
         height: `${labelConfig.height}mm`,
+        fontWeight: settings.labelFontWeight
       }}
     >
       {labelConfig.elements.map(el => {

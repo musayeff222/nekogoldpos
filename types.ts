@@ -110,6 +110,7 @@ export interface AppSettings {
   receiptPrinterPath: string;
   labelPrinterPath: string;
   receiptFontWeight: string;
+  labelFontWeight: string;
 }
 
 export enum Page {

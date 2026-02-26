@@ -123,7 +123,8 @@ const SettingsModule: React.FC<SettingsProps> = ({ settings, setSettings }) => {
     setTestProduct(sampleProduct);
     setTimeout(() => {
       window.print();
-    }, 100);
+      setTimeout(() => setTestProduct(null), 2000);
+    }, 1000);
   };
 
   const addType = () => {
@@ -438,6 +439,21 @@ const SettingsModule: React.FC<SettingsProps> = ({ settings, setSettings }) => {
                 <option value="900">Maksimum Qalın (900)</option>
               </select>
             </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-stone-400 uppercase tracking-widest ml-4">Etiket Mətni Qalınlığı (Label Weight)</label>
+              <select 
+                value={localSettings.labelFontWeight}
+                onChange={(e) => setLocalSettings({...localSettings, labelFontWeight: e.target.value})}
+                className="w-full bg-stone-50 border-2 border-stone-100 rounded-2xl py-4 px-6 font-black text-xl outline-none"
+              >
+                <option value="normal">Normal</option>
+                <option value="500">Orta (500)</option>
+                <option value="600">Qalın (600)</option>
+                <option value="700">Çox Qalın (700)</option>
+                <option value="800">Ekstra Qalın (800)</option>
+                <option value="900">Maksimum Qalın (900)</option>
+              </select>
+            </div>
           </div>
           <div className="flex flex-col justify-start space-y-2">
             <div className="flex items-center space-x-3 ml-4">
@@ -471,6 +487,7 @@ const SettingsModule: React.FC<SettingsProps> = ({ settings, setSettings }) => {
                     <li>Tam avtomatlaşdırılmış (pəncərəsiz) iki fərqli printer üçün kənar proqram təminatı (məs: QZ Tray) tələb oluna bilər.</li>
                   </ul>
                 </li>
+                <li><strong>Boya Solğunluğu:</strong> Əgər çap solğun çıxırsa, Windows-da Printer Properties &rarr; Preferences &rarr; Options bölməsindən <strong>Darkness</strong> (Qaralıq) ayarını artırın və <strong>Print Speed</strong> (Sürət) ayarını azaldın.</li>
                 <li>İndi Chrome-u həmin qısayol ilə açdıqda, çap düyməsini basan kimi pəncərə açılmadan birbaşa çap ediləcək.</li>
               </ol>
             </div>
