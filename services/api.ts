@@ -7,6 +7,10 @@ export const api = {
   getProducts: async (): Promise<Product[]> => {
     const res = await fetch(`${API_BASE}/products`);
     const data = await res.json();
+    if (!Array.isArray(data)) {
+      console.error("Expected array from /api/products, got:", data);
+      return [];
+    }
     return data.map((p: any) => ({ ...p, logs: typeof p.logs === 'string' ? JSON.parse(p.logs) : p.logs }));
   },
   addProduct: async (product: Product): Promise<Product> => {
@@ -32,7 +36,12 @@ export const api = {
   // Sales
   getSales: async (): Promise<Sale[]> => {
     const res = await fetch(`${API_BASE}/sales`);
-    return res.json();
+    const data = await res.json();
+    if (!Array.isArray(data)) {
+      console.error("Expected array from /api/sales, got:", data);
+      return [];
+    }
+    return data;
   },
   addSale: async (sale: Sale): Promise<Sale> => {
     const res = await fetch(`${API_BASE}/sales`, {
@@ -54,7 +63,12 @@ export const api = {
   // Customers
   getCustomers: async (): Promise<Customer[]> => {
     const res = await fetch(`${API_BASE}/customers`);
-    return res.json();
+    const data = await res.json();
+    if (!Array.isArray(data)) {
+      console.error("Expected array from /api/customers, got:", data);
+      return [];
+    }
+    return data;
   },
   addCustomer: async (customer: Customer): Promise<Customer> => {
     const res = await fetch(`${API_BASE}/customers`, {
@@ -80,6 +94,10 @@ export const api = {
   getScraps: async (): Promise<ScrapGold[]> => {
     const res = await fetch(`${API_BASE}/scraps`);
     const data = await res.json();
+    if (!Array.isArray(data)) {
+      console.error("Expected array from /api/scraps, got:", data);
+      return [];
+    }
     return data.map((s: any) => ({
       ...s,
       phones: typeof s.phones === 'string' ? JSON.parse(s.phones) : s.phones,
