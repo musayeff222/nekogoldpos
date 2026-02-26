@@ -17,6 +17,7 @@ import {
   User
 } from 'lucide-react';
 import { Sale, Product } from '../types';
+import { api } from '../services/api';
 
 interface ReturnsProps {
   sales: Sale[];
@@ -47,7 +48,7 @@ const ReturnsModule: React.FC<ReturnsProps> = ({ sales, setSales, products, setP
     setShowRefundOptions(true);
   };
 
-  const finalizeReturn = (isExchange: boolean) => {
+  const finalizeReturn = async (isExchange: boolean) => {
     if (!selectedSale) return;
 
     let finalCode = selectedSale.productCode;
@@ -67,28 +68,32 @@ const ReturnsModule: React.FC<ReturnsProps> = ({ sales, setSales, products, setP
     const actionText = isExchange ? 'DƏYİŞİLMƏ' : 'GERİ QAYTARMA';
     const finalStatus = isExchange ? 'exchanged' : 'returned';
 
-    // 1. Satış tarixçəsini yenilə
-    setSales(prev => prev.map(s => 
-      s.id === selectedSale.id ? { ...s, status: finalStatus, returnNote: note } : s
-    ));
-    
-    // 2. Məhsulu stoka əlavə et
-    setProducts(prev => prev.map(p => {
-        if (p.id === selectedSale.productId) {
-            return { 
-                ...p, 
-                stockCount: p.stockCount + 1, 
-                code: finalCode,
-                logs: [{ date: new Date().toISOString(), action: `${actionText} prosesi ilə geri qayıtdı. ${note}` }, ...(p.logs || [])]
-            };
-        }
-        return p;
-    }));
+    try {
+      // 1. Update sale status in DB
+      const updatedSale = { ...selectedSale, status: finalStatus, returnNote: note };
+      await api.updateSale(updatedSale);
+      setSales(prev => prev.map(s => s.id === selectedSale.id ? updatedSale : s));
+      
+      // 2. Update product in DB and state
+      const productToUpdate = products.find(p => p.id === selectedSale.productId);
+      if (productToUpdate) {
+          const updatedProduct = { 
+              ...productToUpdate, 
+              stockCount: productToUpdate.stockCount + 1, 
+              code: finalCode,
+              logs: [{ date: new Date().toISOString(), action: `${actionText} prosesi ilə geri qayıtdı. ${note}` }, ...(productToUpdate.logs || [])]
+          };
+          await api.updateProduct(updatedProduct);
+          setProducts(prev => prev.map(p => p.id === selectedSale.productId ? updatedProduct : p));
+      }
 
-    alert(`${actionText} tamamlandı. Məhsul ${finalCode} kodu ilə stoka geri əlavə edildi.`);
-    setShowRefundOptions(false);
-    setSelectedSale(null);
-    setSearchTerm('');
+      alert(`${actionText} tamamlandı. Məhsul ${finalCode} kodu ilə stoka geri əlavə edildi.`);
+      setShowRefundOptions(false);
+      setSelectedSale(null);
+      setSearchTerm('');
+    } catch (err) {
+      alert("Xəta baş verdi: " + (err as Error).message);
+    }
   };
 
   return (

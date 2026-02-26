@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Shield, Key, Save, List, Star, Calculator, Plus, X, User, Tag, Move, Type as TypeIcon, Eye, EyeOff, Bold, ChevronUp, ChevronDown, Printer, Download, Upload, Settings2 } from 'lucide-react';
 import { AppSettings, LabelElement, Product } from '../types';
 import { LabelPrint } from '../components/LabelPrint';
+import { api } from '../services/api';
 
 interface SettingsProps {
   settings: AppSettings;
@@ -19,9 +20,14 @@ const SettingsModule: React.FC<SettingsProps> = ({ settings, setSettings }) => {
   const designerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSave = () => {
-    setSettings(localSettings);
-    alert("Ayarlar uğurla yadda saxlanıldı.");
+  const handleSave = async () => {
+    try {
+      await api.saveSettings(localSettings);
+      setSettings(localSettings);
+      alert("Ayarlar uğurla yadda saxlanıldı.");
+    } catch (err) {
+      alert("Xəta baş verdi: " + (err as Error).message);
+    }
   };
 
   const updateLabelElement = (id: string, updates: Partial<LabelElement>) => {

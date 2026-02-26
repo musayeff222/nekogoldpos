@@ -15,6 +15,7 @@ import {
   History
 } from 'lucide-react';
 import { Page, Product, Sale, Customer, ScrapGold, AppSettings } from './types';
+import { api } from './services/api';
 import SalesModule from './modules/Sales';
 import StockModule from './modules/Stock';
 import CustomersModule from './modules/Customers';
@@ -63,98 +64,25 @@ const App: React.FC = () => {
   });
 
   useEffect(() => {
-    // Initial static data
-    setProducts([
-      { 
-        id: '1', 
-        code: 'U001', 
-        name: 'Sadə Qaşlı Üzük', 
-        carat: 22, 
-        type: 'Üzük', 
-        weight: 4.2, 
-        supplier: 'Tədərükçü A', 
-        supplierPrice: 8500, 
-        price: 10500, 
-        stockCount: 1,
-        purchaseDate: new Date().toISOString().split('T')[0],
-        logs: [{ date: new Date().toISOString(), action: 'Sistemə əlavə edildi' }]
-      },
-      { 
-        id: '2', 
-        code: 'S023', 
-        name: 'Brilliant Sırğa', 
-        carat: 18, 
-        type: 'Sırğa', 
-        weight: 2.1, 
-        supplier: 'Tədərükçü B', 
-        supplierPrice: 15000, 
-        price: 19500, 
-        stockCount: 1, 
-        brilliant: '0.25ct VS1',
-        purchaseDate: new Date().toISOString().split('T')[0],
-        logs: [{ date: new Date().toISOString(), action: 'Sistemə əlavə edildi' }]
-      },
-      { 
-        id: '3', 
-        code: 'SP102', 
-        name: 'İtalyan Sep', 
-        carat: 14, 
-        type: 'Sep', 
-        weight: 12.5, 
-        supplier: 'Tədərükçü A', 
-        supplierPrice: 25000, 
-        price: 32000, 
-        stockCount: 1,
-        purchaseDate: new Date().toISOString().split('T')[0],
-        logs: [{ date: new Date().toISOString(), action: 'Sistemə əlavə edildi' }]
-      },
-      { 
-        id: '4', 
-        code: 'ST005', 
-        name: 'Rolex Qızıl Saat', 
-        carat: 18, 
-        type: 'Saat', 
-        weight: 85.0, 
-        supplier: 'Atelye X', 
-        supplierPrice: 120000, 
-        price: 155000, 
-        stockCount: 1,
-        purchaseDate: new Date().toISOString().split('T')[0],
-        logs: [{ date: new Date().toISOString(), action: 'Sistemə əlavə edildi' }]
-      },
-      { 
-        id: '5', 
-        code: 'Q044', 
-        name: 'Cartier Qolbaq', 
-        carat: 22, 
-        type: 'Qolbaq', 
-        weight: 18.2, 
-        supplier: 'Tədərükçü B', 
-        supplierPrice: 45000, 
-        price: 58000, 
-        stockCount: 1,
-        purchaseDate: new Date().toISOString().split('T')[0],
-        logs: [{ date: new Date().toISOString(), action: 'Sistemə əlavə edildi' }]
-      },
-      { 
-        id: '6', 
-        code: 'B009', 
-        name: 'Mirvari Boyunbağı', 
-        carat: 14, 
-        type: 'Boyunbağı', 
-        weight: 6.8, 
-        supplier: 'Tədərükçü A', 
-        supplierPrice: 12000, 
-        price: 16500, 
-        stockCount: 1,
-        purchaseDate: new Date().toISOString().split('T')[0],
-        logs: [{ date: new Date().toISOString(), action: 'Sistemə əlavə edildi' }]
-      },
-    ]);
-    setCustomers([
-      { id: 'c1', fullName: 'Əhməd Yılmaz', phone: '05321234567', cashDebt: 1500, goldDebt: 2.5, address: 'Bakı ş.' },
-      { id: 'c2', fullName: 'Fatma Dəmir', phone: '05449876543', cashDebt: 0, goldDebt: 0 },
-    ]);
+    const loadData = async () => {
+      try {
+        const [p, s, c, sc, set] = await Promise.all([
+          api.getProducts(),
+          api.getSales(),
+          api.getCustomers(),
+          api.getScraps(),
+          api.getSettings()
+        ]);
+        setProducts(p);
+        setSales(s);
+        setCustomers(c);
+        setScraps(sc);
+        if (set) setSettings(set);
+      } catch (err) {
+        console.error("Failed to load data:", err);
+      }
+    };
+    loadData();
   }, []);
 
   const navItems = [

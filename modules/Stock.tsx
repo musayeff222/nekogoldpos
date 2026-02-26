@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { Product, ProductType, AppSettings, ProductLog, Sale } from '../types';
 import { LabelPrint } from '../components/LabelPrint';
+import { api } from '../services/api';
 
 interface StockProps {
   products: Product[];
@@ -82,29 +83,25 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
 
   const [editForm, setEditForm] = useState<Partial<Product>>({});
 
-  const handleBulkPrint = () => {
+  const handleBulkPrint = async () => {
     if (!bulkPricePerGram || !activeFolder) return;
     
     const pricePerGram = Number(bulkPricePerGram);
-    const productsInFolder = products.filter(p => p.type === activeFolder);
     
-    // Update products in state
-    const updatedProducts = products.map(p => {
+    // Update products in state and DB
+    const printList: Product[] = [];
+    const updatedProducts = await Promise.all(products.map(async p => {
       if (p.type === activeFolder) {
         const newPrice = Math.round((Number(p.weight) * pricePerGram) / 10) * 10;
-        return { ...p, price: newPrice };
+        const updated = { ...p, price: newPrice };
+        printList.push(updated);
+        await api.updateProduct(updated);
+        return updated;
       }
       return p;
-    });
+    }));
     
     setProducts(updatedProducts);
-    
-    // Prepare for printing
-    const printList = productsInFolder.map(p => {
-      const newPrice = Math.round((Number(p.weight) * pricePerGram) / 10) * 10;
-      return { ...p, price: newPrice };
-    });
-    
     setBulkPrintList(printList);
     
     // Trigger print
@@ -174,7 +171,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     }
   }, [newProduct.code, products, sales]);
 
-  const handleAddProduct = (e: React.FormEvent) => {
+  const handleAddProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProduct.code || !newProduct.name || duplicateInStock || duplicateInSales) return;
 
@@ -203,21 +200,26 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
       logs: [{ date: new Date().toISOString(), action: 'Sistemə əlavə edildi' }]
     };
 
-    setProducts(prev => [productToAdd, ...prev]);
-    setLastAddedProduct(productToAdd);
-    
-    // Trigger print if autoPrint is enabled
-    if (autoPrint) {
-      setTimeout(() => {
-          window.print();
-          // Clear after print dialog
-          setTimeout(() => setLastAddedProduct(null), 2000);
-      }, 1000);
-    }
+    try {
+      await api.addProduct(productToAdd);
+      setProducts(prev => [productToAdd, ...prev]);
+      setLastAddedProduct(productToAdd);
+      
+      // Trigger print if autoPrint is enabled
+      if (autoPrint) {
+        setTimeout(() => {
+            window.print();
+            // Clear after print dialog
+            setTimeout(() => setLastAddedProduct(null), 2000);
+        }, 1000);
+      }
 
-    setIsAddingNew(false);
-    resetForm();
-    setActiveFolder(productToAdd.type);
+      setIsAddingNew(false);
+      resetForm();
+      setActiveFolder(productToAdd.type);
+    } catch (err) {
+      alert("Xəta baş verdi: " + (err as Error).message);
+    }
   };
 
   const resetForm = () => {
@@ -284,14 +286,19 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     setShowDetailModal(true);
   };
 
-  const handleUpdateProduct = (e: React.FormEvent) => {
+  const handleUpdateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedProduct || !editForm.code || !editForm.name) return;
 
     const updatedProduct: Product = { ...selectedProduct, ...editForm } as Product;
-    setProducts(prev => prev.map(p => p.id === selectedProduct.id ? updatedProduct : p));
-    setSelectedProduct(updatedProduct);
-    alert("Məhsul məlumatları uğurla yeniləndi.");
+    try {
+      await api.updateProduct(updatedProduct);
+      setProducts(prev => prev.map(p => p.id === selectedProduct.id ? updatedProduct : p));
+      setSelectedProduct(updatedProduct);
+      alert("Məhsul məlumatları uğurla yeniləndi.");
+    } catch (err) {
+      alert("Xəta baş verdi: " + (err as Error).message);
+    }
   };
 
   const getFilteredProducts = () => {

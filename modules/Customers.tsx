@@ -26,6 +26,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { Customer, Sale } from '../types';
+import { api } from '../services/api';
 
 interface CustomersProps {
   customers: Customer[];
@@ -72,7 +73,7 @@ const CustomersModule: React.FC<CustomersProps> = ({ customers, setCustomers, sa
     ? sales.filter(s => s.customerName === viewingCustomer.fullName && s.status !== 'returned').reduce((acc, s) => acc + s.total, 0)
     : 0;
 
-  const handleAddCustomer = (e: React.FormEvent) => {
+  const handleAddCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCustomer.fullName || !newCustomer.phone) return;
 
@@ -86,15 +87,25 @@ const CustomersModule: React.FC<CustomersProps> = ({ customers, setCustomers, sa
       goldDebt: 0
     };
 
-    setCustomers(prev => [customerToAdd, ...prev]);
-    setShowAddModal(false);
-    setNewCustomer({ fullName: '', phone: '', address: '', title: '' });
+    try {
+      await api.addCustomer(customerToAdd);
+      setCustomers(prev => [customerToAdd, ...prev]);
+      setShowAddModal(false);
+      setNewCustomer({ fullName: '', phone: '', address: '', title: '' });
+    } catch (err) {
+      alert("Xəta baş verdi: " + (err as Error).message);
+    }
   };
 
-  const deleteCustomer = (e: React.MouseEvent, id: string) => {
+  const deleteCustomer = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation(); 
     if (confirm('Bu müştərini silmək istədiyinizə əminsiniz?')) {
-      setCustomers(prev => prev.filter(c => c.id !== id));
+      try {
+        await api.deleteCustomer(id);
+        setCustomers(prev => prev.filter(c => c.id !== id));
+      } catch (err) {
+        alert("Xəta baş verdi: " + (err as Error).message);
+      }
     }
   };
 

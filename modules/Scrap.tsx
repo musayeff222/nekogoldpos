@@ -23,6 +23,7 @@ import {
   ClipboardList
 } from 'lucide-react';
 import { ScrapGold, ScrapPhone, ScrapItem } from '../types';
+import { api } from '../services/api';
 
 interface ScrapProps {
   scraps: ScrapGold[];
@@ -106,7 +107,7 @@ const ScrapModule: React.FC<ScrapProps> = ({ scraps, setScraps }) => {
   const totalWeight = form.items.reduce((acc, item) => acc + (Number(item.weight) || 0), 0);
   const totalPrice = totalWeight * form.pricePerGram;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.customer || form.phones[0].number === '' || totalWeight <= 0 || form.pricePerGram <= 0) {
         alert("Zəhmət olmasa məcburi sahələri (Müştəri, Nömrə, Malın Çəkisi, Qram Qiyməti) daxil edin.");
         return;
@@ -126,10 +127,15 @@ const ScrapModule: React.FC<ScrapProps> = ({ scraps, setScraps }) => {
       date: new Date().toISOString()
     };
     
-    setScraps([newScrap, ...scraps]);
-    setForm({ customer: '', idCardFin: '', phones: [{ number: '', owner: '' }], items: [{ name: '', weight: 0, carat: 583, image: '' }], personImage: '', idCardImage: '', pricePerGram: 0 });
-    alert("Hurda alışı uğurla qeydə alındı.");
-    setActiveTab('history');
+    try {
+      await api.addScrap(newScrap);
+      setScraps([newScrap, ...scraps]);
+      setForm({ customer: '', idCardFin: '', phones: [{ number: '', owner: '' }], items: [{ name: '', weight: 0, carat: 583, image: '' }], personImage: '', idCardImage: '', pricePerGram: 0 });
+      alert("Hurda alışı uğurla qeydə alındı.");
+      setActiveTab('history');
+    } catch (err) {
+      alert("Xəta baş verdi: " + (err as Error).message);
+    }
   };
 
   return (
