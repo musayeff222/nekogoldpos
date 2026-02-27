@@ -15,7 +15,17 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
-const PORT = 3000;
+// Request logging
+app.use((req, res, next) => {
+  if (!req.url.startsWith('/@vite') && !req.url.startsWith('/src')) {
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+  }
+  next();
+});
+
+const PORT = process.env.PORT || 3000;
+
+console.log("Starting server with NODE_ENV:", process.env.NODE_ENV);
 
 // Database connection pool
 const pool = mysql.createPool({
@@ -110,11 +120,20 @@ async function initDb() {
     `);
 
     connection.release();
-    console.log("Database initialized");
+    console.log("Database initialized successfully on host:", process.env.DB_HOST || 'localhost');
   } catch (err) {
-    console.error("Database initialization failed:", err);
+    console.error("!!! DATABASE CONNECTION ERROR !!!");
+    console.error("Check if your DB_HOST, DB_USER, DB_PASSWORD and DB_NAME are correct.");
+    console.error("Current Host:", process.env.DB_HOST || 'localhost');
+    console.error("Current Database:", process.env.DB_NAME || 'nekogold');
+    console.error("Error Details:", (err as Error).message);
   }
 }
+
+// Health check
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok", env: process.env.NODE_ENV, time: new Date().toISOString() });
+});
 
 // API Routes
 app.get("/api/products", async (req, res) => {
@@ -290,6 +309,12 @@ app.post("/api/settings", async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
   }
+});
+
+// API Catch-all (to prevent falling through to SPA fallback)
+app.all("/api/*", (req, res) => {
+  console.log(`404 API: ${req.method} ${req.url}`);
+  res.status(404).json({ error: `API route not found: ${req.method} ${req.url}` });
 });
 
 // Vite middleware for development
