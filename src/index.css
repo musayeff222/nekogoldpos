@@ -2,10 +2,12 @@
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
 body {
-  @apply bg-stone-50 text-stone-900;
+  font-family: var(--font-sans);
+  background-color: #f5f5f4; /* Warm off-white */
 }
 
 .gold-gradient {
@@ -28,15 +30,15 @@ body {
 }
 
 @media print {
-  @page {
-    size: 80mm auto;
-    margin: 0 !important;
+  @page { 
+    size: 80mm auto; 
+    margin: 0 !important; 
   }
-  html, body {
-    height: auto !important;
-    overflow: visible !important;
-    background: white !important;
-    visibility: hidden !important;
+  html, body { 
+    height: auto !important; 
+    overflow: visible !important; 
+    background: white !important; 
+    visibility: hidden !important; 
     margin: 0 !important;
     padding: 0 !important;
   }
@@ -72,17 +74,13 @@ body {
     margin: 0 !important;
     font-family: Arial, sans-serif !important;
   }
-  #label-print *, #label-print {
-    visibility: visible !important;
-  }
+  #label-print *, #label-print { visibility: visible !important; }
   .label-page-break {
     page-break-after: always !important;
     break-after: page !important;
   }
-  .no-print {
-    display: none !important;
-    visibility: hidden !important;
-  }
+  .no-print { display: none !important; visibility: hidden !important; }
+  
   .receipt-table {
     width: 100% !important;
     border-collapse: collapse !important;
@@ -101,3 +99,5 @@ body {
     font-weight: bold !important;
   }
 }
+
+#receipt-print, #label-print { display: none; }

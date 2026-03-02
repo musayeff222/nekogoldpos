@@ -13,23 +13,22 @@ import {
   ChevronLeft,
   LayoutGrid,
   History,
-  AlertTriangle
+  Bot
 } from 'lucide-react';
-import { Page, Product, Sale, Customer, ScrapGold, AppSettings } from './types';
-import { api } from './src/services/api';
-import SalesModule from './modules/Sales';
-import StockModule from './modules/Stock';
-import CustomersModule from './modules/Customers';
-import SoldProductsModule from './modules/SoldProducts';
-import ReturnsModule from './modules/Returns';
-import ScrapModule from './modules/Scrap';
-import SettingsModule from './modules/Settings';
-import ReportsModule from './modules/Reports';
+import { Page, Product, Sale, Customer, ScrapGold, AppSettings } from '@/types';
+import SalesModule from '@/modules/Sales';
+import StockModule from '@/modules/Stock';
+import CustomersModule from '@/modules/Customers';
+import SoldProductsModule from '@/modules/SoldProducts';
+import ReturnsModule from '@/modules/Returns';
+import ScrapModule from '@/modules/Scrap';
+import SettingsModule from '@/modules/Settings';
+import ReportsModule from '@/modules/Reports';
+import ChatModule from '@/modules/Chat';
 
 const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.Sales);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -66,70 +65,99 @@ const App: React.FC = () => {
   });
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setError(null);
-        const [dbProducts, dbSales, dbCustomers, dbSettings] = await Promise.all([
-          api.getProducts(),
-          api.getSales(),
-          api.getCustomers(),
-          api.getSettings()
-        ]);
-
-        if (dbProducts.length > 0) setProducts(dbProducts);
-        if (dbSales.length > 0) setSales(dbSales);
-        if (dbCustomers.length > 0) setCustomers(dbCustomers);
-        if (dbSettings) setSettings(dbSettings);
-      } catch (err) {
-        console.error('Error fetching data:', err);
-        setError('Məlumatları yükləmək mümkün olmadı. Zəhmət olmasa bazanı və serveri yoxlayın.');
-      }
-    };
-
-    fetchData();
+    // Initial static data
+    setProducts([
+      { 
+        id: '1', 
+        code: 'U001', 
+        name: 'Sadə Qaşlı Üzük', 
+        carat: 22, 
+        type: 'Üzük', 
+        weight: 4.2, 
+        supplier: 'Tədərükçü A', 
+        supplierPrice: 8500, 
+        price: 10500, 
+        stockCount: 1,
+        purchaseDate: new Date().toISOString().split('T')[0],
+        logs: [{ date: new Date().toISOString(), action: 'Sistemə əlavə edildi' }]
+      },
+      { 
+        id: '2', 
+        code: 'S023', 
+        name: 'Brilliant Sırğa', 
+        carat: 18, 
+        type: 'Sırğa', 
+        weight: 2.1, 
+        supplier: 'Tədərükçü B', 
+        supplierPrice: 15000, 
+        price: 19500, 
+        stockCount: 1, 
+        brilliant: '0.25ct VS1',
+        purchaseDate: new Date().toISOString().split('T')[0],
+        logs: [{ date: new Date().toISOString(), action: 'Sistemə əlavə edildi' }]
+      },
+      { 
+        id: '3', 
+        code: 'SP102', 
+        name: 'İtalyan Sep', 
+        carat: 14, 
+        type: 'Sep', 
+        weight: 12.5, 
+        supplier: 'Tədərükçü A', 
+        supplierPrice: 25000, 
+        price: 32000, 
+        stockCount: 1,
+        purchaseDate: new Date().toISOString().split('T')[0],
+        logs: [{ date: new Date().toISOString(), action: 'Sistemə əlavə edildi' }]
+      },
+      { 
+        id: '4', 
+        code: 'ST005', 
+        name: 'Rolex Qızıl Saat', 
+        carat: 18, 
+        type: 'Saat', 
+        weight: 85.0, 
+        supplier: 'Atelye X', 
+        supplierPrice: 120000, 
+        price: 155000, 
+        stockCount: 1,
+        purchaseDate: new Date().toISOString().split('T')[0],
+        logs: [{ date: new Date().toISOString(), action: 'Sistemə əlavə edildi' }]
+      },
+      { 
+        id: '5', 
+        code: 'Q044', 
+        name: 'Cartier Qolbaq', 
+        carat: 22, 
+        type: 'Qolbaq', 
+        weight: 18.2, 
+        supplier: 'Tədərükçü B', 
+        supplierPrice: 45000, 
+        price: 58000, 
+        stockCount: 1,
+        purchaseDate: new Date().toISOString().split('T')[0],
+        logs: [{ date: new Date().toISOString(), action: 'Sistemə əlavə edildi' }]
+      },
+      { 
+        id: '6', 
+        code: 'B009', 
+        name: 'Mirvari Boyunbağı', 
+        carat: 14, 
+        type: 'Boyunbağı', 
+        weight: 6.8, 
+        supplier: 'Tədərükçü A', 
+        supplierPrice: 12000, 
+        price: 16500, 
+        stockCount: 1,
+        purchaseDate: new Date().toISOString().split('T')[0],
+        logs: [{ date: new Date().toISOString(), action: 'Sistemə əlavə edildi' }]
+      },
+    ]);
+    setCustomers([
+      { id: 'c1', fullName: 'Əhməd Yılmaz', phone: '05321234567', cashDebt: 1500, goldDebt: 2.5, address: 'Bakı ş.' },
+      { id: 'c2', fullName: 'Fatma Dəmir', phone: '05449876543', cashDebt: 0, goldDebt: 0 },
+    ]);
   }, []);
-
-  const handleSetProducts = (newProducts: React.SetStateAction<Product[]>) => {
-    setProducts(prev => {
-      const updated = typeof newProducts === 'function' ? newProducts(prev) : newProducts;
-      if (updated.length > prev.length) {
-        const added = updated[updated.length - 1];
-        api.saveProduct(added).catch(console.error);
-      }
-      return updated;
-    });
-  };
-
-  const handleSetSales = async (newSales: React.SetStateAction<Sale[]>) => {
-    setSales(prev => {
-      const updated = typeof newSales === 'function' ? newSales(prev) : newSales;
-      // If new sales were added, save them to DB
-      if (updated.length > prev.length) {
-        const added = updated.slice(0, updated.length - prev.length);
-        api.saveSales(added).catch(console.error);
-      }
-      return updated;
-    });
-  };
-
-  const handleSetCustomers = (newCustomers: React.SetStateAction<Customer[]>) => {
-    setCustomers(prev => {
-      const updated = typeof newCustomers === 'function' ? newCustomers(prev) : newCustomers;
-      if (updated.length > prev.length) {
-        const added = updated[updated.length - 1]; // Assuming one added at a time
-        api.saveCustomer(added).catch(console.error);
-      }
-      return updated;
-    });
-  };
-
-  const handleSetSettings = (newSettings: React.SetStateAction<AppSettings>) => {
-    setSettings(prev => {
-      const updated = typeof newSettings === 'function' ? newSettings(prev) : newSettings;
-      api.saveSettings(updated).catch(console.error);
-      return updated;
-    });
-  };
 
   const navItems = [
     { id: Page.Sales, icon: <ShoppingBag size={24} />, label: 'Satış' },
@@ -139,20 +167,22 @@ const App: React.FC = () => {
     { id: Page.Return, icon: <RotateCcw size={24} />, label: 'Qaytarma' },
     { id: Page.Scrap, icon: <Flame size={24} />, label: 'Lom' },
     { id: Page.Reports, icon: <BarChart3 size={24} />, label: 'Hesabat' },
+    { id: Page.Chat, icon: <Bot size={24} />, label: 'AI Köməkçi' },
     { id: Page.Settings, icon: <SettingsIcon size={24} />, label: 'Ayarlar' },
   ];
 
   const renderModule = () => {
     switch (currentPage) {
-      case Page.Sales: return <SalesModule products={products} setProducts={handleSetProducts} sales={sales} setSales={handleSetSales} customers={customers} setCustomers={handleSetCustomers} settings={settings} cart={cart} setCart={setCart} />;
-      case Page.Stock: return <StockModule products={products} setProducts={handleSetProducts} settings={settings} sales={sales} />;
-      case Page.Customers: return <CustomersModule customers={customers} setCustomers={handleSetCustomers} sales={sales} />;
+      case Page.Sales: return <SalesModule products={products} setProducts={setProducts} sales={sales} setSales={setSales} customers={customers} setCustomers={setCustomers} settings={settings} cart={cart} setCart={setCart} />;
+      case Page.Stock: return <StockModule products={products} setProducts={setProducts} settings={settings} sales={sales} />;
+      case Page.Customers: return <CustomersModule customers={customers} setCustomers={setCustomers} sales={sales} />;
       case Page.SoldProducts: return <SoldProductsModule sales={sales} />;
-      case Page.Return: return <ReturnsModule sales={sales} setSales={handleSetSales} products={products} setProducts={handleSetProducts} />;
+      case Page.Return: return <ReturnsModule sales={sales} setSales={setSales} products={products} setProducts={setProducts} />;
       case Page.Scrap: return <ScrapModule scraps={scraps} setScraps={setScraps} />;
       case Page.Reports: return <ReportsModule sales={sales} products={products} scraps={scraps} customers={customers} />;
-      case Page.Settings: return <SettingsModule settings={settings} setSettings={handleSetSettings} />;
-      default: return <SalesModule products={products} setProducts={handleSetProducts} sales={sales} setSales={handleSetSales} customers={customers} setCustomers={handleSetCustomers} settings={settings} />;
+      case Page.Chat: return <ChatModule />;
+      case Page.Settings: return <SettingsModule settings={settings} setSettings={setSettings} />;
+      default: return <SalesModule products={products} setProducts={setProducts} sales={sales} setSales={setSales} customers={customers} setCustomers={setCustomers} settings={settings} />;
     }
   };
 
@@ -197,6 +227,13 @@ const App: React.FC = () => {
           </button>
         ))}
         <button
+          onClick={() => setCurrentPage(Page.Chat)}
+          className={`flex flex-col items-center p-2 rounded-xl transition-all ${currentPage === Page.Chat ? 'text-amber-500 bg-white/5' : 'text-stone-500'}`}
+        >
+          <Bot size={24} />
+          <span className="text-[10px] font-black mt-1 uppercase tracking-tighter">AI</span>
+        </button>
+        <button
           onClick={() => setCurrentPage(Page.Settings)}
           className={`flex flex-col items-center p-2 rounded-xl ${currentPage === Page.Settings ? 'text-amber-500 bg-white/5' : 'text-stone-500'}`}
         >
@@ -208,12 +245,6 @@ const App: React.FC = () => {
       {/* MAIN CONTENT AREA */}
       <main className="flex-1 h-full overflow-y-auto bg-stone-50 scrollbar-hide pb-20 md:pb-0">
         <div className="p-4 md:p-8">
-          {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-2xl flex items-center space-x-3 shadow-sm">
-              <AlertTriangle size={20} />
-              <span className="font-medium">{error}</span>
-            </div>
-          )}
           {renderModule()}
         </div>
       </main>

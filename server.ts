@@ -1,164 +1,112 @@
 
+import express, { Request, Response } from 'express';
+import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
-dotenv.config({ override: true });
-
-import express from 'express';
 import cors from 'cors';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import pool from './db';
+import { GoogleGenAI } from "@google/genai";
+import { createServer as createViteServer } from "vite";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Load environment variables
+dotenv.config();
 
-const app = express();
-const PORT = process.env.PORT || 3000;
+async function startServer() {
+  const app = express();
+  const PORT = 3000;
 
-app.use(cors());
-app.use(express.json());
+  // Middleware
+  app.use(cors({
+    origin: 'https://tapal.store',
+    credentials: true
+  }));
+  app.use(express.json());
 
-// API Routes
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok' });
-});
+  // MySQL Connection Pool
+  const pool = mysql.createPool({
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASS,
+    database: process.env.DB_NAME,
+    port: parseInt(process.env.DB_PORT || '3306'),
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
+  });
 
-// Products API
-app.get('/api/products', async (req, res) => {
-  try {
-    const [rows] = await pool.query('SELECT * FROM products');
-    res.json(rows);
-  } catch (error) {
-    console.error('Error fetching products:', error);
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
+  // Initialize Gemini API
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
-app.post('/api/products', async (req, res) => {
-  try {
-    const { id, code, name, carat, type, weight, supplier, supplierPrice, price, stockCount, purchaseDate, imageUrl, brilliant } = req.body;
-    await pool.query(
-      'INSERT INTO products (id, code, name, carat, type, weight, supplier, supplierPrice, price, stockCount, purchaseDate, imageUrl, brilliant) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, code, name, carat, type, weight, supplier, supplierPrice, price, stockCount, purchaseDate, imageUrl, brilliant]
-    );
-    res.status(201).json({ message: 'Product created' });
-  } catch (error) {
-    console.error('Error creating product:', error);
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
+  // API Endpoint: /api/chat
+  app.post('/api/chat', async (req: Request, res: Response) => {
+    const { message } = req.body;
 
-// Customers API
-app.get('/api/customers', async (req, res) => {
-  try {
-    const [rows] = await pool.query('SELECT * FROM customers');
-    res.json(rows);
-  } catch (error) {
-    console.error('Error fetching customers:', error);
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
-
-app.post('/api/customers', async (req, res) => {
-  try {
-    const { id, fullName, phone, cashDebt, goldDebt, address, title } = req.body;
-    await pool.query(
-      'INSERT INTO customers (id, fullName, phone, cashDebt, goldDebt, address, title) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [id, fullName, phone, cashDebt, goldDebt, address, title]
-    );
-    res.status(201).json({ message: 'Customer created' });
-  } catch (error) {
-    console.error('Error creating customer:', error);
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
-
-// Sales API
-app.get('/api/sales', async (req, res) => {
-  try {
-    const [rows] = await pool.query('SELECT * FROM sales ORDER BY date DESC');
-    res.json(rows);
-  } catch (error) {
-    console.error('Error fetching sales:', error);
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
-
-app.post('/api/sales', async (req, res) => {
-  try {
-    const sales = req.body; // Expecting an array of sales
-    for (const sale of sales) {
-      const { id, productId, productName, productCode, type, customerName, price, discount, total, date, status, weight, carat, supplier, brilliant, imageUrl } = sale;
-      await pool.query(
-        'INSERT INTO sales (id, productId, productName, productCode, type, customerName, price, discount, total, date, status, weight, carat, supplier, brilliant, imageUrl) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [id, productId, productName, productCode, type, customerName, price, discount, total, date, status, weight, carat, supplier, brilliant, imageUrl]
-      );
-      // Update stock
-      await pool.query('UPDATE products SET stockCount = 0 WHERE id = ?', [productId]);
+    if (!message) {
+      return res.status(400).json({ error: 'Message is required' });
     }
-    res.status(201).json({ message: 'Sales recorded' });
-  } catch (error) {
-    console.error('Error recording sales:', error);
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
 
-// Settings API
-app.get('/api/settings', async (req, res) => {
-  try {
-    const [rows]: any = await pool.query('SELECT data FROM settings WHERE id = 1');
-    if (rows.length > 0) {
-      res.json(rows[0].data);
-    } else {
-      res.json(null);
+    try {
+      // 1. Get response from Gemini API
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: message,
+        config: {
+          systemInstruction: "Sən NEKO GOLD zərgərlik mağazasının süni intellekt köməkçisisən. Müştərilərə zərgərlik məmulatları, qızılın qiyməti, məhsul növləri (üzük, sırğa, boyunbağı və s.) haqqında məlumat verirsən. Cavabların qısa, peşəkar və mehriban olmalıdır. Azərbaycan dilində danışırsan."
+        }
+      });
+
+      const aiResponse = response.text || 'Üzr istəyirik, hazırda cavab verə bilmirəm.';
+
+      // 2. Save to MySQL database
+      const sql = 'INSERT INTO messages (question, answer) VALUES (?, ?)';
+      await pool.execute(sql, [message, aiResponse]);
+
+      // 3. Return the response to the frontend
+      res.json({
+        question: message,
+        answer: aiResponse,
+        status: 'success'
+      });
+
+    } catch (error: any) {
+      console.error('Error in /api/chat:', error);
+      res.status(500).json({ 
+        error: 'Internal Server Error', 
+        details: error.message 
+      });
     }
-  } catch (error) {
-    console.error('Error fetching settings:', error);
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
+  });
 
-app.post('/api/settings', async (req, res) => {
-  try {
-    const data = req.body;
-    await pool.query(
-      'INSERT INTO settings (id, data) VALUES (1, ?) ON DUPLICATE KEY UPDATE data = ?',
-      [JSON.stringify(data), JSON.stringify(data)]
-    );
-    res.json({ message: 'Settings updated' });
-  } catch (error) {
-    console.error('Error updating settings:', error);
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
+  // Health check endpoint
+  app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', database: 'connected' });
+  });
 
-// Vite middleware for development
-async function setupVite() {
-  // Test database connection
-  try {
-    const [rows] = await pool.query('SELECT 1');
-    console.log('Database connection successful');
-  } catch (error) {
-    console.error('Database connection failed:', error);
-  }
-
-  if (process.env.NODE_ENV !== 'production') {
-    const { createServer: createViteServer } = await import('vite');
+  // Vite middleware for development or static serving for production
+  if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
-      appType: 'spa',
+      appType: "spa",
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(__dirname, 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+    // Serve static files from the dist directory in production
+    const path = await import('path');
+    const { fileURLToPath } = await import('url');
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    
+    app.use(express.static(path.join(__dirname, 'dist')));
+    
+    // Handle SPA routing: serve index.html for all non-API routes
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api')) return next();
+      res.sendFile(path.join(__dirname, 'dist', 'index.html'));
     });
   }
 
-  app.listen(Number(PORT), '0.0.0.0', () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+  // Start the server
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on http://0.0.0.0:${PORT}`);
   });
 }
 
-setupVite();
+startServer();
