@@ -37,7 +37,7 @@ import { LabelPrint } from '@/components/LabelPrint';
 
 interface StockProps {
   products: Product[];
-  setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
+  setProducts: React.Dispatch<React.SetStateAction<any>>;
   settings: AppSettings;
   sales: Sale[];
 }
@@ -167,7 +167,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
 
     // 2. Satış tarixçəsində yoxla (Əgər stokda yoxdursa)
     if (!inStock) {
-      const inSales = sales.find(s => s.productCode.trim().toLowerCase() === code);
+      const inSales = (Array.isArray(sales) ? sales : []).find(s => s.productCode.trim().toLowerCase() === code);
       setDuplicateInSales(inSales || null);
     } else {
       setDuplicateInSales(null);

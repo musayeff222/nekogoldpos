@@ -26,7 +26,7 @@ import { ScrapGold, ScrapPhone, ScrapItem } from '@/types';
 
 interface ScrapProps {
   scraps: ScrapGold[];
-  setScraps: React.Dispatch<React.SetStateAction<ScrapGold[]>>;
+  setScraps: React.Dispatch<React.SetStateAction<any>>;
 }
 
 const ScrapModule: React.FC<ScrapProps> = ({ scraps, setScraps }) => {

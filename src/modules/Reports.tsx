@@ -22,8 +22,9 @@ interface ReportsProps {
 }
 
 const ReportsModule: React.FC<ReportsProps> = ({ sales, products, scraps, customers }) => {
-  const totalRevenue = sales.filter(s => s.status !== 'returned').reduce((acc, s) => acc + s.total, 0);
-  const dailySales = sales.filter(s => new Date(s.date).toDateString() === new Date().toDateString() && s.status !== 'returned');
+  const safeSales = Array.isArray(sales) ? sales : [];
+  const totalRevenue = safeSales.filter(s => s.status !== 'returned').reduce((acc, s) => acc + s.total, 0);
+  const dailySales = safeSales.filter(s => new Date(s.date).toDateString() === new Date().toDateString() && s.status !== 'returned');
   const dailyRevenue = dailySales.reduce((acc, s) => acc + s.total, 0);
   
   const totalScrapPay = scraps.reduce((acc, s) => acc + s.totalPrice, 0);
@@ -108,7 +109,7 @@ const ReportsModule: React.FC<ReportsProps> = ({ sales, products, scraps, custom
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-50">
-                {sales.slice(0, 10).map(s => (
+                {safeSales.slice(0, 10).map(s => (
                   <tr key={s.id} className="hover:bg-amber-50/20 transition-all group">
                     <td className="px-6 md:px-10 py-4 md:py-6">
                       <p className="text-sm font-black text-stone-800 uppercase leading-none truncate max-w-[120px] md:max-w-none">{s.productName}</p>

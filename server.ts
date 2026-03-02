@@ -15,22 +15,76 @@ async function startServer() {
 
   // Middleware
   app.use(cors({
-    origin: 'https://tapal.store',
+    origin: true,
     credentials: true
   }));
-  app.use(express.json());
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
   // MySQL Connection Pool
   const pool = mysql.createPool({
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
-    password: process.env.DB_PASS,
+    password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
     port: parseInt(process.env.DB_PORT || '3306'),
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0
   });
+
+  // Initialize Database Tables
+  const initDB = async () => {
+    try {
+      await pool.execute(`
+        CREATE TABLE IF NOT EXISTS messages (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          question TEXT,
+          answer TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      await pool.execute(`
+        CREATE TABLE IF NOT EXISTS products (
+          id VARCHAR(100) PRIMARY KEY,
+          content LONGTEXT,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+      `);
+      await pool.execute(`
+        CREATE TABLE IF NOT EXISTS sales (
+          id VARCHAR(100) PRIMARY KEY,
+          content LONGTEXT,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+      `);
+      await pool.execute(`
+        CREATE TABLE IF NOT EXISTS customers (
+          id VARCHAR(100) PRIMARY KEY,
+          content LONGTEXT,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+      `);
+      await pool.execute(`
+        CREATE TABLE IF NOT EXISTS scraps (
+          id VARCHAR(100) PRIMARY KEY,
+          content LONGTEXT,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+      `);
+      await pool.execute(`
+        CREATE TABLE IF NOT EXISTS settings (
+          id VARCHAR(50) PRIMARY KEY,
+          content LONGTEXT,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+      `);
+      console.log('Database tables initialized');
+    } catch (err) {
+      console.error('Database initialization failed:', err);
+    }
+  };
+  await initDB();
 
   // Initialize Gemini API
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
@@ -44,7 +98,6 @@ async function startServer() {
     }
 
     try {
-      // 1. Get response from Gemini API
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: message,
@@ -54,12 +107,14 @@ async function startServer() {
       });
 
       const aiResponse = response.text || 'Üzr istəyirik, hazırda cavab verə bilmirəm.';
+      
+      try {
+        const sql = 'INSERT INTO messages (question, answer) VALUES (?, ?)';
+        await pool.execute(sql, [message, aiResponse]);
+      } catch (dbErr) {
+        console.warn('Database logging failed, but AI responded:', dbErr);
+      }
 
-      // 2. Save to MySQL database
-      const sql = 'INSERT INTO messages (question, answer) VALUES (?, ?)';
-      await pool.execute(sql, [message, aiResponse]);
-
-      // 3. Return the response to the frontend
       res.json({
         question: message,
         answer: aiResponse,
@@ -68,10 +123,87 @@ async function startServer() {
 
     } catch (error: any) {
       console.error('Error in /api/chat:', error);
-      res.status(500).json({ 
-        error: 'Internal Server Error', 
-        details: error.message 
-      });
+      res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+
+  // Generic Data Sync Endpoints
+  app.get('/api/data/:type', async (req: Request, res: Response) => {
+    const type = req.params.type as string;
+    const allowedTypes = ['products', 'sales', 'customers', 'scraps', 'settings'];
+    
+    if (!allowedTypes.includes(type)) {
+      return res.status(400).json({ error: 'Invalid data type' });
+    }
+
+    try {
+      const [rows] = await pool.execute(`SELECT content FROM ${type}`);
+      const data = (rows as any[]).map(row => JSON.parse(row.content));
+      
+      // Settings is a special case, it's usually just one object
+      if (type === 'settings') {
+        res.json(data[0] || null);
+      } else {
+        res.json(data);
+      }
+    } catch (error) {
+      console.error(`Failed to fetch ${type}:`, error);
+      res.status(500).json({ error: 'Failed to fetch data' });
+    }
+  });
+
+  app.post('/api/data/:type', async (req: Request, res: Response) => {
+    const type = req.params.type as string;
+    const { data } = req.body;
+    const allowedTypes = ['products', 'sales', 'customers', 'scraps', 'settings'];
+
+    if (!allowedTypes.includes(type)) {
+      return res.status(400).json({ error: 'Invalid data type' });
+    }
+
+    try {
+      console.log(`Syncing ${type} with ${Array.isArray(data) ? data.length : 'single'} items`);
+      
+      if (type === 'settings') {
+        const content = JSON.stringify(data);
+        await pool.execute(
+          `INSERT INTO settings (id, content) VALUES ('current', ?) ON DUPLICATE KEY UPDATE content = ?`,
+          [content, content]
+        );
+      } else if (Array.isArray(data)) {
+        const connection = await pool.getConnection();
+        await connection.beginTransaction();
+        try {
+          // 1. Clear existing
+          await connection.execute(`DELETE FROM ${type}`);
+          
+          // 2. Bulk insert if there is data
+          if (data.length > 0) {
+            const values = data.map(item => [
+              item.id || Math.random().toString(36).substr(2, 9),
+              JSON.stringify(item)
+            ]);
+            
+            const sql = `INSERT INTO ${type} (id, content) VALUES ?`;
+            await connection.query(sql, [values]);
+          }
+          
+          await connection.commit();
+          console.log(`Successfully committed ${data.length} items to ${type}`);
+        } catch (err) {
+          await connection.rollback();
+          console.error(`Transaction failed for ${type}:`, err);
+          throw err;
+        } finally {
+          connection.release();
+        }
+      }
+      
+      console.log(`Successfully synced ${type}`);
+      res.json({ status: 'success' });
+    } catch (error) {
+      console.error(`Failed to save ${type} data:`, error);
+      res.status(500).json({ error: 'Failed to save data' });
     }
   });
 

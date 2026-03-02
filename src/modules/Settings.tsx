@@ -6,7 +6,7 @@ import { LabelPrint } from '@/components/LabelPrint';
 
 interface SettingsProps {
   settings: AppSettings;
-  setSettings: React.Dispatch<React.SetStateAction<AppSettings>>;
+  setSettings: React.Dispatch<React.SetStateAction<any>>;
 }
 
 const SettingsModule: React.FC<SettingsProps> = ({ settings, setSettings }) => {

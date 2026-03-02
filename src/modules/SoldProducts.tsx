@@ -42,11 +42,11 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales }) => {
   const [orderList, setOrderList] = useState<Sale[]>([]);
 
   // Unique suppliers from sales for the filter
-  const suppliers = Array.from(new Set(sales.map(s => s.supplier).filter(Boolean)));
+  const suppliers = Array.from(new Set((Array.isArray(sales) ? sales : []).map(s => s.supplier).filter(Boolean)));
 
   // Update order list when filters change
   useEffect(() => {
-    let filtered = sales.filter(s => s.status === 'completed');
+    let filtered = (Array.isArray(sales) ? sales : []).filter(s => s.status === 'completed');
     
     if (printDate) {
       filtered = filtered.filter(s => new Date(s.date).toISOString().split('T')[0] === printDate);
@@ -68,7 +68,7 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales }) => {
   };
 
   const getFilteredSales = () => {
-    let filtered = sales;
+    let filtered = Array.isArray(sales) ? sales : [];
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter(s => 

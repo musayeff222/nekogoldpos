@@ -24,140 +24,180 @@ import ReturnsModule from '@/modules/Returns';
 import ScrapModule from '@/modules/Scrap';
 import SettingsModule from '@/modules/Settings';
 import ReportsModule from '@/modules/Reports';
-import ChatModule from '@/modules/Chat';
+import ChatModule from './modules/AIChat';
 
 const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.Sales);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [sales, setSales] = useState<Sale[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [scraps, setScraps] = useState<ScrapGold[]>([]);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [products, setProducts] = useState<Product[] | null>(null);
+  const [sales, setSales] = useState<Sale[] | null>(null);
+  const [customers, setCustomers] = useState<Customer[] | null>(null);
+  const [scraps, setScraps] = useState<ScrapGold[] | null>(null);
   const [cart, setCart] = useState<Product[]>([]);
-  const [settings, setSettings] = useState<AppSettings>({
-    deleteCode: '1234',
-    adminPassword: 'admin',
-    printerName: 'Epson POS-80',
-    shopName: 'NEKO GOLD',
-    productTypes: ['Üzük', 'Sırğa', 'Boyunbağı', 'Qolbaq', 'Dəst', 'Zəncir', 'Set', 'Saat', 'Sep', 'Külçə', 'Digər'],
-    suppliers: ['Tədərükçü A', 'Tədərükçü B', 'Atelye X'],
-    carats: [14, 18, 22, 24],
-    pricePerGram: 400,
-    labelConfig: {
-      width: 80,
-      height: 25,
-      elements: [
-        { id: '1', field: 'shopName', x: 5, y: 5, fontSize: 10, visible: true, bold: true },
-        { id: '2', field: 'code', x: 5, y: 35, fontSize: 24, visible: true, bold: true },
-        { id: '3', field: 'weight', x: 25, y: 75, fontSize: 12, visible: true, bold: true },
-        { id: '4', field: 'supplier', x: 55, y: 5, fontSize: 10, visible: true, bold: true },
-        { id: '5', field: 'carat', x: 75, y: 5, fontSize: 10, visible: true, bold: true },
-        { id: '6', field: 'brilliant', x: 55, y: 25, fontSize: 8, visible: true, bold: true },
-        { id: '7', field: 'price', x: 45, y: 55, fontSize: 24, visible: true, bold: true },
-        { id: '8', field: 'currency', x: 85, y: 75, fontSize: 10, visible: true, bold: true },
-      ]
-    },
-    silentPrinting: false,
-    receiptPrinterPath: '',
-    labelPrinterPath: '',
-    receiptFontWeight: '600',
-    labelFontWeight: '600'
-  });
+  const [settings, setSettings] = useState<AppSettings | null>(null);
 
   useEffect(() => {
-    // Initial static data
-    setProducts([
-      { 
-        id: '1', 
-        code: 'U001', 
-        name: 'Sadə Qaşlı Üzük', 
-        carat: 22, 
-        type: 'Üzük', 
-        weight: 4.2, 
-        supplier: 'Tədərükçü A', 
-        supplierPrice: 8500, 
-        price: 10500, 
-        stockCount: 1,
-        purchaseDate: new Date().toISOString().split('T')[0],
-        logs: [{ date: new Date().toISOString(), action: 'Sistemə əlavə edildi' }]
-      },
-      { 
-        id: '2', 
-        code: 'S023', 
-        name: 'Brilliant Sırğa', 
-        carat: 18, 
-        type: 'Sırğa', 
-        weight: 2.1, 
-        supplier: 'Tədərükçü B', 
-        supplierPrice: 15000, 
-        price: 19500, 
-        stockCount: 1, 
-        brilliant: '0.25ct VS1',
-        purchaseDate: new Date().toISOString().split('T')[0],
-        logs: [{ date: new Date().toISOString(), action: 'Sistemə əlavə edildi' }]
-      },
-      { 
-        id: '3', 
-        code: 'SP102', 
-        name: 'İtalyan Sep', 
-        carat: 14, 
-        type: 'Sep', 
-        weight: 12.5, 
-        supplier: 'Tədərükçü A', 
-        supplierPrice: 25000, 
-        price: 32000, 
-        stockCount: 1,
-        purchaseDate: new Date().toISOString().split('T')[0],
-        logs: [{ date: new Date().toISOString(), action: 'Sistemə əlavə edildi' }]
-      },
-      { 
-        id: '4', 
-        code: 'ST005', 
-        name: 'Rolex Qızıl Saat', 
-        carat: 18, 
-        type: 'Saat', 
-        weight: 85.0, 
-        supplier: 'Atelye X', 
-        supplierPrice: 120000, 
-        price: 155000, 
-        stockCount: 1,
-        purchaseDate: new Date().toISOString().split('T')[0],
-        logs: [{ date: new Date().toISOString(), action: 'Sistemə əlavə edildi' }]
-      },
-      { 
-        id: '5', 
-        code: 'Q044', 
-        name: 'Cartier Qolbaq', 
-        carat: 22, 
-        type: 'Qolbaq', 
-        weight: 18.2, 
-        supplier: 'Tədərükçü B', 
-        supplierPrice: 45000, 
-        price: 58000, 
-        stockCount: 1,
-        purchaseDate: new Date().toISOString().split('T')[0],
-        logs: [{ date: new Date().toISOString(), action: 'Sistemə əlavə edildi' }]
-      },
-      { 
-        id: '6', 
-        code: 'B009', 
-        name: 'Mirvari Boyunbağı', 
-        carat: 14, 
-        type: 'Boyunbağı', 
-        weight: 6.8, 
-        supplier: 'Tədərükçü A', 
-        supplierPrice: 12000, 
-        price: 16500, 
-        stockCount: 1,
-        purchaseDate: new Date().toISOString().split('T')[0],
-        logs: [{ date: new Date().toISOString(), action: 'Sistemə əlavə edildi' }]
-      },
-    ]);
-    setCustomers([
-      { id: 'c1', fullName: 'Əhməd Yılmaz', phone: '05321234567', cashDebt: 1500, goldDebt: 2.5, address: 'Bakı ş.' },
-      { id: 'c2', fullName: 'Fatma Dəmir', phone: '05449876543', cashDebt: 0, goldDebt: 0 },
-    ]);
+    const fetchData = async () => {
+      try {
+        const fetchWithType = async (type: string) => {
+          const res = await fetch(`/api/data/${type}`);
+          if (!res.ok) throw new Error(`Failed to fetch ${type}`);
+          return res.json();
+        };
+
+        const [p, s, c, sc, st] = await Promise.all([
+          fetchWithType('products'),
+          fetchWithType('sales'),
+          fetchWithType('customers'),
+          fetchWithType('scraps'),
+          fetchWithType('settings')
+        ]);
+
+        setProducts(Array.isArray(p) ? p : []);
+        setSales(Array.isArray(s) ? s : []);
+        setCustomers(Array.isArray(c) ? c : []);
+        setScraps(Array.isArray(sc) ? sc : []);
+        
+        if (st && !st.error) {
+          setSettings(st);
+        } else {
+          setSettings({
+            deleteCode: '1234',
+            adminPassword: 'admin',
+            printerName: 'Epson POS-80',
+            shopName: 'NEKO GOLD',
+            productTypes: ['Üzük', 'Sırğa', 'Boyunbağı', 'Qolbaq', 'Dəst', 'Zəncir', 'Set', 'Saat', 'Sep', 'Külçə', 'Digər'],
+            suppliers: ['Tədərükçü A', 'Tədərükçü B', 'Atelye X'],
+            carats: [14, 18, 22, 24],
+            pricePerGram: 400,
+            labelConfig: {
+              width: 80,
+              height: 25,
+              elements: [
+                { id: '1', field: 'shopName', x: 5, y: 5, fontSize: 10, visible: true, bold: true },
+                { id: '2', field: 'code', x: 5, y: 35, fontSize: 24, visible: true, bold: true },
+                { id: '3', field: 'weight', x: 25, y: 75, fontSize: 12, visible: true, bold: true },
+                { id: '4', field: 'supplier', x: 55, y: 5, fontSize: 10, visible: true, bold: true },
+                { id: '5', field: 'carat', x: 75, y: 5, fontSize: 10, visible: true, bold: true },
+                { id: '6', field: 'brilliant', x: 55, y: 25, fontSize: 8, visible: true, bold: true },
+                { id: '7', field: 'price', x: 45, y: 55, fontSize: 24, visible: true, bold: true },
+                { id: '8', field: 'currency', x: 85, y: 75, fontSize: 10, visible: true, bold: true },
+              ]
+            },
+            silentPrinting: false,
+            receiptPrinterPath: '',
+            labelPrinterPath: '',
+            receiptFontWeight: '600',
+            labelFontWeight: '600'
+          });
+        }
+        
+        setIsLoaded(true);
+        console.log('Initial data load complete');
+      } catch (error) {
+        console.error('Failed to fetch data from remote source:', error);
+      }
+    };
+
+    fetchData();
   }, []);
+
+  // Sync data to backend on changes - ONLY after initial load is complete
+  useEffect(() => {
+    if (!isLoaded || products === null) return;
+    
+    const syncData = async () => {
+      try {
+        await fetch('/api/data/products', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: products })
+        });
+      } catch (err) {
+        console.error('Failed to sync products:', err);
+      }
+    };
+    
+    const timeoutId = setTimeout(syncData, 1000);
+    return () => clearTimeout(timeoutId);
+  }, [products, isLoaded]);
+
+  useEffect(() => {
+    if (!isLoaded || sales === null) return;
+
+    const syncData = async () => {
+      try {
+        await fetch('/api/data/sales', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: sales })
+        });
+      } catch (err) {
+        console.error('Failed to sync sales:', err);
+      }
+    };
+
+    const timeoutId = setTimeout(syncData, 1000);
+    return () => clearTimeout(timeoutId);
+  }, [sales, isLoaded]);
+
+  useEffect(() => {
+    if (!isLoaded || customers === null) return;
+
+    const syncData = async () => {
+      try {
+        await fetch('/api/data/customers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: customers })
+        });
+      } catch (err) {
+        console.error('Failed to sync customers:', err);
+      }
+    };
+
+    const timeoutId = setTimeout(syncData, 1000);
+    return () => clearTimeout(timeoutId);
+  }, [customers, isLoaded]);
+
+  useEffect(() => {
+    if (!isLoaded || scraps === null) return;
+
+    const syncData = async () => {
+      try {
+        await fetch('/api/data/scraps', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: scraps })
+        });
+      } catch (err) {
+        console.error('Failed to sync scraps:', err);
+      }
+    };
+
+    const timeoutId = setTimeout(syncData, 1000);
+    return () => clearTimeout(timeoutId);
+  }, [scraps, isLoaded]);
+
+  useEffect(() => {
+    if (!isLoaded || settings === null) return;
+
+    const syncData = async () => {
+      try {
+        await fetch('/api/data/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: settings })
+        });
+      } catch (err) {
+        console.error('Failed to sync settings:', err);
+      }
+    };
+
+    const timeoutId = setTimeout(syncData, 1000);
+    return () => clearTimeout(timeoutId);
+  }, [settings, isLoaded]);
 
   const navItems = [
     { id: Page.Sales, icon: <ShoppingBag size={24} />, label: 'Satış' },
@@ -172,6 +212,17 @@ const App: React.FC = () => {
   ];
 
   const renderModule = () => {
+    if (!isLoaded || !products || !sales || !customers || !scraps || !settings) {
+      return (
+        <div className="flex items-center justify-center h-64">
+          <div className="flex flex-col items-center space-y-4">
+            <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-stone-500 font-bold animate-pulse">Məlumatlar yüklənir...</p>
+          </div>
+        </div>
+      );
+    }
+
     switch (currentPage) {
       case Page.Sales: return <SalesModule products={products} setProducts={setProducts} sales={sales} setSales={setSales} customers={customers} setCustomers={setCustomers} settings={settings} cart={cart} setCart={setCart} />;
       case Page.Stock: return <StockModule products={products} setProducts={setProducts} settings={settings} sales={sales} />;

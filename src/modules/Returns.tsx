@@ -20,9 +20,9 @@ import { Sale, Product } from '@/types';
 
 interface ReturnsProps {
   sales: Sale[];
-  setSales: React.Dispatch<React.SetStateAction<Sale[]>>;
+  setSales: React.Dispatch<React.SetStateAction<any>>;
   products: Product[];
-  setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
+  setProducts: React.Dispatch<React.SetStateAction<any>>;
 }
 
 const ReturnsModule: React.FC<ReturnsProps> = ({ sales, setSales, products, setProducts }) => {
@@ -34,7 +34,7 @@ const ReturnsModule: React.FC<ReturnsProps> = ({ sales, setSales, products, setP
   const [returnCodeOption, setReturnCodeOption] = useState<'same' | 'new'>('same');
   const [newCodeInput, setNewCodeInput] = useState('');
 
-  const filtered = sales.filter(s => 
+  const filtered = (Array.isArray(sales) ? sales : []).filter(s => 
     s.productCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
     s.id.toLowerCase().includes(searchTerm.toLowerCase()) || 
     s.productName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -98,7 +98,7 @@ const ReturnsModule: React.FC<ReturnsProps> = ({ sales, setSales, products, setP
       <div className="space-y-4 md:space-y-6 flex flex-col h-full">
         <div className="flex items-center justify-between px-2">
             <h3 className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em]">Məhsul Kodu ilə Axtarış</h3>
-            <span className="text-[9px] font-bold text-stone-300 uppercase">{sales.length} Satış Mövcuddur</span>
+            <span className="text-[9px] font-bold text-stone-300 uppercase">{(Array.isArray(sales) ? sales : []).length} Satış Mövcuddur</span>
         </div>
         
         <div className="relative group">

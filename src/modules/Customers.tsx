@@ -29,7 +29,7 @@ import { Customer, Sale } from '@/types';
 
 interface CustomersProps {
   customers: Customer[];
-  setCustomers: React.Dispatch<React.SetStateAction<Customer[]>>;
+  setCustomers: React.Dispatch<React.SetStateAction<any>>;
   sales: Sale[];
 }
 
@@ -55,7 +55,7 @@ const CustomersModule: React.FC<CustomersProps> = ({ customers, setCustomers, sa
   });
 
   const customerHistory = viewingCustomer 
-    ? sales.filter(s => {
+    ? (Array.isArray(sales) ? sales : []).filter(s => {
         const matchesCustomer = s.customerName === viewingCustomer.fullName;
         if (!matchesCustomer) return false;
         
@@ -69,7 +69,7 @@ const CustomersModule: React.FC<CustomersProps> = ({ customers, setCustomers, sa
     : [];
 
   const totalSpent = viewingCustomer 
-    ? sales.filter(s => s.customerName === viewingCustomer.fullName && s.status !== 'returned').reduce((acc, s) => acc + s.total, 0)
+    ? (Array.isArray(sales) ? sales : []).filter(s => s.customerName === viewingCustomer.fullName && s.status !== 'returned').reduce((acc, s) => acc + s.total, 0)
     : 0;
 
   const handleAddCustomer = (e: React.FormEvent) => {
