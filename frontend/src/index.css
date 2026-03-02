@@ -1,0 +1,91 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer base {
+  .no-print {
+    @apply print:hidden;
+  }
+}
+
+@layer components {
+  .gold-gradient {
+    background: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
+  }
+  
+  .brand-font {
+    font-family: 'Georgia', serif;
+    font-style: italic;
+  }
+
+  /* Receipt Printing Styles */
+  @media print {
+    body {
+      background: white !important;
+      color: black !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+
+    #root > div > aside,
+    #root > div > nav,
+    .no-print {
+      display: none !important;
+    }
+
+    #root > div > main {
+      padding: 0 !important;
+      margin: 0 !important;
+      width: 100% !important;
+      overflow: visible !important;
+    }
+
+    #receipt-print {
+      display: block !important;
+      width: 80mm; /* Standard thermal printer width */
+      margin: 0 auto;
+      padding: 5mm;
+      font-family: 'Courier New', Courier, monospace;
+    }
+
+    .receipt-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 10px;
+    }
+
+    .receipt-table th, .receipt-table td {
+      border-bottom: 1px dashed #000;
+      padding: 4px 0;
+      text-align: center;
+    }
+
+    #label-print {
+      display: block !important;
+      width: 100%;
+      margin: 0;
+      padding: 0;
+    }
+
+    .label-page-break {
+      page-break-after: always;
+    }
+  }
+
+  #receipt-print, #label-print {
+    display: none;
+  }
+
+  /* Custom Scrollbar */
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
