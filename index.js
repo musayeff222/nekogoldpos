@@ -8,7 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Hostinger-də TypeScript serverini işə salmaq üçün köməkçi JavaScript faylı
 console.log('Tətbiq başladılır...');
 
-const child = spawn(process.execPath, ['--import', 'tsx', path.join(__dirname, 'server.ts')], {
+const child = spawn(process.execPath, [path.join(__dirname, 'dist-server', 'server.js')], {
   stdio: 'inherit',
   env: { ...process.env, NODE_ENV: 'production' }
 });
