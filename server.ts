@@ -260,12 +260,14 @@ async function startServer() {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = path.dirname(__filename);
     
-    app.use(express.static(path.join(__dirname, 'dist')));
+    // In production, server.js is inside 'dist', so static files are in the same directory
+    const staticPath = process.env.NODE_ENV === 'production' ? __dirname : path.join(__dirname, 'dist');
+    app.use(express.static(staticPath));
     
     // Handle SPA routing: serve index.html for all non-API routes
     app.get('*', (req, res, next) => {
       if (req.path.startsWith('/api')) return next();
-      res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+      res.sendFile(path.join(staticPath, 'index.html'));
     });
   }
 

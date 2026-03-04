@@ -8,10 +8,10 @@
   },
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && tsc server.ts --target ES2020 --module ESNext --moduleResolution node --outDir dist-server --allowSyntheticDefaultImports --esModuleInterop --skipLibCheck",
+    "build": "vite build && tsc server.ts --target ES2020 --module ESNext --moduleResolution node --outDir dist --allowSyntheticDefaultImports --esModuleInterop --skipLibCheck",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
-    "start": "node dist-server/server.js"
+    "start": "node dist/server.js"
   },
   "dependencies": {
     "@google/genai": "^1.43.0",
