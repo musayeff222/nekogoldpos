@@ -31,12 +31,40 @@ const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [products, setProducts] = useState<Product[] | null>(null);
-  const [sales, setSales] = useState<Sale[] | null>(null);
-  const [customers, setCustomers] = useState<Customer[] | null>(null);
-  const [scraps, setScraps] = useState<ScrapGold[] | null>(null);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [sales, setSales] = useState<Sale[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [scraps, setScraps] = useState<ScrapGold[]>([]);
   const [cart, setCart] = useState<Product[]>([]);
-  const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [settings, setSettings] = useState<AppSettings>({
+    deleteCode: '1234',
+    adminPassword: 'admin',
+    printerName: 'Epson POS-80',
+    shopName: 'NEKO GOLD',
+    productTypes: ['Üzük', 'Sırğa', 'Boyunbağı', 'Qolbaq', 'Dəst', 'Zəncir', 'Set', 'Saat', 'Sep', 'Külçə', 'Digər'],
+    suppliers: ['Tədərükçü A', 'Tədərükçü B', 'Atelye X'],
+    carats: [14, 18, 22, 24],
+    pricePerGram: 400,
+    labelConfig: {
+      width: 80,
+      height: 25,
+      elements: [
+        { id: '1', field: 'shopName', x: 5, y: 5, fontSize: 10, visible: true, bold: true },
+        { id: '2', field: 'code', x: 5, y: 35, fontSize: 24, visible: true, bold: true },
+        { id: '3', field: 'weight', x: 25, y: 75, fontSize: 12, visible: true, bold: true },
+        { id: '4', field: 'supplier', x: 55, y: 5, fontSize: 10, visible: true, bold: true },
+        { id: '5', field: 'carat', x: 75, y: 5, fontSize: 10, visible: true, bold: true },
+        { id: '6', field: 'brilliant', x: 55, y: 25, fontSize: 8, visible: true, bold: true },
+        { id: '7', field: 'price', x: 45, y: 55, fontSize: 24, visible: true, bold: true },
+        { id: '8', field: 'currency', x: 85, y: 75, fontSize: 10, visible: true, bold: true },
+      ]
+    },
+    silentPrinting: false,
+    receiptPrinterPath: '',
+    labelPrinterPath: '',
+    receiptFontWeight: '600',
+    labelFontWeight: '600'
+  });
 
   useEffect(() => {
     const fetchData = async () => {
@@ -237,7 +265,7 @@ const App: React.FC = () => {
       );
     }
 
-    if (!isLoaded || !products || !sales || !customers || !scraps || !settings) {
+    if (!isLoaded) {
       return (
         <div className="flex items-center justify-center h-64">
           <div className="flex flex-col items-center space-y-4">
@@ -258,7 +286,7 @@ const App: React.FC = () => {
       case Page.Reports: return <ReportsModule sales={sales} products={products} scraps={scraps} customers={customers} />;
       case Page.Chat: return <ChatModule />;
       case Page.Settings: return <SettingsModule settings={settings} setSettings={setSettings} />;
-      default: return <SalesModule products={products} setProducts={setProducts} sales={sales} setSales={setSales} customers={customers} setCustomers={setCustomers} settings={settings} />;
+      default: return <SalesModule products={products} setProducts={setProducts} sales={sales} setSales={setSales} customers={customers} setCustomers={setCustomers} settings={settings} cart={cart} setCart={setCart} />;
     }
   };
 

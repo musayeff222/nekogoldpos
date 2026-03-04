@@ -37,7 +37,7 @@ import { LabelPrint } from '@/components/LabelPrint';
 
 interface StockProps {
   products: Product[];
-  setProducts: React.Dispatch<React.SetStateAction<any>>;
+  setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
   settings: AppSettings;
   sales: Sale[];
 }
@@ -203,7 +203,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
       logs: [{ date: new Date().toISOString(), action: 'Sistemə əlavə edildi' }]
     };
 
-    setProducts(prev => [productToAdd, ...prev]);
+    setProducts((prev: Product[]) => [productToAdd, ...prev]);
     setLastAddedProduct(productToAdd);
     
     // Trigger print if autoPrint is enabled
@@ -289,7 +289,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     if (!selectedProduct || !editForm.code || !editForm.name) return;
 
     const updatedProduct: Product = { ...selectedProduct, ...editForm } as Product;
-    setProducts(prev => prev.map(p => p.id === selectedProduct.id ? updatedProduct : p));
+    setProducts((prev: Product[]) => prev.map((p: Product) => p.id === selectedProduct.id ? updatedProduct : p));
     setSelectedProduct(updatedProduct);
     alert("Məhsul məlumatları uğurla yeniləndi.");
   };
@@ -632,7 +632,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
               </div>
             ))
           ) : (
-            <LabelPrint product={lastAddedProduct} settings={settings} />
+            lastAddedProduct && <LabelPrint product={lastAddedProduct} settings={settings} />
           )}
         </div>,
         document.body

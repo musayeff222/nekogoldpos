@@ -20,9 +20,9 @@ import { Sale, Product } from '@/types';
 
 interface ReturnsProps {
   sales: Sale[];
-  setSales: React.Dispatch<React.SetStateAction<any>>;
+  setSales: React.Dispatch<React.SetStateAction<Sale[]>>;
   products: Product[];
-  setProducts: React.Dispatch<React.SetStateAction<any>>;
+  setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
 }
 
 const ReturnsModule: React.FC<ReturnsProps> = ({ sales, setSales, products, setProducts }) => {
@@ -68,12 +68,12 @@ const ReturnsModule: React.FC<ReturnsProps> = ({ sales, setSales, products, setP
     const finalStatus = isExchange ? 'exchanged' : 'returned';
 
     // 1. Satış tarixçəsini yenilə
-    setSales(prev => prev.map(s => 
+    setSales((prev: Sale[]) => prev.map((s: Sale) => 
       s.id === selectedSale.id ? { ...s, status: finalStatus, returnNote: note } : s
     ));
     
     // 2. Məhsulu stoka əlavə et
-    setProducts(prev => prev.map(p => {
+    setProducts((prev: Product[]) => prev.map((p: Product) => {
         if (p.id === selectedSale.productId) {
             return { 
                 ...p, 

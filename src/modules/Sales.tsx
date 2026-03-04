@@ -34,11 +34,11 @@ import { Product, ProductType, Sale, Customer, AppSettings } from '@/types';
 
 interface SalesProps {
   products: Product[];
-  setProducts: React.Dispatch<React.SetStateAction<any>>;
+  setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
   sales: Sale[];
-  setSales: React.Dispatch<React.SetStateAction<any>>;
+  setSales: React.Dispatch<React.SetStateAction<Sale[]>>;
   customers: Customer[];
-  setCustomers: React.Dispatch<React.SetStateAction<any>>;
+  setCustomers: React.Dispatch<React.SetStateAction<Customer[]>>;
   settings: AppSettings;
   cart: Product[];
   setCart: React.Dispatch<React.SetStateAction<Product[]>>;

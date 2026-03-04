@@ -29,7 +29,7 @@ import { Customer, Sale } from '@/types';
 
 interface CustomersProps {
   customers: Customer[];
-  setCustomers: React.Dispatch<React.SetStateAction<any>>;
+  setCustomers: React.Dispatch<React.SetStateAction<Customer[]>>;
   sales: Sale[];
 }
 
@@ -86,7 +86,7 @@ const CustomersModule: React.FC<CustomersProps> = ({ customers, setCustomers, sa
       goldDebt: 0
     };
 
-    setCustomers(prev => [customerToAdd, ...prev]);
+    setCustomers((prev: Customer[]) => [customerToAdd, ...prev]);
     setShowAddModal(false);
     setNewCustomer({ fullName: '', phone: '', address: '', title: '' });
   };
@@ -94,7 +94,7 @@ const CustomersModule: React.FC<CustomersProps> = ({ customers, setCustomers, sa
   const deleteCustomer = (e: React.MouseEvent, id: string) => {
     e.stopPropagation(); 
     if (confirm('Bu müştərini silmək istədiyinizə əminsiniz?')) {
-      setCustomers(prev => prev.filter(c => c.id !== id));
+      setCustomers((prev: Customer[]) => prev.filter((c: Customer) => c.id !== id));
     }
   };
 

@@ -2,13 +2,14 @@
   "name": "nekogold",
   "private": true,
   "version": "0.0.0",
+  "main": "server.ts",
   "type": "module",
   "engines": {
     "node": ">=18.0.0"
   },
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && tsc server.ts --target ES2020 --module ESNext --moduleResolution node --outDir dist --allowSyntheticDefaultImports --esModuleInterop --skipLibCheck",
+    "build": "vite build && tsc",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
     "start": "node dist/server.js"
@@ -16,6 +17,11 @@
   "dependencies": {
     "@google/genai": "^1.43.0",
     "@tailwindcss/vite": "^4.2.1",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
@@ -25,14 +31,11 @@
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "tailwindcss": "^4.2.1",
-    "tsx": "^4.21.0"
+    "tsx": "^4.21.0",
+    "typescript": "~5.8.2"
   },
   "devDependencies": {
-    "@types/cors": "^2.8.19",
-    "@types/express": "^5.0.6",
-    "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
-    "typescript": "~5.8.2",
     "vite": "^6.2.0"
   }
 }
