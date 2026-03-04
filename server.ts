@@ -4,7 +4,8 @@ import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import { GoogleGenAI } from "@google/genai";
-import { createServer as createViteServer } from "vite";
+// Vite import moved inside startServer for better production compatibility
+
 
 // Load environment variables
 dotenv.config({ override: true });
@@ -246,6 +247,7 @@ async function startServer() {
 
   // Vite middleware for development or static serving for production
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
