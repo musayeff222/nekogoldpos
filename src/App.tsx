@@ -30,6 +30,7 @@ const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.Sales);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [products, setProducts] = useState<Product[] | null>(null);
   const [sales, setSales] = useState<Sale[] | null>(null);
   const [customers, setCustomers] = useState<Customer[] | null>(null);
@@ -42,7 +43,10 @@ const App: React.FC = () => {
       try {
         const fetchWithType = async (type: string) => {
           const res = await fetch(`/api/data/${type}`);
-          if (!res.ok) throw new Error(`Failed to fetch ${type}`);
+          if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.details || errorData.error || `Failed to fetch ${type}`);
+          }
           return res.json();
         };
 
@@ -95,8 +99,9 @@ const App: React.FC = () => {
         
         setIsLoaded(true);
         console.log('Initial data load complete');
-      } catch (error) {
+      } catch (error: any) {
         console.error('Failed to fetch data from remote source:', error);
+        setError(error.message || 'Məlumatları yükləmək mümkün olmadı. İnternet bağlantısını və ya server statusunu yoxlayın.');
       }
     };
 
@@ -212,6 +217,26 @@ const App: React.FC = () => {
   ];
 
   const renderModule = () => {
+    if (error) {
+      return (
+        <div className="flex items-center justify-center h-64">
+          <div className="bg-red-50 border-2 border-red-200 p-8 rounded-3xl max-w-md text-center shadow-xl">
+            <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Flame size={32} />
+            </div>
+            <h2 className="text-xl font-black text-red-800 mb-2">Bağlantı Xətası</h2>
+            <p className="text-red-600 font-medium mb-6">{error}</p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-8 rounded-2xl transition-all shadow-lg shadow-red-900/20"
+            >
+              Yenidən Cəhd Et
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     if (!isLoaded || !products || !sales || !customers || !scraps || !settings) {
       return (
         <div className="flex items-center justify-center h-64">
@@ -295,6 +320,22 @@ const App: React.FC = () => {
 
       {/* MAIN CONTENT AREA */}
       <main className="flex-1 h-full overflow-y-auto bg-stone-50 scrollbar-hide pb-20 md:pb-0">
+        {error && (
+          <div className="bg-red-50 border-b border-red-100 p-4 flex items-center justify-between animate-in slide-in-from-top duration-500">
+            <div className="flex items-center space-x-3">
+              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+              <p className="text-xs font-black text-red-800 uppercase tracking-tighter">
+                Sistem Xətası: {error}
+              </p>
+            </div>
+            <button 
+              onClick={() => window.location.reload()} 
+              className="text-[10px] font-black text-red-600 hover:text-red-800 uppercase underline tracking-widest"
+            >
+              Yenidən Yoxla
+            </button>
+          </div>
+        )}
         <div className="p-4 md:p-8">
           {renderModule()}
         </div>

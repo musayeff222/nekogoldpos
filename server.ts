@@ -7,7 +7,7 @@ import { GoogleGenAI } from "@google/genai";
 import { createServer as createViteServer } from "vite";
 
 // Load environment variables
-dotenv.config();
+dotenv.config({ override: true });
 
 async function startServer() {
   const app = express();
@@ -35,53 +35,74 @@ async function startServer() {
 
   // Initialize Database Tables
   const initDB = async () => {
+    let connection;
     try {
-      await pool.execute(`
-        CREATE TABLE IF NOT EXISTS messages (
-          id INT AUTO_INCREMENT PRIMARY KEY,
-          question TEXT,
-          answer TEXT,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-      `);
-      await pool.execute(`
-        CREATE TABLE IF NOT EXISTS products (
-          id VARCHAR(100) PRIMARY KEY,
-          content LONGTEXT,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        )
-      `);
-      await pool.execute(`
-        CREATE TABLE IF NOT EXISTS sales (
-          id VARCHAR(100) PRIMARY KEY,
-          content LONGTEXT,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        )
-      `);
-      await pool.execute(`
-        CREATE TABLE IF NOT EXISTS customers (
-          id VARCHAR(100) PRIMARY KEY,
-          content LONGTEXT,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        )
-      `);
-      await pool.execute(`
-        CREATE TABLE IF NOT EXISTS scraps (
-          id VARCHAR(100) PRIMARY KEY,
-          content LONGTEXT,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        )
-      `);
-      await pool.execute(`
-        CREATE TABLE IF NOT EXISTS settings (
-          id VARCHAR(50) PRIMARY KEY,
-          content LONGTEXT,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        )
-      `);
-      console.log('Database tables initialized');
+      connection = await pool.getConnection();
+      console.log('Successfully connected to MySQL server');
+      
+      const tables = [
+        {
+          name: 'messages',
+          sql: `CREATE TABLE IF NOT EXISTS messages (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            question TEXT,
+            answer TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )`
+        },
+        {
+          name: 'products',
+          sql: `CREATE TABLE IF NOT EXISTS products (
+            id VARCHAR(100) PRIMARY KEY,
+            content LONGTEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+          )`
+        },
+        {
+          name: 'sales',
+          sql: `CREATE TABLE IF NOT EXISTS sales (
+            id VARCHAR(100) PRIMARY KEY,
+            content LONGTEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+          )`
+        },
+        {
+          name: 'customers',
+          sql: `CREATE TABLE IF NOT EXISTS customers (
+            id VARCHAR(100) PRIMARY KEY,
+            content LONGTEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+          )`
+        },
+        {
+          name: 'scraps',
+          sql: `CREATE TABLE IF NOT EXISTS scraps (
+            id VARCHAR(100) PRIMARY KEY,
+            content LONGTEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+          )`
+        },
+        {
+          name: 'settings',
+          sql: `CREATE TABLE IF NOT EXISTS settings (
+            id VARCHAR(50) PRIMARY KEY,
+            content LONGTEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+          )`
+        }
+      ];
+
+      for (const table of tables) {
+        await connection.execute(table.sql);
+        console.log(`Table ${table.name} checked/created`);
+      }
+      
+      console.log('All database tables initialized successfully');
     } catch (err) {
-      console.error('Database initialization failed:', err);
+      console.error('Database initialization failed critical error:', err);
+      // We don't exit, but the health check will reflect this
+    } finally {
+      if (connection) connection.release();
     }
   };
   await initDB();
@@ -129,10 +150,10 @@ async function startServer() {
 
   // Generic Data Sync Endpoints
   app.get('/api/data/:type', async (req: Request, res: Response) => {
-    const type = req.params.type as string;
+    const { type } = req.params;
     const allowedTypes = ['products', 'sales', 'customers', 'scraps', 'settings'];
     
-    if (!allowedTypes.includes(type)) {
+    if (typeof type !== 'string' || !allowedTypes.includes(type)) {
       return res.status(400).json({ error: 'Invalid data type' });
     }
 
@@ -148,22 +169,23 @@ async function startServer() {
       }
     } catch (error) {
       console.error(`Failed to fetch ${type}:`, error);
-      res.status(500).json({ error: 'Failed to fetch data' });
+      res.status(500).json({ 
+        error: 'Failed to fetch data', 
+        details: error instanceof Error ? error.message : String(error)
+      });
     }
   });
 
   app.post('/api/data/:type', async (req: Request, res: Response) => {
-    const type = req.params.type as string;
+    const { type } = req.params;
     const { data } = req.body;
     const allowedTypes = ['products', 'sales', 'customers', 'scraps', 'settings'];
 
-    if (!allowedTypes.includes(type)) {
+    if (typeof type !== 'string' || !allowedTypes.includes(type)) {
       return res.status(400).json({ error: 'Invalid data type' });
     }
 
     try {
-      console.log(`Syncing ${type} with ${Array.isArray(data) ? data.length : 'single'} items`);
-      
       if (type === 'settings') {
         const content = JSON.stringify(data);
         await pool.execute(
@@ -171,28 +193,27 @@ async function startServer() {
           [content, content]
         );
       } else if (Array.isArray(data)) {
+        // For arrays, we clear and re-insert or update
+        // To keep it simple and consistent with frontend state sync:
+        // 1. Clear existing (optional, but safer for state sync)
+        // 2. Insert all
+        
+        // Optimization: Use a transaction
         const connection = await pool.getConnection();
         await connection.beginTransaction();
         try {
-          // 1. Clear existing
           await connection.execute(`DELETE FROM ${type}`);
-          
-          // 2. Bulk insert if there is data
-          if (data.length > 0) {
-            const values = data.map(item => [
-              item.id || Math.random().toString(36).substr(2, 9),
-              JSON.stringify(item)
-            ]);
-            
-            const sql = `INSERT INTO ${type} (id, content) VALUES ?`;
-            await connection.query(sql, [values]);
+          for (const item of data) {
+            const content = JSON.stringify(item);
+            const id = item.id || Math.random().toString(36).substr(2, 9);
+            await connection.execute(
+              `INSERT INTO ${type} (id, content) VALUES (?, ?)`,
+              [id, content]
+            );
           }
-          
           await connection.commit();
-          console.log(`Successfully committed ${data.length} items to ${type}`);
         } catch (err) {
           await connection.rollback();
-          console.error(`Transaction failed for ${type}:`, err);
           throw err;
         } finally {
           connection.release();
@@ -203,13 +224,24 @@ async function startServer() {
       res.json({ status: 'success' });
     } catch (error) {
       console.error(`Failed to save ${type} data:`, error);
-      res.status(500).json({ error: 'Failed to save data' });
+      res.status(500).json({ 
+        error: 'Failed to save data', 
+        details: error instanceof Error ? error.message : String(error) 
+      });
     }
   });
 
   // Health check endpoint
-  app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', database: 'connected' });
+  app.get('/api/health', async (req, res) => {
+    try {
+      const connection = await pool.getConnection();
+      await connection.ping();
+      connection.release();
+      res.json({ status: 'ok', database: 'connected' });
+    } catch (err) {
+      console.error('Health check failed:', err);
+      res.status(500).json({ status: 'error', database: 'disconnected', error: err instanceof Error ? err.message : String(err) });
+    }
   });
 
   // Vite middleware for development or static serving for production

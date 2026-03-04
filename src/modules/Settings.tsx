@@ -6,7 +6,7 @@ import { LabelPrint } from '@/components/LabelPrint';
 
 interface SettingsProps {
   settings: AppSettings;
-  setSettings: React.Dispatch<React.SetStateAction<any>>;
+  setSettings: React.Dispatch<React.SetStateAction<AppSettings>>;
 }
 
 const SettingsModule: React.FC<SettingsProps> = ({ settings, setSettings }) => {
@@ -18,6 +18,21 @@ const SettingsModule: React.FC<SettingsProps> = ({ settings, setSettings }) => {
   const [testProduct, setTestProduct] = useState<Product | null>(null);
   const designerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [dbStatus, setDbStatus] = useState<{ status: string; database: string; error?: string } | null>(null);
+
+  useEffect(() => {
+    const checkHealth = () => {
+      fetch('/api/health')
+        .then(res => res.json())
+        .then(data => setDbStatus(data))
+        .catch((err) => setDbStatus({ status: 'error', database: 'disconnected', error: err.message }));
+    };
+    
+    checkHealth();
+    const interval = setInterval(checkHealth, 30000); // Check every 30s
+    return () => clearInterval(interval);
+  }, []);
 
   const handleSave = () => {
     setSettings(localSettings);
@@ -155,6 +170,28 @@ const SettingsModule: React.FC<SettingsProps> = ({ settings, setSettings }) => {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 md:space-y-10 pb-24 md:pb-10 animate-in fade-in">
+      {/* DATABASE STATUS */}
+      <div className="bg-white rounded-[2rem] border border-stone-100 shadow-xl overflow-hidden p-6 flex items-center justify-between">
+        <div className="flex items-center space-x-4">
+          <div className={`w-3 h-3 rounded-full animate-pulse ${dbStatus?.database === 'connected' ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]'}`} />
+          <div>
+            <h3 className="text-[10px] font-black text-stone-400 uppercase tracking-widest">Məlumat Bazası Statusu</h3>
+            <p className="text-sm font-black text-stone-800 uppercase">
+              {dbStatus?.database === 'connected' ? 'Uğurla Qoşuldu' : 'Bağlantı Xətası'}
+            </p>
+            {dbStatus?.error && (
+              <p className="text-[9px] text-red-500 font-bold mt-1 max-w-xs truncate" title={dbStatus.error}>
+                Xəta: {dbStatus.error}
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="text-right">
+          <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest">Server</p>
+          <p className="text-sm font-black text-amber-600 uppercase">72.60.86.130</p>
+        </div>
+      </div>
+
       <div className="bg-white rounded-3xl md:rounded-[3rem] border border-stone-100 shadow-2xl overflow-hidden flex flex-col md:flex-row">
         <div className="w-full md:w-5/12 p-8 bg-amber-50/30 border-b md:border-b-0 md:border-r border-stone-100">
           <div className="w-12 h-12 bg-amber-500 text-white rounded-2xl flex items-center justify-center mb-4 shadow-xl shadow-amber-200">
