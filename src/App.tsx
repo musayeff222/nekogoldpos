@@ -25,8 +25,12 @@ import ScrapModule from '@/modules/Scrap';
 import SettingsModule from '@/modules/Settings';
 import ReportsModule from '@/modules/Reports';
 import ChatModule from './modules/AIChat';
+import Login from '@/modules/Login';
+import { LogOut } from 'lucide-react';
 
 const App: React.FC = () => {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState<{ username: string } | null>(null);
   const [currentPage, setCurrentPage] = useState<Page>(Page.Sales);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -67,6 +71,15 @@ const App: React.FC = () => {
   });
 
   useEffect(() => {
+    // Check for existing auth session
+    const token = localStorage.getItem('nekogold_token');
+    const username = localStorage.getItem('nekogold_username');
+    
+    if (token && username) {
+      setIsAuthenticated(true);
+      setUser({ username });
+    }
+
     const fetchData = async () => {
       try {
         const fetchWithType = async (type: string) => {
@@ -135,6 +148,20 @@ const App: React.FC = () => {
 
     fetchData();
   }, []);
+
+  const handleLogin = (token: string, username: string) => {
+    localStorage.setItem('nekogold_token', token);
+    localStorage.setItem('nekogold_username', username);
+    setIsAuthenticated(true);
+    setUser({ username });
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('nekogold_token');
+    localStorage.removeItem('nekogold_username');
+    setIsAuthenticated(false);
+    setUser(null);
+  };
 
   // Sync data to backend on changes - ONLY after initial load is complete
   useEffect(() => {
@@ -290,6 +317,10 @@ const App: React.FC = () => {
     }
   };
 
+  if (!isAuthenticated) {
+    return <Login onLogin={handleLogin} />;
+  }
+
   return (
     <div className="flex flex-col md:flex-row h-screen w-full bg-stone-100 font-sans overflow-hidden">
       {/* DESKTOP SIDEBAR */}
@@ -316,6 +347,16 @@ const App: React.FC = () => {
             </button>
           ))}
         </nav>
+
+        <div className="w-full px-3 mt-auto mb-6">
+          <button
+            onClick={handleLogout}
+            className={`w-full flex items-center rounded-2xl transition-all hover:bg-red-500/10 text-red-500 ${isSidebarOpen ? 'px-4 py-3.5 space-x-4' : 'p-3.5 justify-center'}`}
+          >
+            <LogOut size={24} />
+            {isSidebarOpen && <span className="text-sm font-bold truncate">Çıxış</span>}
+          </button>
+        </div>
       </aside>
 
       {/* MOBILE BOTTOM NAV */}

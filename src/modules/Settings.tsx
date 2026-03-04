@@ -168,6 +168,102 @@ const SettingsModule: React.FC<SettingsProps> = ({ settings, setSettings }) => {
     setLocalSettings({ ...localSettings, [list]: localSettings[list].filter(i => i !== item) });
   };
 
+  const PasswordChangeSection = () => {
+    const [currentPassword, setCurrentPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [message, setMessage] = useState({ text: '', type: '' });
+
+    const handleChangePassword = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (newPassword !== confirmPassword) {
+        setMessage({ text: 'Yeni şifrələr uyğun gəlmir', type: 'error' });
+        return;
+      }
+
+      setLoading(true);
+      setMessage({ text: '', type: '' });
+
+      try {
+        const response = await fetch('/api/auth/change-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            username: 'admin', // Default user
+            currentPassword, 
+            newPassword 
+          }),
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+          setMessage({ text: 'Şifrə uğurla dəyişdirildi', type: 'success' });
+          setCurrentPassword('');
+          setNewPassword('');
+          setConfirmPassword('');
+        } else {
+          setMessage({ text: data.error || 'Xəta baş verdi', type: 'error' });
+        }
+      } catch (err) {
+        setMessage({ text: 'Server xətası', type: 'error' });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    return (
+      <form onSubmit={handleChangePassword} className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-stone-400 uppercase tracking-widest ml-4">Cari Şifrə</label>
+            <input 
+              type="password" 
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              className="w-full bg-stone-50 border-2 border-stone-100 rounded-2xl py-4 px-6 font-black text-xl"
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-stone-400 uppercase tracking-widest ml-4">Yeni Şifrə</label>
+            <input 
+              type="password" 
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              className="w-full bg-stone-50 border-2 border-stone-100 rounded-2xl py-4 px-6 font-black text-xl"
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-stone-400 uppercase tracking-widest ml-4">Yeni Şifrəni Təsdiqlə</label>
+            <input 
+              type="password" 
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="w-full bg-stone-50 border-2 border-stone-100 rounded-2xl py-4 px-6 font-black text-xl"
+              required
+            />
+          </div>
+        </div>
+        
+        {message.text && (
+          <div className={`p-4 rounded-2xl text-sm font-bold ${message.type === 'success' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-red-50 text-red-600 border border-red-100'}`}>
+            {message.text}
+          </div>
+        )}
+
+        <button 
+          type="submit" 
+          disabled={loading}
+          className="bg-stone-900 text-amber-500 px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-black transition-all disabled:opacity-50"
+        >
+          {loading ? 'Yüklənir...' : 'Şifrəni Yenilə'}
+        </button>
+      </form>
+    );
+  };
+
   return (
     <div className="max-w-5xl mx-auto space-y-6 md:space-y-10 pb-24 md:pb-10 animate-in fade-in">
       {/* DATABASE STATUS */}
@@ -530,6 +626,14 @@ const SettingsModule: React.FC<SettingsProps> = ({ settings, setSettings }) => {
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="bg-white rounded-[2rem] border border-stone-100 shadow-2xl overflow-hidden p-8 md:p-12 space-y-8">
+        <div className="flex items-center space-x-4">
+          <Key className="text-amber-500" size={32} />
+          <h3 className="text-xl font-black text-stone-900 uppercase">Giriş Şifrəsini Dəyiş</h3>
+        </div>
+        <PasswordChangeSection />
       </div>
 
       <div className="bg-white rounded-[2rem] border border-stone-100 shadow-2xl overflow-hidden p-8 md:p-12 space-y-8">

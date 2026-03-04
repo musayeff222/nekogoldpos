@@ -4,6 +4,8 @@ import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import { GoogleGenAI } from "@google/genai";
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
 // Vite import moved inside startServer for better production compatibility
 
 
@@ -90,12 +92,29 @@ async function startServer() {
             content LONGTEXT,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
           )`
+        },
+        {
+          name: 'users',
+          sql: `CREATE TABLE IF NOT EXISTS users (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            username VARCHAR(50) UNIQUE NOT NULL,
+            password VARCHAR(255) NOT NULL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+          )`
         }
       ];
 
       for (const table of tables) {
         await connection.execute(table.sql);
         console.log(`Table ${table.name} checked/created`);
+      }
+
+      // Check if admin user exists, if not create default
+      const [users] = await connection.execute('SELECT * FROM users WHERE username = ?', ['admin']);
+      if ((users as any[]).length === 0) {
+        const hashedPassword = await bcrypt.hash('123456', 10);
+        await connection.execute('INSERT INTO users (username, password) VALUES (?, ?)', ['admin', hashedPassword]);
+        console.log('Default admin user created');
       }
       
       console.log('All database tables initialized successfully');
@@ -110,6 +129,70 @@ async function startServer() {
 
   // Initialize Gemini API
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+  const JWT_SECRET = process.env.JWT_SECRET || 'nekogold-secret-key-2024';
+
+  // Auth Endpoints
+  app.post('/api/auth/login', async (req: Request, res: Response) => {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password are required' });
+    }
+
+    try {
+      const [rows] = await pool.execute('SELECT * FROM users WHERE username = ?', [username]);
+      const users = rows as any[];
+
+      if (users.length === 0) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+
+      const user = users[0];
+      const isPasswordValid = await bcrypt.compare(password, user.password);
+
+      if (!isPasswordValid) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+
+      const token = jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '24h' });
+      res.json({ token, username: user.username });
+    } catch (error) {
+      console.error('Login error:', error);
+      res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+
+  app.post('/api/auth/change-password', async (req: Request, res: Response) => {
+    const { username, currentPassword, newPassword } = req.body;
+
+    if (!username || !currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'All fields are required' });
+    }
+
+    try {
+      const [rows] = await pool.execute('SELECT * FROM users WHERE username = ?', [username]);
+      const users = rows as any[];
+
+      if (users.length === 0) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      const user = users[0];
+      const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+
+      if (!isPasswordValid) {
+        return res.status(401).json({ error: 'Current password is incorrect' });
+      }
+
+      const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+      await pool.execute('UPDATE users SET password = ? WHERE username = ?', [hashedNewPassword, username]);
+
+      res.json({ status: 'success', message: 'Password updated successfully' });
+    } catch (error) {
+      console.error('Change password error:', error);
+      res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
 
   // API Endpoint: /api/chat
   app.post('/api/chat', async (req: Request, res: Response) => {
