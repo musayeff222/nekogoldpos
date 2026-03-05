@@ -32,12 +32,21 @@ const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.Sales);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [scraps, setScraps] = useState<ScrapGold[]>([]);
   const [cart, setCart] = useState<Product[]>([]);
+
+  // Refs to track last synced data to avoid redundant syncs
+  const lastSyncedProducts = React.useRef<string>('');
+  const lastSyncedSales = React.useRef<string>('');
+  const lastSyncedCustomers = React.useRef<string>('');
+  const lastSyncedScraps = React.useRef<string>('');
+  const lastSyncedSettings = React.useRef<string>('');
   const [settings, setSettings] = useState<AppSettings>({
     deleteCode: '1234',
     adminPassword: 'admin',
@@ -111,9 +120,16 @@ const App: React.FC = () => {
         ]);
 
         setProducts(Array.isArray(p) ? p : []);
+        lastSyncedProducts.current = JSON.stringify(Array.isArray(p) ? p : []);
+        
         setSales(Array.isArray(s) ? s : []);
+        lastSyncedSales.current = JSON.stringify(Array.isArray(s) ? s : []);
+        
         setCustomers(Array.isArray(c) ? c : []);
+        lastSyncedCustomers.current = JSON.stringify(Array.isArray(c) ? c : []);
+        
         setScraps(Array.isArray(sc) ? sc : []);
+        lastSyncedScraps.current = JSON.stringify(Array.isArray(sc) ? sc : []);
         
         if (st && !st.error) {
           // Ensure productGroups exists for backward compatibility
@@ -134,8 +150,9 @@ const App: React.FC = () => {
             ]
           };
           setSettings(mergedSettings);
+          lastSyncedSettings.current = JSON.stringify(mergedSettings);
         } else {
-          setSettings({
+          const defaultSettings: AppSettings = {
             deleteCode: '1234',
             adminPassword: 'admin',
             printerName: 'Epson POS-80',
@@ -161,14 +178,14 @@ const App: React.FC = () => {
               width: 80,
               height: 25,
               elements: [
-                { id: '1', field: 'shopName', x: 5, y: 5, fontSize: 10, visible: true, bold: true },
-                { id: '2', field: 'code', x: 5, y: 35, fontSize: 24, visible: true, bold: true },
-                { id: '3', field: 'weight', x: 25, y: 75, fontSize: 12, visible: true, bold: true },
-                { id: '4', field: 'supplier', x: 55, y: 5, fontSize: 10, visible: true, bold: true },
-                { id: '5', field: 'carat', x: 75, y: 5, fontSize: 10, visible: true, bold: true },
-                { id: '6', field: 'brilliant', x: 55, y: 25, fontSize: 8, visible: true, bold: true },
-                { id: '7', field: 'price', x: 45, y: 55, fontSize: 24, visible: true, bold: true },
-                { id: '8', field: 'currency', x: 85, y: 75, fontSize: 10, visible: true, bold: true },
+                { id: '1', field: 'shopName' as const, x: 5, y: 5, fontSize: 10, visible: true, bold: true },
+                { id: '2', field: 'code' as const, x: 5, y: 35, fontSize: 24, visible: true, bold: true },
+                { id: '3', field: 'weight' as const, x: 25, y: 75, fontSize: 12, visible: true, bold: true },
+                { id: '4', field: 'supplier' as const, x: 55, y: 5, fontSize: 10, visible: true, bold: true },
+                { id: '5', field: 'carat' as const, x: 75, y: 5, fontSize: 10, visible: true, bold: true },
+                { id: '6', field: 'brilliant' as const, x: 55, y: 25, fontSize: 8, visible: true, bold: true },
+                { id: '7', field: 'price' as const, x: 45, y: 55, fontSize: 24, visible: true, bold: true },
+                { id: '8', field: 'currency' as const, x: 85, y: 75, fontSize: 10, visible: true, bold: true },
               ]
             },
             silentPrinting: false,
@@ -176,7 +193,9 @@ const App: React.FC = () => {
             labelPrinterPath: '',
             receiptFontWeight: '600',
             labelFontWeight: '600'
-          });
+          };
+          setSettings(defaultSettings);
+          lastSyncedSettings.current = JSON.stringify(defaultSettings);
         }
         
         setIsLoaded(true);
@@ -208,15 +227,28 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!isLoaded || products === null) return;
     
+    const currentData = JSON.stringify(products);
+    if (currentData === lastSyncedProducts.current) return;
+
     const syncData = async () => {
+      setIsSyncing(true);
       try {
-        await fetch('/api/data/products', {
+        const res = await fetch('/api/data/products', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ data: products })
         });
-      } catch (err) {
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          throw new Error(errorData.details || errorData.error || 'Sync failed');
+        }
+        lastSyncedProducts.current = currentData;
+        setSyncError(null);
+      } catch (err: any) {
         console.error('Failed to sync products:', err);
+        setSyncError(`Məlumatlar yadda saxlanılmadı: ${err.message}`);
+      } finally {
+        setIsSyncing(false);
       }
     };
     
@@ -227,15 +259,28 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!isLoaded || sales === null) return;
 
+    const currentData = JSON.stringify(sales);
+    if (currentData === lastSyncedSales.current) return;
+
     const syncData = async () => {
+      setIsSyncing(true);
       try {
-        await fetch('/api/data/sales', {
+        const res = await fetch('/api/data/sales', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ data: sales })
         });
-      } catch (err) {
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          throw new Error(errorData.details || errorData.error || 'Sync failed');
+        }
+        lastSyncedSales.current = currentData;
+        setSyncError(null);
+      } catch (err: any) {
         console.error('Failed to sync sales:', err);
+        setSyncError(`Məlumatlar yadda saxlanılmadı: ${err.message}`);
+      } finally {
+        setIsSyncing(false);
       }
     };
 
@@ -246,15 +291,28 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!isLoaded || customers === null) return;
 
+    const currentData = JSON.stringify(customers);
+    if (currentData === lastSyncedCustomers.current) return;
+
     const syncData = async () => {
+      setIsSyncing(true);
       try {
-        await fetch('/api/data/customers', {
+        const res = await fetch('/api/data/customers', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ data: customers })
         });
-      } catch (err) {
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          throw new Error(errorData.details || errorData.error || 'Sync failed');
+        }
+        lastSyncedCustomers.current = currentData;
+        setSyncError(null);
+      } catch (err: any) {
         console.error('Failed to sync customers:', err);
+        setSyncError(`Məlumatlar yadda saxlanılmadı: ${err.message}`);
+      } finally {
+        setIsSyncing(false);
       }
     };
 
@@ -265,15 +323,28 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!isLoaded || scraps === null) return;
 
+    const currentData = JSON.stringify(scraps);
+    if (currentData === lastSyncedScraps.current) return;
+
     const syncData = async () => {
+      setIsSyncing(true);
       try {
-        await fetch('/api/data/scraps', {
+        const res = await fetch('/api/data/scraps', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ data: scraps })
         });
-      } catch (err) {
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          throw new Error(errorData.details || errorData.error || 'Sync failed');
+        }
+        lastSyncedScraps.current = currentData;
+        setSyncError(null);
+      } catch (err: any) {
         console.error('Failed to sync scraps:', err);
+        setSyncError(`Məlumatlar yadda saxlanılmadı: ${err.message}`);
+      } finally {
+        setIsSyncing(false);
       }
     };
 
@@ -284,15 +355,28 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!isLoaded || settings === null) return;
 
+    const currentData = JSON.stringify(settings);
+    if (currentData === lastSyncedSettings.current) return;
+
     const syncData = async () => {
+      setIsSyncing(true);
       try {
-        await fetch('/api/data/settings', {
+        const res = await fetch('/api/data/settings', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ data: settings })
         });
-      } catch (err) {
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          throw new Error(errorData.details || errorData.error || 'Sync failed');
+        }
+        lastSyncedSettings.current = currentData;
+        setSyncError(null);
+      } catch (err: any) {
         console.error('Failed to sync settings:', err);
+        setSyncError(`Məlumatlar yadda saxlanılmadı: ${err.message}`);
+      } finally {
+        setIsSyncing(false);
       }
     };
 
@@ -421,6 +505,16 @@ const App: React.FC = () => {
 
       {/* MAIN CONTENT AREA */}
       <main className="flex-1 h-full overflow-y-auto bg-stone-50 scrollbar-hide pb-20 md:pb-0">
+        {syncError && (
+          <div className="bg-red-600 text-white p-2 text-center text-[10px] font-black uppercase tracking-widest animate-pulse sticky top-0 z-50">
+            {syncError}
+          </div>
+        )}
+        {isSyncing && !syncError && (
+          <div className="bg-amber-500 text-amber-950 p-1 text-center text-[8px] font-black uppercase tracking-widest sticky top-0 z-50 opacity-50">
+            Məlumatlar sinxronizasiya edilir...
+          </div>
+        )}
         {error && (
           <div className="bg-red-50 border-b border-red-100 p-4 flex items-center justify-between animate-in slide-in-from-top duration-500">
             <div className="flex items-center space-x-3">

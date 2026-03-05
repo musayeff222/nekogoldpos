@@ -32,97 +32,108 @@ async function startServer() {
     database: process.env.DB_NAME,
     port: parseInt(process.env.DB_PORT || '3306'),
     waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
+    connectionLimit: 20, // Increased connection limit
+    queueLimit: 0,
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 10000
   });
 
-  // Initialize Database Tables
-  const initDB = async () => {
+  // Initialize Database Tables with retry logic
+  const initDB = async (retries = 5) => {
     let connection;
-    try {
-      connection = await pool.getConnection();
-      console.log('Successfully connected to MySQL server');
-      
-      const tables = [
-        {
-          name: 'messages',
-          sql: `CREATE TABLE IF NOT EXISTS messages (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            question TEXT,
-            answer TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-          )`
-        },
-        {
-          name: 'products',
-          sql: `CREATE TABLE IF NOT EXISTS products (
-            id VARCHAR(100) PRIMARY KEY,
-            content LONGTEXT,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-          )`
-        },
-        {
-          name: 'sales',
-          sql: `CREATE TABLE IF NOT EXISTS sales (
-            id VARCHAR(100) PRIMARY KEY,
-            content LONGTEXT,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-          )`
-        },
-        {
-          name: 'customers',
-          sql: `CREATE TABLE IF NOT EXISTS customers (
-            id VARCHAR(100) PRIMARY KEY,
-            content LONGTEXT,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-          )`
-        },
-        {
-          name: 'scraps',
-          sql: `CREATE TABLE IF NOT EXISTS scraps (
-            id VARCHAR(100) PRIMARY KEY,
-            content LONGTEXT,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-          )`
-        },
-        {
-          name: 'settings',
-          sql: `CREATE TABLE IF NOT EXISTS settings (
-            id VARCHAR(50) PRIMARY KEY,
-            content LONGTEXT,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-          )`
-        },
-        {
-          name: 'users',
-          sql: `CREATE TABLE IF NOT EXISTS users (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            username VARCHAR(50) UNIQUE NOT NULL,
-            password VARCHAR(255) NOT NULL,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-          )`
+    while (retries > 0) {
+      try {
+        connection = await pool.getConnection();
+        console.log('Successfully connected to MySQL server');
+        
+        const tables = [
+          {
+            name: 'messages',
+            sql: `CREATE TABLE IF NOT EXISTS messages (
+              id INT AUTO_INCREMENT PRIMARY KEY,
+              question TEXT,
+              answer TEXT,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )`
+          },
+          {
+            name: 'products',
+            sql: `CREATE TABLE IF NOT EXISTS products (
+              id VARCHAR(100) PRIMARY KEY,
+              content LONGTEXT,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )`
+          },
+          {
+            name: 'sales',
+            sql: `CREATE TABLE IF NOT EXISTS sales (
+              id VARCHAR(100) PRIMARY KEY,
+              content LONGTEXT,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )`
+          },
+          {
+            name: 'customers',
+            sql: `CREATE TABLE IF NOT EXISTS customers (
+              id VARCHAR(100) PRIMARY KEY,
+              content LONGTEXT,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )`
+          },
+          {
+            name: 'scraps',
+            sql: `CREATE TABLE IF NOT EXISTS scraps (
+              id VARCHAR(100) PRIMARY KEY,
+              content LONGTEXT,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )`
+          },
+          {
+            name: 'settings',
+            sql: `CREATE TABLE IF NOT EXISTS settings (
+              id VARCHAR(50) PRIMARY KEY,
+              content LONGTEXT,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )`
+          },
+          {
+            name: 'users',
+            sql: `CREATE TABLE IF NOT EXISTS users (
+              id INT AUTO_INCREMENT PRIMARY KEY,
+              username VARCHAR(50) UNIQUE NOT NULL,
+              password VARCHAR(255) NOT NULL,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )`
+          }
+        ];
+
+        for (const table of tables) {
+          await connection.execute(table.sql);
+          console.log(`Table ${table.name} checked/created`);
         }
-      ];
 
-      for (const table of tables) {
-        await connection.execute(table.sql);
-        console.log(`Table ${table.name} checked/created`);
+        // Check if admin user exists, if not create default
+        const [users] = await connection.execute('SELECT * FROM users WHERE username = ?', ['admin']);
+        if ((users as any[]).length === 0) {
+          const hashedPassword = await bcrypt.hash('123456', 10);
+          await connection.execute('INSERT INTO users (username, password) VALUES (?, ?)', ['admin', hashedPassword]);
+          console.log('Default admin user created');
+        }
+        
+        console.log('All database tables initialized successfully');
+        return; // Success, exit the loop
+      } catch (err) {
+        retries--;
+        console.error(`Database initialization attempt failed (${5 - retries}/5):`, err);
+        if (retries === 0) {
+          console.error('Database initialization failed after all retries.');
+        } else {
+          // Wait before retrying
+          await new Promise(resolve => setTimeout(resolve, 5000));
+        }
+      } finally {
+        if (connection) connection.release();
       }
-
-      // Check if admin user exists, if not create default
-      const [users] = await connection.execute('SELECT * FROM users WHERE username = ?', ['admin']);
-      if ((users as any[]).length === 0) {
-        const hashedPassword = await bcrypt.hash('123456', 10);
-        await connection.execute('INSERT INTO users (username, password) VALUES (?, ?)', ['admin', hashedPassword]);
-        console.log('Default admin user created');
-      }
-      
-      console.log('All database tables initialized successfully');
-    } catch (err) {
-      console.error('Database initialization failed critical error:', err);
-      // We don't exit, but the health check will reflect this
-    } finally {
-      if (connection) connection.release();
     }
   };
   await initDB();
@@ -277,34 +288,41 @@ async function startServer() {
           [content, content]
         );
       } else if (Array.isArray(data)) {
-        // For arrays, we clear and re-insert or update
-        // To keep it simple and consistent with frontend state sync:
-        // 1. Clear existing (optional, but safer for state sync)
-        // 2. Insert all
-        
-        // Optimization: Use a transaction
+        // Optimization: Use a transaction and bulk insert with chunking
         const connection = await pool.getConnection();
-        await connection.beginTransaction();
         try {
+          await connection.beginTransaction();
+          
+          // Clear existing
           await connection.execute(`DELETE FROM ${type}`);
-          for (const item of data) {
-            const content = JSON.stringify(item);
-            const id = item.id || Math.random().toString(36).substr(2, 9);
-            await connection.execute(
-              `INSERT INTO ${type} (id, content) VALUES (?, ?)`,
-              [id, content]
-            );
+          
+          if (data.length > 0) {
+            // Prepare bulk insert in chunks to avoid max_allowed_packet issues
+            const chunkSize = 100; // Process 100 items at a time
+            for (let i = 0; i < data.length; i += chunkSize) {
+              const chunk = data.slice(i, i + chunkSize);
+              const values = chunk.map(item => {
+                const content = JSON.stringify(item);
+                const id = item.id || Math.random().toString(36).substr(2, 9);
+                return [id, content];
+              });
+              
+              const sql = `INSERT INTO ${type} (id, content) VALUES ?`;
+              await connection.query(sql, [values]);
+            }
           }
+          
           await connection.commit();
+          console.log(`Successfully synced ${data.length} items to ${type}`);
         } catch (err) {
           await connection.rollback();
+          console.error(`Transaction failed for ${type}:`, err);
           throw err;
         } finally {
           connection.release();
         }
       }
       
-      console.log(`Successfully synced ${type}`);
       res.json({ status: 'success' });
     } catch (error) {
       console.error(`Failed to save ${type} data:`, error);
