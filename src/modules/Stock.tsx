@@ -67,7 +67,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     code: '',
     name: '',
     carat: 583,
-    type: settings.productTypes[0] || '',
+    type: settings.productGroups[0]?.name || '',
     supplier: settings.suppliers[0] || '',
     brilliant: '',
     weight: '' as string | number,
@@ -119,24 +119,41 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
   };
 
   const getPrefix = (type: string) => {
-    switch (type) {
-      case 'Üzük': return 'U';
-      case 'Sırğa': return 'S';
-      case 'Saat': return 'ST';
-      case 'Sep': return 'SP';
-      case 'Boyunbağı': return 'B';
-      case 'Qolbaq': return 'Q';
-      case 'Dəst': return 'D';
-      case 'Zəncir': return 'Z';
-      case 'Set': return 'SET';
-      case 'Külçə': return 'K';
-      default: return '';
-    }
+    const group = settings.productGroups.find(g => g.name === type);
+    return group ? group.prefix : '';
+  };
+
+  const getNextCode = (prefix: string) => {
+    if (!prefix) return '';
+    
+    const allCodes = [
+      ...products.map(p => p.code),
+      ...(Array.isArray(sales) ? sales.map(s => s.productCode) : [])
+    ];
+    
+    const groupCodes = allCodes.filter(code => code.startsWith(prefix));
+    if (groupCodes.length === 0) return `${prefix}001`;
+    
+    const numbers = groupCodes.map(code => {
+      const numStr = code.substring(prefix.length);
+      // Try to find the numeric part after the prefix
+      const match = numStr.match(/^\d+/);
+      if (match) {
+        return parseInt(match[0], 10);
+      }
+      return 0;
+    });
+    
+    const maxNumber = Math.max(...numbers, 0);
+    const nextNumber = maxNumber + 1;
+    
+    return `${prefix}${nextNumber.toString().padStart(3, '0')}`;
   };
 
   useEffect(() => {
     if (isAddingNew && !newProduct.code) {
-      setNewProduct(prev => ({ ...prev, code: getPrefix(prev.type) }));
+      const prefix = getPrefix(newProduct.type);
+      setNewProduct(prev => ({ ...prev, code: getNextCode(prefix) }));
     }
   }, [newProduct.type, isAddingNew]);
 
@@ -221,9 +238,12 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
   };
 
   const resetForm = () => {
-    const defaultType = settings.productTypes[0] || '';
+    const defaultGroup = settings.productGroups?.[0];
+    const defaultType = defaultGroup?.name || '';
+    const prefix = defaultGroup?.prefix || '';
+    
     setNewProduct({
-      code: getPrefix(defaultType), name: '', carat: 583,
+      code: getNextCode(prefix), name: '', carat: 583,
       type: defaultType, supplier: settings.suppliers[0] || '',
       brilliant: '', weight: '', price: '', imageUrl: '',
       purchaseDate: new Date().toISOString().split('T')[0]
@@ -391,16 +411,9 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                   <div className="space-y-1"><label className="text-[9px] font-black text-stone-400 uppercase ml-2">Məhsul Adı</label><input type="text" required value={newProduct.name} onChange={(e) => setNewProduct({...newProduct, name: e.target.value})} className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 font-bold text-base text-stone-800 focus:border-amber-400 outline-none" placeholder="Üzük" /></div>
                   <div className="space-y-1"><label className="text-[9px] font-black text-stone-400 uppercase ml-2">Kateqoriya</label><select value={newProduct.type} onChange={(e) => {
                     const newType = e.target.value;
-                    const oldPrefix = getPrefix(newProduct.type);
                     const newPrefix = getPrefix(newType);
-                    let currentCode = newProduct.code;
-                    
-                    if (oldPrefix && currentCode.startsWith(oldPrefix)) {
-                        currentCode = currentCode.substring(oldPrefix.length);
-                    }
-                    
-                    setNewProduct({...newProduct, type: newType, code: newPrefix + currentCode});
-                  }} className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 font-bold text-base text-stone-800 outline-none cursor-pointer">{settings.productTypes.map(t => <option key={t}>{t}</option>)}</select></div>
+                    setNewProduct({...newProduct, type: newType, code: getNextCode(newPrefix)});
+                  }} className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 font-bold text-base text-stone-800 outline-none cursor-pointer">{(settings.productGroups || []).map(g => <option key={g.name} value={g.name}>{g.name}</option>)}</select></div>
                   <div className="space-y-1"><label className="text-[9px] font-black text-stone-400 uppercase ml-2">Tədarükçü</label><select value={newProduct.supplier} onChange={(e) => setNewProduct({...newProduct, supplier: e.target.value})} className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 font-bold text-base text-stone-800 outline-none cursor-pointer">{settings.suppliers.map(s => <option key={s}>{s}</option>)}</select></div>
                   <div className="space-y-1 md:col-span-2">
                     <label className="text-[9px] font-black text-stone-400 uppercase ml-2">Əyar</label>
@@ -498,12 +511,12 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
 
       {!activeFolder && !searchTerm ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-6">
-          {settings.productTypes.map((type) => {
-            const countInStock = activeProducts.filter(p => p.type === type).length;
+          {(settings.productGroups || []).map((group) => {
+            const countInStock = activeProducts.filter(p => p.type === group.name).length;
             return (
-              <button key={type} onClick={() => setActiveFolder(type)} className="bg-white p-6 rounded-[2.5rem] border border-stone-200 shadow-sm hover:shadow-2xl hover:border-amber-300 transition-all flex flex-col items-center group relative overflow-hidden">
+              <button key={group.name} onClick={() => setActiveFolder(group.name)} className="bg-white p-6 rounded-[2.5rem] border border-stone-200 shadow-sm hover:shadow-2xl hover:border-amber-300 transition-all flex flex-col items-center group relative overflow-hidden">
                 <div className="w-16 h-16 md:w-20 md:h-20 bg-stone-50 rounded-2xl flex items-center justify-center text-amber-500 mb-4 group-hover:scale-110 group-hover:bg-amber-50 transition-all"><Folder className="w-8 h-8 md:w-10 md:h-10" /></div>
-                <h4 className="font-black text-stone-800 text-xs md:text-sm uppercase tracking-tighter">{type}</h4>
+                <h4 className="font-black text-stone-800 text-xs md:text-sm uppercase tracking-tighter">{group.name}</h4>
                 <p className={`text-[10px] mt-1 font-bold ${countInStock > 0 ? 'text-amber-600' : 'text-stone-300'}`}>{countInStock} Çeşid</p>
               </button>
             );

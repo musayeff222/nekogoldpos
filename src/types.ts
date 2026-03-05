@@ -6,6 +6,11 @@ export interface ProductLog {
   action: string;
 }
 
+export interface ProductGroup {
+  name: string;
+  prefix: string;
+}
+
 export interface Product {
   id: string;
   code: string;
@@ -101,7 +106,8 @@ export interface AppSettings {
   adminPassword: string;
   printerName: string;
   shopName: string;
-  productTypes: string[];
+  productGroups: ProductGroup[];
+  productTypes: string[]; // Keep for compatibility or simple lists
   suppliers: string[];
   carats: number[];
   pricePerGram: number; // 1 Qramın qiyməti
@@ -121,6 +127,5 @@ export enum Page {
   Return = 'RETURN',
   Scrap = 'SCRAP',
   Settings = 'SETTINGS',
-  Reports = 'REPORTS',
-  Chat = 'CHAT'
+  Reports = 'REPORTS'
 }

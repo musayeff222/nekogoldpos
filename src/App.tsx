@@ -12,8 +12,7 @@ import {
   Menu,
   ChevronLeft,
   LayoutGrid,
-  History,
-  Bot
+  History
 } from 'lucide-react';
 import { Page, Product, Sale, Customer, ScrapGold, AppSettings } from '@/types';
 import SalesModule from '@/modules/Sales';
@@ -24,7 +23,6 @@ import ReturnsModule from '@/modules/Returns';
 import ScrapModule from '@/modules/Scrap';
 import SettingsModule from '@/modules/Settings';
 import ReportsModule from '@/modules/Reports';
-import ChatModule from './modules/AIChat';
 import Login from '@/modules/Login';
 import { LogOut } from 'lucide-react';
 
@@ -45,6 +43,19 @@ const App: React.FC = () => {
     adminPassword: 'admin',
     printerName: 'Epson POS-80',
     shopName: 'NEKO GOLD',
+    productGroups: [
+      { name: 'Bilərzik', prefix: 'BK' },
+      { name: 'Üzük', prefix: 'UK' },
+      { name: 'Boyunbağı', prefix: 'BB' },
+      { name: 'Sırğa', prefix: 'SK' },
+      { name: 'Qolbaq', prefix: 'QK' },
+      { name: 'Dəst', prefix: 'DK' },
+      { name: 'Zəncir', prefix: 'ZK' },
+      { name: 'Saat', prefix: 'ST' },
+      { name: 'Sep', prefix: 'SP' },
+      { name: 'Külçə', prefix: 'KL' },
+      { name: 'Digər', prefix: 'DG' },
+    ],
     productTypes: ['Üzük', 'Sırğa', 'Boyunbağı', 'Qolbaq', 'Dəst', 'Zəncir', 'Set', 'Saat', 'Sep', 'Külçə', 'Digər'],
     suppliers: ['Tədərükçü A', 'Tədərükçü B', 'Atelye X'],
     carats: [14, 18, 22, 24],
@@ -105,13 +116,43 @@ const App: React.FC = () => {
         setScraps(Array.isArray(sc) ? sc : []);
         
         if (st && !st.error) {
-          setSettings(st);
+          // Ensure productGroups exists for backward compatibility
+          const mergedSettings = {
+            ...st,
+            productGroups: st.productGroups || [
+              { name: 'Bilərzik', prefix: 'BK' },
+              { name: 'Üzük', prefix: 'UK' },
+              { name: 'Boyunbağı', prefix: 'BB' },
+              { name: 'Sırğa', prefix: 'SK' },
+              { name: 'Qolbaq', prefix: 'QK' },
+              { name: 'Dəst', prefix: 'DK' },
+              { name: 'Zəncir', prefix: 'ZK' },
+              { name: 'Saat', prefix: 'ST' },
+              { name: 'Sep', prefix: 'SP' },
+              { name: 'Külçə', prefix: 'KL' },
+              { name: 'Digər', prefix: 'DG' },
+            ]
+          };
+          setSettings(mergedSettings);
         } else {
           setSettings({
             deleteCode: '1234',
             adminPassword: 'admin',
             printerName: 'Epson POS-80',
             shopName: 'NEKO GOLD',
+            productGroups: [
+              { name: 'Bilərzik', prefix: 'BK' },
+              { name: 'Üzük', prefix: 'UK' },
+              { name: 'Boyunbağı', prefix: 'BB' },
+              { name: 'Sırğa', prefix: 'SK' },
+              { name: 'Qolbaq', prefix: 'QK' },
+              { name: 'Dəst', prefix: 'DK' },
+              { name: 'Zəncir', prefix: 'ZK' },
+              { name: 'Saat', prefix: 'ST' },
+              { name: 'Sep', prefix: 'SP' },
+              { name: 'Külçə', prefix: 'KL' },
+              { name: 'Digər', prefix: 'DG' },
+            ],
             productTypes: ['Üzük', 'Sırğa', 'Boyunbağı', 'Qolbaq', 'Dəst', 'Zəncir', 'Set', 'Saat', 'Sep', 'Külçə', 'Digər'],
             suppliers: ['Tədərükçü A', 'Tədərükçü B', 'Atelye X'],
             carats: [14, 18, 22, 24],
@@ -267,7 +308,6 @@ const App: React.FC = () => {
     { id: Page.Return, icon: <RotateCcw size={24} />, label: 'Qaytarma' },
     { id: Page.Scrap, icon: <Flame size={24} />, label: 'Lom' },
     { id: Page.Reports, icon: <BarChart3 size={24} />, label: 'Hesabat' },
-    { id: Page.Chat, icon: <Bot size={24} />, label: 'AI Köməkçi' },
     { id: Page.Settings, icon: <SettingsIcon size={24} />, label: 'Ayarlar' },
   ];
 
@@ -311,7 +351,6 @@ const App: React.FC = () => {
       case Page.Return: return <ReturnsModule sales={sales} setSales={setSales} products={products} setProducts={setProducts} />;
       case Page.Scrap: return <ScrapModule scraps={scraps} setScraps={setScraps} />;
       case Page.Reports: return <ReportsModule sales={sales} products={products} scraps={scraps} customers={customers} />;
-      case Page.Chat: return <ChatModule />;
       case Page.Settings: return <SettingsModule settings={settings} setSettings={setSettings} />;
       default: return <SalesModule products={products} setProducts={setProducts} sales={sales} setSales={setSales} customers={customers} setCustomers={setCustomers} settings={settings} cart={cart} setCart={setCart} />;
     }
@@ -371,13 +410,6 @@ const App: React.FC = () => {
             <span className="text-[10px] font-black mt-1 uppercase tracking-tighter">{item.label}</span>
           </button>
         ))}
-        <button
-          onClick={() => setCurrentPage(Page.Chat)}
-          className={`flex flex-col items-center p-2 rounded-xl transition-all ${currentPage === Page.Chat ? 'text-amber-500 bg-white/5' : 'text-stone-500'}`}
-        >
-          <Bot size={24} />
-          <span className="text-[10px] font-black mt-1 uppercase tracking-tighter">AI</span>
-        </button>
         <button
           onClick={() => setCurrentPage(Page.Settings)}
           className={`flex flex-col items-center p-2 rounded-xl ${currentPage === Page.Settings ? 'text-amber-500 bg-white/5' : 'text-stone-500'}`}

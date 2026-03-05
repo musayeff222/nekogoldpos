@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Shield, Key, Save, List, Star, Calculator, Plus, X, User, Tag, Move, Type as TypeIcon, Eye, EyeOff, Bold, ChevronUp, ChevronDown, Printer, Download, Upload, Settings2 } from 'lucide-react';
+import { Shield, Key, Save, List, Star, Calculator, Plus, X, User, Tag, Move, Type as TypeIcon, Eye, EyeOff, Bold, ChevronUp, ChevronDown, Printer, Download, Upload, Settings2, Layers } from 'lucide-react';
 import { AppSettings, LabelElement, Product } from '@/types';
 import { LabelPrint } from '@/components/LabelPrint';
 
@@ -12,6 +12,8 @@ interface SettingsProps {
 const SettingsModule: React.FC<SettingsProps> = ({ settings, setSettings }) => {
   const [localSettings, setLocalSettings] = useState(settings);
   const [newType, setNewType] = useState('');
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupPrefix, setNewGroupPrefix] = useState('');
   const [newSupplier, setNewSupplier] = useState('');
   const [newCarat, setNewCarat] = useState('');
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
@@ -149,6 +151,17 @@ const SettingsModule: React.FC<SettingsProps> = ({ settings, setSettings }) => {
     setNewType('');
   };
 
+  const addGroup = () => {
+    if (!newGroupName.trim() || !newGroupPrefix.trim()) return;
+    if ((localSettings.productGroups || []).some(g => g.name === newGroupName.trim() || g.prefix === newGroupPrefix.trim())) return;
+    setLocalSettings({ 
+      ...localSettings, 
+      productGroups: [...(localSettings.productGroups || []), { name: newGroupName.trim(), prefix: newGroupPrefix.trim().toUpperCase() }] 
+    });
+    setNewGroupName('');
+    setNewGroupPrefix('');
+  };
+
   const addSupplier = () => {
     if (!newSupplier.trim()) return;
     if (localSettings.suppliers.includes(newSupplier.trim())) return;
@@ -164,8 +177,12 @@ const SettingsModule: React.FC<SettingsProps> = ({ settings, setSettings }) => {
     setNewCarat('');
   };
 
-  const removeItem = (list: 'productTypes' | 'suppliers' | 'carats', item: any) => {
-    setLocalSettings({ ...localSettings, [list]: localSettings[list].filter(i => i !== item) });
+  const removeItem = (list: 'productTypes' | 'suppliers' | 'carats' | 'productGroups', item: any) => {
+    if (list === 'productGroups') {
+      setLocalSettings({ ...localSettings, productGroups: (localSettings.productGroups || []).filter(g => g !== item) });
+    } else {
+      setLocalSettings({ ...localSettings, [list]: localSettings[list].filter(i => i !== item) });
+    }
   };
 
   const PasswordChangeSection = () => {
@@ -314,6 +331,34 @@ const SettingsModule: React.FC<SettingsProps> = ({ settings, setSettings }) => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {/* STOK QRUPLARI */}
+        <div className="bg-white rounded-[2rem] border border-stone-100 shadow-xl overflow-hidden flex flex-col min-h-[300px]">
+          <div className="p-6 border-b border-stone-100 bg-stone-50/50 flex items-center justify-between">
+            <h3 className="font-black text-stone-800 text-xs uppercase tracking-widest flex items-center"><Layers size={18} className="mr-2 text-amber-500"/> STOK QRUPLARI</h3>
+            <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">{(localSettings.productGroups || []).length}</span>
+          </div>
+          <div className="p-6 space-y-4">
+            <div className="space-y-2">
+              <input type="text" placeholder="Qrup Adı (Məs: Üzük)" value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl px-4 py-2.5 text-xs font-bold" />
+              <div className="flex space-x-2">
+                <input type="text" placeholder="Kod (Məs: UK)" value={newGroupPrefix} onChange={(e) => setNewGroupPrefix(e.target.value)} className="flex-1 bg-stone-50 border-2 border-stone-100 rounded-xl px-4 py-2.5 text-xs font-bold uppercase" />
+                <button onClick={addGroup} className="bg-stone-900 text-amber-500 p-2.5 rounded-xl"><Plus size={20} /></button>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {(localSettings.productGroups || []).map(g => (
+                <div key={g.prefix} className="bg-amber-50/50 text-stone-700 px-3 py-1.5 rounded-lg text-[10px] font-black border border-amber-100 flex items-center justify-between w-full group">
+                  <div className="flex items-center space-x-2">
+                    <span className="bg-amber-500 text-white px-1.5 py-0.5 rounded text-[8px]">{g.prefix}</span>
+                    <span>{g.name}</span>
+                  </div>
+                  <button onClick={() => removeItem('productGroups', g)} className="text-stone-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><X size={12} /></button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
         {/* NÖVLƏR */}
         <div className="bg-white rounded-[2rem] border border-stone-100 shadow-xl overflow-hidden flex flex-col min-h-[300px]">
           <div className="p-6 border-b border-stone-100 bg-stone-50/50 flex items-center justify-between">
