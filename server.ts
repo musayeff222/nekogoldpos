@@ -6,6 +6,10 @@ import cors from 'cors';
 import { GoogleGenAI } from "@google/genai";
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 // Vite import moved inside startServer for better production compatibility
 
 
@@ -16,13 +20,42 @@ async function startServer() {
   const app = express();
   const PORT: number = Number(process.env.PORT) || 3000;
 
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+
+  // Ensure uploads directory exists
+  const uploadDir = path.join(__dirname, 'uploads');
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  }
+
+  // Multer Configuration
+  const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+      cb(null, 'uploads/');
+    },
+    filename: (req, file, cb) => {
+      // Create a unique filename
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+    }
+  });
+
+  const upload = multer({ 
+    storage: storage,
+    limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+  });
+
   // Middleware
   app.use(cors({
     origin: true,
     credentials: true
   }));
-  app.use(express.json({ limit: '50mb' }));
-  app.use(express.urlencoded({ limit: '50mb', extended: true }));
+  app.use(express.json({ limit: '200mb' }));
+  app.use(express.urlencoded({ limit: '200mb', extended: true }));
+  
+  // Serve uploaded files statically
+  app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
   // MySQL Connection Pool
   const pool = mysql.createPool({
@@ -346,6 +379,48 @@ async function startServer() {
     }
   });
 
+  // --- NEW ROUTES REQUESTED BY USER ---
+
+  /**
+   * @route POST /api/upload-image
+   * @desc Upload a single image using Multer
+   */
+  app.post('/api/upload-image', upload.single('image'), (req: Request, res: Response) => {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Fayl yüklənmədi' });
+    }
+
+    // Return the file path or URL
+    const fileUrl = `/uploads/${req.file.filename}`;
+    res.json({
+      message: 'Şəkil uğurla yükləndi',
+      imageUrl: fileUrl,
+      filename: req.file.filename
+    });
+  });
+
+  /**
+   * @route POST /api/product
+   * @desc Receive product data in JSON format
+   */
+  app.post('/api/product', (req: Request, res: Response) => {
+    const { name, price, description, imageUrl } = req.body;
+
+    if (!name || !price) {
+      return res.status(400).json({ error: 'Ad və qiymət tələb olunur' });
+    }
+
+    // Here you would typically save to database
+    console.log('Received product data:', { name, price, description, imageUrl });
+
+    res.json({
+      message: 'Məhsul məlumatı qəbul edildi',
+      product: { name, price, description, imageUrl }
+    });
+  });
+
+  // --- END OF NEW ROUTES ---
+
   // Vite middleware for development or static serving for production
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import('vite');
@@ -357,9 +432,6 @@ async function startServer() {
   } else {
     // Serve static files from the dist directory in production
     const path = await import('path');
-    const { fileURLToPath } = await import('url');
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = path.dirname(__filename);
     
     // In production, server.js is inside 'dist', so static files are in the same directory
     const staticPath = process.env.NODE_ENV === 'production' ? __dirname : path.join(__dirname, 'dist');
@@ -368,6 +440,7 @@ async function startServer() {
     // Handle SPA routing: serve index.html for all non-API routes
     app.use((req, res, next) => {
       if (req.path.startsWith('/api')) return next();
+      if (req.path.startsWith('/uploads')) return next();
       res.sendFile(path.join(staticPath, 'index.html'));
     });
   }
