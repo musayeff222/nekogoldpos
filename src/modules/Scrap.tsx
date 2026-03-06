@@ -66,12 +66,31 @@ const ScrapModule: React.FC<ScrapProps> = ({ scraps, setScraps }) => {
   const capturePhoto = () => {
     if (videoRef.current && canvasRef.current && activeCamera) {
       const canvas = canvasRef.current;
-      canvas.width = videoRef.current.videoWidth;
-      canvas.height = videoRef.current.videoHeight;
+      const video = videoRef.current;
+      
+      // Resize to max 800px for persistent storage
+      const maxDim = 800;
+      let width = video.videoWidth;
+      let height = video.videoHeight;
+      
+      if (width > height) {
+        if (width > maxDim) {
+          height *= maxDim / width;
+          width = maxDim;
+        }
+      } else {
+        if (height > maxDim) {
+          width *= maxDim / height;
+          height = maxDim;
+        }
+      }
+      
+      canvas.width = width;
+      canvas.height = height;
       const ctx = canvas.getContext('2d');
       if (ctx) {
-        ctx.drawImage(videoRef.current, 0, 0);
-        const dataUrl = canvas.toDataURL('image/jpeg');
+        ctx.drawImage(video, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
         
         if (activeCamera.type === 'item' && activeCamera.index !== undefined) {
           const newItems = [...form.items];
@@ -249,7 +268,14 @@ const ScrapModule: React.FC<ScrapProps> = ({ scraps, setScraps }) => {
                             className="w-full aspect-square bg-white rounded-[2rem] border-4 border-dashed border-amber-300 flex flex-col items-center justify-center overflow-hidden relative group/img shadow-md hover:border-amber-500 transition-all"
                            >
                               {item.image ? (
-                                 <img src={item.image} className="w-full h-full object-cover" />
+                                 <img 
+                                   src={item.image} 
+                                   className="w-full h-full object-cover" 
+                                   onError={(e) => {
+                                     (e.target as HTMLImageElement).style.display = 'none';
+                                     (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="text-amber-500 flex flex-col items-center"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-box"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg><p class="text-[8px] font-black uppercase mt-1">Şəkil tapılmadı</p></div>';
+                                   }}
+                                 />
                               ) : (
                                  <>
                                    <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mb-3 group-hover/img:scale-110 transition-transform">
@@ -312,7 +338,14 @@ const ScrapModule: React.FC<ScrapProps> = ({ scraps, setScraps }) => {
                       <div className="flex items-center space-x-5">
                         <div className="w-16 h-16 bg-white rounded-2xl border-2 border-stone-300 flex items-center justify-center overflow-hidden shadow-md group-hover:scale-105 transition-transform">
                            {form[`${it.key}Image` as keyof typeof form] ? (
-                             <img src={form[`${it.key}Image` as keyof typeof form] as string} className="w-full h-full object-cover" />
+                             <img 
+                               src={form[`${it.key}Image` as keyof typeof form] as string} 
+                               className="w-full h-full object-cover" 
+                               onError={(e) => {
+                                 (e.target as HTMLImageElement).style.display = 'none';
+                                 (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="text-stone-300 flex flex-col items-center"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg><p class="text-[8px] font-black uppercase mt-1">Şəkil tapılmadı</p></div>';
+                               }}
+                             />
                            ) : <it.icon size={28} className="text-stone-400" />}
                         </div>
                         <div>
@@ -458,7 +491,16 @@ const ScrapModule: React.FC<ScrapProps> = ({ scraps, setScraps }) => {
                             <div className="flex -space-x-4">
                                {[s.personImage, s.idCardImage].map((img, i) => (
                                   <div key={i} className={`w-14 h-14 rounded-2xl border-4 border-white shadow-xl overflow-hidden bg-stone-100 flex items-center justify-center transition-transform hover:scale-110 hover:z-20 ${img ? '' : 'opacity-40'}`}>
-                                     {img ? <img src={img} className="w-full h-full object-cover" /> : <UserSquare2 size={24} className="text-stone-400"/>}
+                                     {img ? (
+                                        <img 
+                                          src={img} 
+                                          className="w-full h-full object-cover" 
+                                          onError={(e) => {
+                                            (e.target as HTMLImageElement).style.display = 'none';
+                                            (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="text-stone-300"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-user-square-2"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="12" cy="10" r="3"/><path d="M7 21v-2a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2"/></svg></div>';
+                                          }}
+                                        />
+                                      ) : <UserSquare2 size={24} className="text-stone-400"/>}
                                   </div>
                                ))}
                             </div>
@@ -469,7 +511,14 @@ const ScrapModule: React.FC<ScrapProps> = ({ scraps, setScraps }) => {
                                {s.items.map((item, i) => (
                                   <div key={i} className="group/item relative h-12 w-12 rounded-xl border-2 border-white bg-stone-100 overflow-hidden shadow-lg hover:w-20 transition-all duration-300">
                                      {item.image ? (
-                                        <img src={item.image} className="h-full w-full object-cover" />
+                                        <img 
+                                           src={item.image} 
+                                           className="h-full w-full object-cover" 
+                                           onError={(e) => {
+                                             (e.target as HTMLImageElement).style.display = 'none';
+                                             (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="text-stone-300 flex items-center justify-center h-full w-full"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-box"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></div>';
+                                           }}
+                                         />
                                      ) : <Box size={16} className="m-auto text-stone-300 mt-4" />}
                                      <div className="absolute inset-0 bg-stone-950/80 opacity-0 group-hover/item:opacity-100 flex items-center justify-center transition-opacity">
                                         <span className="text-[10px] font-black text-amber-500">{item.weight}g</span>

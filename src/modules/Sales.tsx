@@ -351,7 +351,14 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
                  <div className="relative">
                     <div className="w-32 h-32 md:w-48 md:h-48 bg-white rounded-2xl md:rounded-3xl flex items-center justify-center p-2 shadow-xl border-2 border-red-100 overflow-hidden group">
                         {previouslySoldItem.imageUrl ? (
-                          <img src={previouslySoldItem.imageUrl} className="w-full h-full object-contain" />
+                          <img 
+                            src={previouslySoldItem.imageUrl} 
+                            className="w-full h-full object-contain" 
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = 'none';
+                              (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="text-red-100"><svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></div>';
+                            }}
+                          />
                         ) : (
                           <ImageIcon className="text-red-100 w-16 h-16" />
                         )}
@@ -412,7 +419,19 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
             {currentProduct && (
               <div className="w-full max-w-3xl bg-amber-50 mt-4 rounded-3xl md:rounded-[3rem] p-4 md:p-10 border-2 md:border-4 border-white shadow-2xl flex flex-col md:flex-row items-center space-y-4 md:space-y-0 md:space-x-10 animate-in zoom-in-95">
                  <div className="w-32 h-32 md:w-40 md:h-40 bg-white rounded-2xl md:rounded-3xl flex items-center justify-center p-2 shadow-sm border border-stone-100 overflow-hidden">
-                    {currentProduct.imageUrl ? <img src={currentProduct.imageUrl} referrerPolicy="no-referrer" className="w-full h-full object-contain" /> : <Sparkles className="text-amber-200 w-8 h-8 md:w-12 md:h-12" />}
+                    {currentProduct.imageUrl ? (
+                      <img 
+                        src={currentProduct.imageUrl} 
+                        referrerPolicy="no-referrer" 
+                        className="w-full h-full object-contain" 
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                          (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="text-amber-200"><svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-sparkles"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg></div>';
+                        }}
+                      />
+                    ) : (
+                      <Sparkles className="text-amber-200 w-8 h-8 md:w-12 md:h-12" />
+                    )}
                  </div>
                  <div className="flex-1 text-center md:text-left space-y-2 md:space-y-4">
                     <h4 className="text-xl md:text-3xl font-black text-stone-900 uppercase tracking-tighter leading-none">{currentProduct.name}</h4>

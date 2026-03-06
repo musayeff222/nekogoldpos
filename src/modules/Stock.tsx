@@ -260,38 +260,68 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     setIsCameraOpen(false);
   };
 
+  const resizeImage = (base64Str: string, maxWidth = 800, maxHeight = 800): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.src = base64Str;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxWidth) {
+            height *= maxWidth / width;
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width *= maxHeight / height;
+            height = maxHeight;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.7));
+      };
+    });
+  };
+
   const capturePhoto = async (isEdit: boolean = false) => {
     if (videoRef.current && canvasRef.current) {
       const canvas = canvasRef.current;
-      canvas.width = videoRef.current.videoWidth;
-      canvas.height = videoRef.current.videoHeight;
+      const video = videoRef.current;
+      
+      // Resize to max 800px for persistent storage
+      const maxDim = 800;
+      let width = video.videoWidth;
+      let height = video.videoHeight;
+      
+      if (width > height) {
+        if (width > maxDim) {
+          height *= maxDim / width;
+          width = maxDim;
+        }
+      } else {
+        if (height > maxDim) {
+          width *= maxDim / height;
+          height = maxDim;
+        }
+      }
+      
+      canvas.width = width;
+      canvas.height = height;
       const ctx = canvas.getContext('2d');
       if (ctx) {
-        ctx.drawImage(videoRef.current, 0, 0);
+        ctx.drawImage(video, 0, 0, width, height);
         
-        // Convert canvas to blob for uploading
-        canvas.toBlob(async (blob) => {
-          if (!blob) return;
-          
-          const formData = new FormData();
-          formData.append('image', blob, `photo-${Date.now()}.jpg`);
-          
-          try {
-            const res = await fetch('/api/upload-image', {
-              method: 'POST',
-              body: formData
-            });
-            
-            if (!res.ok) throw new Error('Upload failed');
-            
-            const data = await res.json();
-            if (isEdit) setEditForm(prev => ({ ...prev, imageUrl: data.imageUrl }));
-            else setNewProduct(prev => ({ ...prev, imageUrl: data.imageUrl }));
-          } catch (err) {
-            console.error('Image upload failed:', err);
-            alert('Şəkil yüklənmədi. Yenidən cəhd edin.');
-          }
-        }, 'image/jpeg', 0.8);
+        // Convert canvas to base64 for persistent storage
+        const base64Image = canvas.toDataURL('image/jpeg', 0.7);
+        if (isEdit) setEditForm(prev => ({ ...prev, imageUrl: base64Image }));
+        else setNewProduct(prev => ({ ...prev, imageUrl: base64Image }));
         
         stopCamera();
       }
@@ -301,24 +331,14 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean = false) => {
     const file = e.target.files?.[0];
     if (file) {
-      const formData = new FormData();
-      formData.append('image', file);
-      
-      try {
-        const res = await fetch('/api/upload-image', {
-          method: 'POST',
-          body: formData
-        });
-        
-        if (!res.ok) throw new Error('Upload failed');
-        
-        const data = await res.json();
-        if (isEdit) setEditForm(prev => ({ ...prev, imageUrl: data.imageUrl }));
-        else setNewProduct(prev => ({ ...prev, imageUrl: data.imageUrl }));
-      } catch (err) {
-        console.error('Image upload failed:', err);
-        alert('Şəkil yüklənmədi. Yenidən cəhd edin.');
-      }
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64Image = reader.result as string;
+        const resized = await resizeImage(base64Image);
+        if (isEdit) setEditForm(prev => ({ ...prev, imageUrl: resized }));
+        else setNewProduct(prev => ({ ...prev, imageUrl: resized }));
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -376,7 +396,14 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                   ) : (
                     <div className="w-full h-full flex flex-col items-center justify-center cursor-pointer p-4" onClick={startCamera}>
                       {newProduct.imageUrl ? (
-                        <img src={newProduct.imageUrl} className="max-w-full max-h-full object-contain" />
+                        <img 
+                          src={newProduct.imageUrl} 
+                          className="max-w-full max-h-full object-contain" 
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none';
+                            (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="text-stone-200 flex flex-col items-center"><svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg><p class="text-[9px] font-black uppercase mt-2 opacity-50">Şəkil tapılmadı</p></div>';
+                          }}
+                        />
                       ) : (
                         <div className="text-center text-stone-200"><Camera size={48} strokeWidth={1} className="mx-auto mb-2 opacity-20" /><p className="text-[9px] font-black uppercase tracking-widest text-stone-300">Kameranı Aç</p></div>
                       )}
@@ -404,7 +431,18 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                      </div>
                      <div className="flex items-center space-x-4 bg-white/50 p-3 rounded-2xl border border-red-50">
                         <div className="w-16 h-16 bg-white rounded-xl border border-red-100 flex items-center justify-center overflow-hidden">
-                           {duplicateInSales.imageUrl ? <img src={duplicateInSales.imageUrl} className="w-full h-full object-cover" /> : <ImageIcon className="text-red-100"/>}
+                           {duplicateInSales.imageUrl ? (
+                             <img 
+                               src={duplicateInSales.imageUrl} 
+                               className="w-full h-full object-cover" 
+                               onError={(e) => {
+                                 (e.target as HTMLImageElement).style.display = 'none';
+                                 (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="text-red-100"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></div>';
+                               }}
+                             />
+                           ) : (
+                             <ImageIcon className="text-red-100"/>
+                           )}
                         </div>
                         <div className="flex-1">
                            <p className="text-[10px] font-black text-stone-900 uppercase">{duplicateInSales.productName}</p>
@@ -599,7 +637,23 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
               <tbody className="divide-y divide-stone-50">
                 {filteredProducts.map((p) => (
                   <tr key={p.id} onClick={() => openDetailModal(p)} className="hover:bg-amber-50/20 transition-all group cursor-pointer">
-                    <td className="px-8 py-5">{p.imageUrl ? <img src={p.imageUrl} referrerPolicy="no-referrer" className="w-14 h-14 rounded-xl object-cover border-2 border-white shadow-md" /> : <div className="w-14 h-14 rounded-xl bg-stone-50 flex items-center justify-center text-stone-200"><ImageIcon size={24} /></div>}</td>
+                    <td className="px-8 py-5">
+                      <div className="w-14 h-14 rounded-xl overflow-hidden border-2 border-stone-100 shadow-sm bg-stone-50 flex items-center justify-center">
+                        {p.imageUrl ? (
+                          <img 
+                            src={p.imageUrl} 
+                            referrerPolicy="no-referrer" 
+                            className="w-full h-full object-cover" 
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = 'none';
+                              (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="text-stone-200"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></div>';
+                            }}
+                          />
+                        ) : (
+                          <div className="text-stone-200"><ImageIcon size={24} /></div>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-8 py-5 font-black text-stone-500 text-xs uppercase tracking-widest">{p.code}</td>
                     <td className="px-8 py-5"><p className="font-black text-stone-800 text-sm uppercase leading-none">{p.name}</p>{p.brilliant && <p className="text-[10px] text-amber-600 font-bold mt-1.5 flex items-center"><Gem size={12} className="mr-1.5"/> {p.brilliant}</p>}</td>
                     <td className="px-8 py-5 font-black text-stone-900 text-sm text-center">{p.weight} gr</td>
@@ -625,7 +679,24 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
             <main className="flex-1 overflow-y-auto p-8 scrollbar-hide">
                <form id="fullEditForm" onSubmit={handleUpdateProduct} className="space-y-8">
                   <div className="flex flex-col items-center space-y-4">
-                    <div onClick={() => (editForm.imageUrl || selectedProduct.imageUrl) && setZoomedImage(editForm.imageUrl || selectedProduct.imageUrl || null)} className="relative w-48 h-48 border-4 border-dashed border-stone-100 rounded-[2rem] bg-stone-50 flex items-center justify-center overflow-hidden cursor-zoom-in group">{editForm.imageUrl || selectedProduct.imageUrl ? <img src={editForm.imageUrl || selectedProduct.imageUrl} referrerPolicy="no-referrer" className="w-full h-full object-contain p-4" /> : <ImageIcon size={48} className="text-stone-200" />}</div>
+                    <div 
+                      onClick={() => (editForm.imageUrl || selectedProduct.imageUrl) && setZoomedImage(editForm.imageUrl || selectedProduct.imageUrl || null)} 
+                      className="relative w-48 h-48 border-4 border-dashed border-stone-100 rounded-[2rem] bg-stone-50 flex items-center justify-center overflow-hidden cursor-zoom-in group shadow-inner"
+                    >
+                      {editForm.imageUrl || selectedProduct.imageUrl ? (
+                        <img 
+                          src={editForm.imageUrl || selectedProduct.imageUrl} 
+                          referrerPolicy="no-referrer" 
+                          className="w-full h-full object-contain p-4" 
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none';
+                            (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="text-stone-200 flex flex-col items-center"><svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg><p class="text-[10px] font-black uppercase mt-2 opacity-50">Şəkil tapılmadı</p></div>';
+                          }}
+                        />
+                      ) : (
+                        <ImageIcon size={48} className="text-stone-200" />
+                      )}
+                    </div>
                     <button type="button" onClick={() => editFileInputRef.current?.click()} className="bg-stone-100 px-6 py-2 rounded-xl text-[10px] font-black text-stone-600 hover:bg-amber-100 transition-all uppercase">Şəkli Dəyiş</button>
                     <input type="file" ref={editFileInputRef} onChange={(e) => handleImageUpload(e, true)} className="hidden" />
                   </div>
@@ -657,7 +728,20 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
         </div>
       )}
 
-      {zoomedImage && <div className="fixed inset-0 bg-stone-950/95 z-[110] flex items-center justify-center p-4 cursor-zoom-out" onClick={() => setZoomedImage(null)}><img src={zoomedImage} referrerPolicy="no-referrer" className="max-w-full max-h-full object-contain drop-shadow-2xl animate-in zoom-in-95" alt="Zoomed product" /></div>}
+      {zoomedImage && (
+        <div className="fixed inset-0 bg-stone-950/95 z-[110] flex items-center justify-center p-4 cursor-zoom-out" onClick={() => setZoomedImage(null)}>
+          <img 
+            src={zoomedImage} 
+            referrerPolicy="no-referrer" 
+            className="max-w-full max-h-full object-contain drop-shadow-2xl animate-in zoom-in-95" 
+            alt="Zoomed product" 
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = 'none';
+              (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="text-white flex flex-col items-center"><svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg><p class="text-xl font-black uppercase mt-6 opacity-50 tracking-widest">Şəkil tapılmadı</p></div>';
+            }}
+          />
+        </div>
+      )}
       
       {/* LABEL PRINT CONTAINER (PORTAL) */}
       {(lastAddedProduct || bulkPrintList.length > 0) && createPortal(

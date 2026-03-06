@@ -287,7 +287,24 @@ async function startServer() {
 
     try {
       const [rows] = await pool.execute(`SELECT content FROM ${type}`);
-      const data = (rows as any[]).map(row => JSON.parse(row.content));
+      const rawData = (rows as any[]).map(row => JSON.parse(row.content));
+      
+      // Migration: Convert old /uploads/ paths to base64 if they exist
+      const data = await Promise.all(rawData.map(async (item: any) => {
+        if (item && item.imageUrl && typeof item.imageUrl === 'string' && item.imageUrl.startsWith('/uploads/')) {
+          try {
+            const filePath = path.join(process.cwd(), item.imageUrl);
+            if (fs.existsSync(filePath)) {
+              const fileData = fs.readFileSync(filePath);
+              const ext = path.extname(filePath).slice(1) || 'jpeg';
+              item.imageUrl = `data:image/${ext};base64,${fileData.toString('base64')}`;
+            }
+          } catch (err) {
+            console.warn(`Failed to migrate image ${item.imageUrl}:`, err);
+          }
+        }
+        return item;
+      }));
       
       // Settings is a special case, it's usually just one object
       if (type === 'settings') {
@@ -331,7 +348,7 @@ async function startServer() {
           
           if (data.length > 0) {
             // Prepare bulk insert in chunks to avoid max_allowed_packet issues
-            const chunkSize = 50; // Increased chunk size since images are now extracted client-side
+            const chunkSize = 1; // Set to 1 for maximum safety with large base64 images
             for (let i = 0; i < data.length; i += chunkSize) {
               const chunk = data.slice(i, i + chunkSize);
               const values = chunk.map(item => {

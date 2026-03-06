@@ -175,7 +175,15 @@ const ReturnsModule: React.FC<ReturnsProps> = ({ sales, setSales, products, setP
                 <div className="flex items-center space-x-6">
                    <div className="w-20 h-20 bg-white rounded-3xl shadow-xl flex items-center justify-center text-amber-500 border border-stone-100 overflow-hidden p-2">
                       {selectedSale.imageUrl ? (
-                        <img src={selectedSale.imageUrl} referrerPolicy="no-referrer" className="w-full h-full object-contain" />
+                        <img 
+                          src={selectedSale.imageUrl} 
+                          referrerPolicy="no-referrer" 
+                          className="w-full h-full object-contain" 
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none';
+                            (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="text-amber-500"><svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-gem"><path d="M6 3h12l4 6-10 13L2 9Z"/><path d="M11 3 8 9l4 13 4-13-3-6"/><path d="M2 9h20"/></svg></div>';
+                          }}
+                        />
                       ) : (
                         <Gem size={40} strokeWidth={1.5} />
                       )}

@@ -130,8 +130,21 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales }) => {
         <div className="flex-1 flex overflow-hidden">
           <aside className="w-80 md:w-96 bg-white border-r border-stone-200 flex flex-col overflow-y-auto scrollbar-hide">
             <div className="p-8 space-y-10">
-              <div className="aspect-square bg-stone-100/50 rounded-[2.5rem] border-2 border-stone-100 flex items-center justify-center p-8 relative group shadow-inner">
-                {selectedSale.imageUrl ? <img src={selectedSale.imageUrl} referrerPolicy="no-referrer" className="w-full h-full object-contain drop-shadow-2xl" alt="Product" /> : <ImageIcon size={80} strokeWidth={0.5} className="text-stone-300" />}
+              <div className="aspect-square bg-stone-100/50 rounded-[2.5rem] border-2 border-stone-100 flex items-center justify-center p-8 relative group shadow-inner overflow-hidden">
+                {selectedSale.imageUrl ? (
+                  <img 
+                    src={selectedSale.imageUrl} 
+                    referrerPolicy="no-referrer" 
+                    className="w-full h-full object-contain drop-shadow-2xl" 
+                    alt="Product" 
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                      (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="text-stone-200 flex flex-col items-center"><svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg><p class="text-[10px] font-black uppercase mt-2 opacity-50">Şəkil tapılmadı</p></div>';
+                    }}
+                  />
+                ) : (
+                  <ImageIcon size={80} strokeWidth={0.5} className="text-stone-300" />
+                )}
                 <div className="absolute top-5 left-5"><span className="bg-stone-900 text-amber-500 px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest shadow-xl">{selectedSale.type}</span></div>
               </div>
               <div className="space-y-4">
@@ -323,7 +336,18 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales }) => {
                       <td className="px-8 py-5">
                         <div className="flex items-center space-x-4">
                           <div className="w-12 h-12 rounded-xl bg-white border-2 border-stone-100 flex items-center justify-center text-amber-500 shadow-sm overflow-hidden p-1 group-hover:scale-110 transition-transform">
-                            {s.imageUrl ? <img src={s.imageUrl} className="w-full h-full object-cover rounded-md" /> : <Gem size={20} />}
+                            {s.imageUrl ? (
+                              <img 
+                                src={s.imageUrl} 
+                                className="w-full h-full object-cover rounded-md" 
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.display = 'none';
+                                  (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="text-stone-200"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-gem"><path d="M6 3h12l4 6-10 13L2 9Z"/><path d="M11 3 8 9l4 13 4-13-3-6"/><path d="M2 9h20"/></svg></div>';
+                                }}
+                              />
+                            ) : (
+                              <Gem size={20} />
+                            )}
                           </div>
                           <div><p className="font-black text-stone-950 text-sm uppercase leading-none">{s.productName}</p><p className="text-[10px] text-stone-500 font-black mt-1.5 uppercase tracking-widest">{s.productCode} | {s.weight} gr</p></div>
                         </div>

@@ -1,15 +1,34 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Shield, Key, Save, List, Star, Calculator, Plus, X, User, Tag, Move, Type as TypeIcon, Eye, EyeOff, Bold, ChevronUp, ChevronDown, Printer, Download, Upload, Settings2, Layers } from 'lucide-react';
+import { Shield, Key, Save, List, Star, Calculator, Plus, X, User, Tag, Move, Type as TypeIcon, Eye, EyeOff, Bold, ChevronUp, ChevronDown, Printer, Download, Upload, Settings2, Layers, Database, RefreshCw } from 'lucide-react';
 import { AppSettings, LabelElement, Product } from '@/types';
 import { LabelPrint } from '@/components/LabelPrint';
 
 interface SettingsProps {
   settings: AppSettings;
   setSettings: React.Dispatch<React.SetStateAction<AppSettings>>;
+  products: Product[];
+  setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
+  sales: any[];
+  setSales: React.Dispatch<React.SetStateAction<any[]>>;
+  customers: any[];
+  setCustomers: React.Dispatch<React.SetStateAction<any[]>>;
+  scraps: any[];
+  setScraps: React.Dispatch<React.SetStateAction<any[]>>;
 }
 
-const SettingsModule: React.FC<SettingsProps> = ({ settings, setSettings }) => {
+const SettingsModule: React.FC<SettingsProps> = ({ 
+  settings, 
+  setSettings,
+  products,
+  setProducts,
+  sales,
+  setSales,
+  customers,
+  setCustomers,
+  scraps,
+  setScraps
+}) => {
   const [localSettings, setLocalSettings] = useState(settings);
   const [newType, setNewType] = useState('');
   const [newGroupName, setNewGroupName] = useState('');
@@ -88,6 +107,77 @@ const SettingsModule: React.FC<SettingsProps> = ({ settings, setSettings }) => {
     
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const handleFullBackup = () => {
+    const backupData = {
+      products,
+      sales,
+      customers,
+      scraps,
+      settings: localSettings,
+      version: '1.0',
+      timestamp: new Date().toISOString()
+    };
+    
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData, null, 2));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    const date = new Date().toISOString().split('T')[0];
+    downloadAnchorNode.setAttribute("download", `nekogold_backup_${date}.json`);
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+  };
+
+  const handleFullRestore = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!confirm("Bütün məlumatlar silinəcək və bu fayldakı məlumatlarla əvəz olunacaq. Davam etmək istəyirsiniz?")) {
+      e.target.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const data = JSON.parse(event.target?.result as string);
+        
+        if (data.products && data.sales && data.customers && data.settings) {
+          // 1. Update local state first
+          setProducts(data.products);
+          setSales(data.sales);
+          setCustomers(data.customers);
+          if (data.scraps) setScraps(data.scraps);
+          setSettings(data.settings);
+          setLocalSettings(data.settings);
+          
+          // 2. Direct sync to server to be safe before reload
+          const syncTypes = ['products', 'sales', 'customers', 'scraps', 'settings'];
+          const syncPromises = syncTypes.map(type => {
+            const payload = type === 'settings' ? data.settings : data[type];
+            if (!payload) return Promise.resolve();
+            return fetch(`/api/data/${type}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ data: type === 'settings' ? [payload] : payload })
+            });
+          });
+
+          alert("Məlumatlar bərpa olunur, zəhmət olmasa gözləyin...");
+          await Promise.all(syncPromises);
+          
+          alert("Məlumatlar uğurla bərpa olundu. Sistem yenilənir...");
+          window.location.reload(); 
+        } else {
+          alert("Yanlış backup faylı formatı.");
+        }
+      } catch (err) {
+        alert("Fayl oxunarkən xəta baş verdi.");
+      }
+    };
+    reader.readAsText(file);
   };
 
   const handleExport = () => {
@@ -420,6 +510,49 @@ const SettingsModule: React.FC<SettingsProps> = ({ settings, setSettings }) => {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-[2rem] border border-stone-100 shadow-2xl overflow-hidden p-8 md:p-12 space-y-8">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <Database className="text-amber-500" size={32} />
+            <h3 className="text-xl font-black text-stone-900 uppercase">Backup & Bərpa (Export/Import)</h3>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="p-8 bg-stone-50 rounded-[2rem] border border-stone-100 space-y-4">
+            <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mb-4">
+              <Download size={24} />
+            </div>
+            <h4 className="text-lg font-black text-stone-800 uppercase tracking-tight">Məlumatları Export Et</h4>
+            <p className="text-xs text-stone-400 font-bold leading-relaxed">
+              Bütün məhsulları, satışları, müştəriləri və ayarları bir JSON faylı olaraq kompüterinizə yükləyin. Bu faylı gələcəkdə məlumatları bərpa etmək üçün istifadə edə bilərsiniz.
+            </p>
+            <button 
+              onClick={handleFullBackup}
+              className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg flex items-center justify-center space-x-2"
+            >
+              <Download size={16} />
+              <span>BACKUP YÜKLƏ (JSON)</span>
+            </button>
+          </div>
+
+          <div className="p-8 bg-stone-50 rounded-[2rem] border border-stone-100 space-y-4">
+            <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mb-4">
+              <Upload size={24} />
+            </div>
+            <h4 className="text-lg font-black text-stone-800 uppercase tracking-tight">Məlumatları Bərpa Et</h4>
+            <p className="text-xs text-stone-400 font-bold leading-relaxed">
+              Əvvəllər götürdüyünüz backup faylını seçərək bütün sistemi həmin tarixə geri qaytarın. <span className="text-red-500">Diqqət: Cari məlumatlar silinəcək!</span>
+            </p>
+            <label className="w-full bg-amber-500 text-amber-950 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-amber-400 transition-all shadow-lg flex items-center justify-center space-x-2 cursor-pointer">
+              <Upload size={16} />
+              <span>BACKUP-I BƏRPA ET</span>
+              <input type="file" onChange={handleFullRestore} accept=".json" className="hidden" />
+            </label>
           </div>
         </div>
       </div>

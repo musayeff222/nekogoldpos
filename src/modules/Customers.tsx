@@ -171,7 +171,15 @@ const CustomersModule: React.FC<CustomersProps> = ({ customers, setCustomers, sa
                             <div className="flex items-center space-x-3 md:space-x-4">
                                <div className="w-10 h-10 md:w-12 md:h-12 bg-white border border-stone-100 rounded-xl flex items-center justify-center text-amber-500 shadow-sm overflow-hidden p-1">
                                   {s.imageUrl ? (
-                                    <img src={s.imageUrl} alt={s.productName} className="w-full h-full object-cover rounded-md" />
+                                    <img 
+                                      src={s.imageUrl} 
+                                      alt={s.productName} 
+                                      className="w-full h-full object-cover rounded-md" 
+                                      onError={(e) => {
+                                        (e.target as HTMLImageElement).style.display = 'none';
+                                        (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="text-amber-500"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-gem"><path d="M6 3h12l4 6-10 13L2 9Z"/><path d="M11 3 8 9l4 13 4-13-3-6"/><path d="M2 9h20"/></svg></div>';
+                                      }}
+                                    />
                                   ) : (
                                     <Gem size={20} />
                                   )}
@@ -239,7 +247,15 @@ const CustomersModule: React.FC<CustomersProps> = ({ customers, setCustomers, sa
                
                <div className="w-full md:w-5/12 bg-stone-50/50 flex flex-col items-center justify-center p-8 md:p-12 border-b md:border-b-0 md:border-r border-stone-100">
                   {selectedSaleInfo.imageUrl ? (
-                    <img src={selectedSaleInfo.imageUrl} referrerPolicy="no-referrer" className="w-full h-full object-contain max-h-[250px] md:max-h-none" />
+                    <img 
+                      src={selectedSaleInfo.imageUrl} 
+                      referrerPolicy="no-referrer" 
+                      className="w-full h-full object-contain max-h-[250px] md:max-h-none" 
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                        (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="text-stone-200 flex flex-col items-center"><svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg><p class="text-[10px] font-black uppercase mt-2 opacity-50">Şəkil tapılmadı</p></div>';
+                      }}
+                    />
                   ) : (
                     <ImageIcon size={80} strokeWidth={0.5} className="text-stone-200" />
                   )}

@@ -37,7 +37,7 @@ export const LabelPrint: React.FC<LabelPrintProps> = ({ product, settings }) => 
             {el.field === 'shopName' ? settings.shopName : 
              el.field === 'code' ? product.code : 
              el.field === 'weight' ? `${product.weight} gr` : 
-             el.field === 'price' ? `${(Number(product.price) || 0).toLocaleString()}` : 
+             el.field === 'price' ? `${Math.round(Number(product.price) || 0)}` : 
              el.field === 'carat' ? `${product.carat}K` : 
              el.field === 'supplier' ? product.supplier : 
              el.field === 'brilliant' ? (product.brilliant || '') : 
