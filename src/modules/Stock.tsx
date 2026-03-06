@@ -124,30 +124,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
   };
 
   const getNextCode = (prefix: string) => {
-    if (!prefix) return '';
-    
-    const allCodes = [
-      ...products.map(p => p.code),
-      ...(Array.isArray(sales) ? sales.map(s => s.productCode) : [])
-    ];
-    
-    const groupCodes = allCodes.filter(code => code.startsWith(prefix));
-    if (groupCodes.length === 0) return `${prefix}001`;
-    
-    const numbers = groupCodes.map(code => {
-      const numStr = code.substring(prefix.length);
-      // Try to find the numeric part after the prefix
-      const match = numStr.match(/^\d+/);
-      if (match) {
-        return parseInt(match[0], 10);
-      }
-      return 0;
-    });
-    
-    const maxNumber = Math.max(...numbers, 0);
-    const nextNumber = maxNumber + 1;
-    
-    return `${prefix}${nextNumber.toString().padStart(3, '0')}`;
+    return prefix || '';
   };
 
   useEffect(() => {
@@ -242,12 +219,20 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     const defaultType = defaultGroup?.name || '';
     const prefix = defaultGroup?.prefix || '';
     
-    setNewProduct({
-      code: getNextCode(prefix), name: '', carat: 583,
-      type: defaultType, supplier: settings.suppliers[0] || '',
-      brilliant: '', weight: '', price: '', imageUrl: '',
+    setNewProduct(prev => ({
+      ...prev,
+      code: getNextCode(prefix),
+      name: '',
+      // Keep the previous carat selection
+      carat: prev.carat,
+      type: defaultType,
+      supplier: settings.suppliers[0] || '',
+      brilliant: '',
+      weight: '',
+      price: '',
+      imageUrl: '',
       purchaseDate: new Date().toISOString().split('T')[0]
-    });
+    }));
     setDuplicateInStock(null);
     setDuplicateInSales(null);
     stopCamera();
@@ -257,12 +242,17 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
       setStream(mediaStream);
-      if (videoRef.current) videoRef.current.srcObject = mediaStream;
       setIsCameraOpen(true);
     } catch (err) {
       alert("Kameraya giriş icazəsi verilmədi.");
     }
   };
+
+  useEffect(() => {
+    if (isCameraOpen && stream && videoRef.current) {
+      videoRef.current.srcObject = stream;
+    }
+  }, [isCameraOpen, stream]);
 
   const stopCamera = () => {
     if (stream) stream.getTracks().forEach(track => track.stop());
@@ -343,7 +333,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                 <div className="relative aspect-square md:aspect-auto md:h-72 border-2 border-dashed border-stone-100 rounded-2xl bg-stone-50/50 flex items-center justify-center overflow-hidden shadow-inner">
                   {isCameraOpen ? (
                     <div className="absolute inset-0 bg-black flex flex-col">
-                       <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                       <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
                        <div className="absolute bottom-4 left-0 right-0 flex justify-center space-x-3 px-4">
                           <button type="button" onClick={() => capturePhoto(false)} className="bg-amber-500 text-stone-950 px-5 py-3 rounded-xl shadow-xl font-black text-[10px] uppercase flex items-center space-x-2"><Camera size={14} /> <span>FOTO ÇƏK</span></button>
                           <button type="button" onClick={stopCamera} className="bg-white/20 backdrop-blur-md text-white p-3 rounded-xl"><X size={14} /></button>
