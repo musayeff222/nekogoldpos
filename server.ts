@@ -23,8 +23,8 @@ async function startServer() {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
 
-  // Ensure uploads directory exists
-  const uploadDir = path.join(__dirname, 'uploads');
+  // Ensure uploads directory exists - use absolute path from process.cwd() for consistency
+  const uploadDir = path.resolve(process.cwd(), 'uploads');
   if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
   }
@@ -32,7 +32,7 @@ async function startServer() {
   // Multer Configuration
   const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-      cb(null, 'uploads/');
+      cb(null, uploadDir);
     },
     filename: (req, file, cb) => {
       // Create a unique filename
@@ -51,11 +51,11 @@ async function startServer() {
     origin: true,
     credentials: true
   }));
-  app.use(express.json({ limit: '200mb' }));
-  app.use(express.urlencoded({ limit: '200mb', extended: true }));
+  app.use(express.json({ limit: '500mb' }));
+  app.use(express.urlencoded({ limit: '500mb', extended: true }));
   
   // Serve uploaded files statically
-  app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+  app.use('/uploads', express.static(uploadDir));
 
   // MySQL Connection Pool
   const pool = mysql.createPool({
@@ -331,7 +331,7 @@ async function startServer() {
           
           if (data.length > 0) {
             // Prepare bulk insert in chunks to avoid max_allowed_packet issues
-            const chunkSize = 100; // Process 100 items at a time
+            const chunkSize = 50; // Increased chunk size since images are now extracted client-side
             for (let i = 0; i < data.length; i += chunkSize) {
               const chunk = data.slice(i, i + chunkSize);
               const values = chunk.map(item => {

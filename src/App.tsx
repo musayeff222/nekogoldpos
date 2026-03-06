@@ -233,10 +233,45 @@ const App: React.FC = () => {
     const syncData = async () => {
       setIsSyncing(true);
       try {
+        // Optimization: Check for base64 images and upload them first to keep sync payload small
+        let hasBase64 = false;
+        const productsWithUrls = await Promise.all(products.map(async (p) => {
+          if (p.imageUrl && p.imageUrl.startsWith('data:image/')) {
+            hasBase64 = true;
+            try {
+              const res = await fetch(p.imageUrl);
+              const blob = await res.blob();
+              const formData = new FormData();
+              formData.append('image', blob, `sync-${p.code}-${Date.now()}.jpg`);
+              
+              const uploadRes = await fetch('/api/upload-image', {
+                method: 'POST',
+                body: formData
+              });
+              
+              if (uploadRes.ok) {
+                const uploadData = await uploadRes.json();
+                return { ...p, imageUrl: uploadData.imageUrl };
+              }
+            } catch (err) {
+              console.error('Failed to upload base64 during sync:', err);
+            }
+          }
+          return p;
+        }));
+
+        if (hasBase64) {
+          setProducts(productsWithUrls);
+          return; // Next effect cycle will handle the actual sync
+        }
+
+        const payload = JSON.stringify({ data: products });
+        console.log(`Syncing products, payload size: ${(payload.length / 1024).toFixed(2)} KB`);
+        
         const res = await fetch('/api/data/products', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ data: products })
+          body: payload
         });
         if (!res.ok) {
           const errorData = await res.json().catch(() => ({}));

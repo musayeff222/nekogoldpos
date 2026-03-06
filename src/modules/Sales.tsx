@@ -412,7 +412,7 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
             {currentProduct && (
               <div className="w-full max-w-3xl bg-amber-50 mt-4 rounded-3xl md:rounded-[3rem] p-4 md:p-10 border-2 md:border-4 border-white shadow-2xl flex flex-col md:flex-row items-center space-y-4 md:space-y-0 md:space-x-10 animate-in zoom-in-95">
                  <div className="w-32 h-32 md:w-40 md:h-40 bg-white rounded-2xl md:rounded-3xl flex items-center justify-center p-2 shadow-sm border border-stone-100 overflow-hidden">
-                    {currentProduct.imageUrl ? <img src={currentProduct.imageUrl} className="w-full h-full object-contain" /> : <Sparkles className="text-amber-200 w-8 h-8 md:w-12 md:h-12" />}
+                    {currentProduct.imageUrl ? <img src={currentProduct.imageUrl} referrerPolicy="no-referrer" className="w-full h-full object-contain" /> : <Sparkles className="text-amber-200 w-8 h-8 md:w-12 md:h-12" />}
                  </div>
                  <div className="flex-1 text-center md:text-left space-y-2 md:space-y-4">
                     <h4 className="text-xl md:text-3xl font-black text-stone-900 uppercase tracking-tighter leading-none">{currentProduct.name}</h4>

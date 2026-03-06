@@ -260,7 +260,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     setIsCameraOpen(false);
   };
 
-  const capturePhoto = (isEdit: boolean = false) => {
+  const capturePhoto = async (isEdit: boolean = false) => {
     if (videoRef.current && canvasRef.current) {
       const canvas = canvasRef.current;
       canvas.width = videoRef.current.videoWidth;
@@ -268,23 +268,57 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
       const ctx = canvas.getContext('2d');
       if (ctx) {
         ctx.drawImage(videoRef.current, 0, 0);
-        const dataUrl = canvas.toDataURL('image/jpeg');
-        if (isEdit) setEditForm(prev => ({ ...prev, imageUrl: dataUrl }));
-        else setNewProduct(prev => ({ ...prev, imageUrl: dataUrl }));
+        
+        // Convert canvas to blob for uploading
+        canvas.toBlob(async (blob) => {
+          if (!blob) return;
+          
+          const formData = new FormData();
+          formData.append('image', blob, `photo-${Date.now()}.jpg`);
+          
+          try {
+            const res = await fetch('/api/upload-image', {
+              method: 'POST',
+              body: formData
+            });
+            
+            if (!res.ok) throw new Error('Upload failed');
+            
+            const data = await res.json();
+            if (isEdit) setEditForm(prev => ({ ...prev, imageUrl: data.imageUrl }));
+            else setNewProduct(prev => ({ ...prev, imageUrl: data.imageUrl }));
+          } catch (err) {
+            console.error('Image upload failed:', err);
+            alert('Şəkil yüklənmədi. Yenidən cəhd edin.');
+          }
+        }, 'image/jpeg', 0.8);
+        
         stopCamera();
       }
     }
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean = false) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean = false) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-          if (isEdit) setEditForm(prev => ({ ...prev, imageUrl: reader.result as string }));
-          else setNewProduct(prev => ({ ...prev, imageUrl: reader.result as string }));
-      };
-      reader.readAsDataURL(file);
+      const formData = new FormData();
+      formData.append('image', file);
+      
+      try {
+        const res = await fetch('/api/upload-image', {
+          method: 'POST',
+          body: formData
+        });
+        
+        if (!res.ok) throw new Error('Upload failed');
+        
+        const data = await res.json();
+        if (isEdit) setEditForm(prev => ({ ...prev, imageUrl: data.imageUrl }));
+        else setNewProduct(prev => ({ ...prev, imageUrl: data.imageUrl }));
+      } catch (err) {
+        console.error('Image upload failed:', err);
+        alert('Şəkil yüklənmədi. Yenidən cəhd edin.');
+      }
     }
   };
 
@@ -565,7 +599,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
               <tbody className="divide-y divide-stone-50">
                 {filteredProducts.map((p) => (
                   <tr key={p.id} onClick={() => openDetailModal(p)} className="hover:bg-amber-50/20 transition-all group cursor-pointer">
-                    <td className="px-8 py-5">{p.imageUrl ? <img src={p.imageUrl} className="w-14 h-14 rounded-xl object-cover border-2 border-white shadow-md" /> : <div className="w-14 h-14 rounded-xl bg-stone-50 flex items-center justify-center text-stone-200"><ImageIcon size={24} /></div>}</td>
+                    <td className="px-8 py-5">{p.imageUrl ? <img src={p.imageUrl} referrerPolicy="no-referrer" className="w-14 h-14 rounded-xl object-cover border-2 border-white shadow-md" /> : <div className="w-14 h-14 rounded-xl bg-stone-50 flex items-center justify-center text-stone-200"><ImageIcon size={24} /></div>}</td>
                     <td className="px-8 py-5 font-black text-stone-500 text-xs uppercase tracking-widest">{p.code}</td>
                     <td className="px-8 py-5"><p className="font-black text-stone-800 text-sm uppercase leading-none">{p.name}</p>{p.brilliant && <p className="text-[10px] text-amber-600 font-bold mt-1.5 flex items-center"><Gem size={12} className="mr-1.5"/> {p.brilliant}</p>}</td>
                     <td className="px-8 py-5 font-black text-stone-900 text-sm text-center">{p.weight} gr</td>
@@ -591,7 +625,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
             <main className="flex-1 overflow-y-auto p-8 scrollbar-hide">
                <form id="fullEditForm" onSubmit={handleUpdateProduct} className="space-y-8">
                   <div className="flex flex-col items-center space-y-4">
-                    <div onClick={() => (editForm.imageUrl || selectedProduct.imageUrl) && setZoomedImage(editForm.imageUrl || selectedProduct.imageUrl || null)} className="relative w-48 h-48 border-4 border-dashed border-stone-100 rounded-[2rem] bg-stone-50 flex items-center justify-center overflow-hidden cursor-zoom-in group">{editForm.imageUrl || selectedProduct.imageUrl ? <img src={editForm.imageUrl || selectedProduct.imageUrl} className="w-full h-full object-contain p-4" /> : <ImageIcon size={48} className="text-stone-200" />}</div>
+                    <div onClick={() => (editForm.imageUrl || selectedProduct.imageUrl) && setZoomedImage(editForm.imageUrl || selectedProduct.imageUrl || null)} className="relative w-48 h-48 border-4 border-dashed border-stone-100 rounded-[2rem] bg-stone-50 flex items-center justify-center overflow-hidden cursor-zoom-in group">{editForm.imageUrl || selectedProduct.imageUrl ? <img src={editForm.imageUrl || selectedProduct.imageUrl} referrerPolicy="no-referrer" className="w-full h-full object-contain p-4" /> : <ImageIcon size={48} className="text-stone-200" />}</div>
                     <button type="button" onClick={() => editFileInputRef.current?.click()} className="bg-stone-100 px-6 py-2 rounded-xl text-[10px] font-black text-stone-600 hover:bg-amber-100 transition-all uppercase">Şəkli Dəyiş</button>
                     <input type="file" ref={editFileInputRef} onChange={(e) => handleImageUpload(e, true)} className="hidden" />
                   </div>
@@ -623,7 +657,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
         </div>
       )}
 
-      {zoomedImage && <div className="fixed inset-0 bg-stone-950/95 z-[110] flex items-center justify-center p-4 cursor-zoom-out" onClick={() => setZoomedImage(null)}><img src={zoomedImage} className="max-w-full max-h-full object-contain drop-shadow-2xl animate-in zoom-in-95" alt="Zoomed product" /></div>}
+      {zoomedImage && <div className="fixed inset-0 bg-stone-950/95 z-[110] flex items-center justify-center p-4 cursor-zoom-out" onClick={() => setZoomedImage(null)}><img src={zoomedImage} referrerPolicy="no-referrer" className="max-w-full max-h-full object-contain drop-shadow-2xl animate-in zoom-in-95" alt="Zoomed product" /></div>}
       
       {/* LABEL PRINT CONTAINER (PORTAL) */}
       {(lastAddedProduct || bulkPrintList.length > 0) && createPortal(

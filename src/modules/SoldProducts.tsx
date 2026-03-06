@@ -131,7 +131,7 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales }) => {
           <aside className="w-80 md:w-96 bg-white border-r border-stone-200 flex flex-col overflow-y-auto scrollbar-hide">
             <div className="p-8 space-y-10">
               <div className="aspect-square bg-stone-100/50 rounded-[2.5rem] border-2 border-stone-100 flex items-center justify-center p-8 relative group shadow-inner">
-                {selectedSale.imageUrl ? <img src={selectedSale.imageUrl} className="w-full h-full object-contain drop-shadow-2xl" alt="Product" /> : <ImageIcon size={80} strokeWidth={0.5} className="text-stone-300" />}
+                {selectedSale.imageUrl ? <img src={selectedSale.imageUrl} referrerPolicy="no-referrer" className="w-full h-full object-contain drop-shadow-2xl" alt="Product" /> : <ImageIcon size={80} strokeWidth={0.5} className="text-stone-300" />}
                 <div className="absolute top-5 left-5"><span className="bg-stone-900 text-amber-500 px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest shadow-xl">{selectedSale.type}</span></div>
               </div>
               <div className="space-y-4">

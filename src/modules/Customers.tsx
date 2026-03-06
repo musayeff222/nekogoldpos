@@ -239,7 +239,7 @@ const CustomersModule: React.FC<CustomersProps> = ({ customers, setCustomers, sa
                
                <div className="w-full md:w-5/12 bg-stone-50/50 flex flex-col items-center justify-center p-8 md:p-12 border-b md:border-b-0 md:border-r border-stone-100">
                   {selectedSaleInfo.imageUrl ? (
-                    <img src={selectedSaleInfo.imageUrl} className="w-full h-full object-contain max-h-[250px] md:max-h-none" />
+                    <img src={selectedSaleInfo.imageUrl} referrerPolicy="no-referrer" className="w-full h-full object-contain max-h-[250px] md:max-h-none" />
                   ) : (
                     <ImageIcon size={80} strokeWidth={0.5} className="text-stone-200" />
                   )}
