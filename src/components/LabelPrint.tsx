@@ -11,14 +11,13 @@ export const LabelPrint: React.FC<LabelPrintProps> = ({ product, settings }) => 
   const { labelConfig } = settings;
 
   return (
-    <div id="label-print" className="label-print-container" style={{
+    <div className="label-print-container" style={{
       width: `${labelConfig.width}mm`,
       height: `${labelConfig.height}mm`,
       position: 'relative',
       backgroundColor: 'white',
       color: 'black',
       overflow: 'hidden',
-      pageBreakAfter: 'always',
       fontWeight: settings.labelFontWeight || '600'
     }}>
       {labelConfig.elements.map(el => (

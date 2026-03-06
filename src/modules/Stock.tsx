@@ -86,7 +86,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     if (!bulkPricePerGram || !activeFolder) return;
     
     const pricePerGram = Number(bulkPricePerGram);
-    const productsInFolder = products.filter(p => p.type === activeFolder);
+    const productsInFolder = activeProducts.filter(p => p.type === activeFolder);
     
     // Update products in state
     const updatedProducts = products.map(p => {
@@ -661,15 +661,19 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
       
       {/* LABEL PRINT CONTAINER (PORTAL) */}
       {(lastAddedProduct || bulkPrintList.length > 0) && createPortal(
-        <div id="label-print" className="bg-white">
+        <div id="label-print">
           {bulkPrintList.length > 0 ? (
-            bulkPrintList.map((p, idx) => (
-              <div key={p.id} className={idx < bulkPrintList.length - 1 ? 'label-page-break' : ''}>
+            bulkPrintList.map((p) => (
+              <div key={p.id} className="label-page-break">
                 <LabelPrint product={p} settings={settings} />
               </div>
             ))
           ) : (
-            lastAddedProduct && <LabelPrint product={lastAddedProduct} settings={settings} />
+            lastAddedProduct && (
+              <div className="label-page-break">
+                <LabelPrint product={lastAddedProduct} settings={settings} />
+              </div>
+            )
           )}
         </div>,
         document.body

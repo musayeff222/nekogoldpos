@@ -38,11 +38,17 @@ body {
     height: auto !important; 
     overflow: visible !important; 
     background: white !important; 
-    visibility: hidden !important; 
     margin: 0 !important;
     padding: 0 !important;
   }
+  
+  /* Hide all top-level elements except our print containers */
+  body > *:not(#receipt-print):not(#label-print) {
+    display: none !important;
+  }
+  
   #receipt-print, #label-print {
+    display: block !important;
     visibility: visible !important;
     background: white !important;
     color: #000000 !important;
@@ -53,6 +59,12 @@ body {
     -moz-osx-font-smoothing: grayscale !important;
     font-smoothing: none !important;
     text-rendering: geometricPrecision !important;
+    width: 100% !important;
+  }
+  
+  /* Ensure all descendants of print containers are visible */
+  #receipt-print *, #label-print * {
+    visibility: visible !important;
   }
   #receipt-print {
     position: absolute !important;
@@ -66,18 +78,19 @@ body {
     line-height: 1.2 !important;
   }
   #label-print {
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
     display: block !important;
     padding: 0 !important;
     margin: 0 !important;
     font-family: Arial, sans-serif !important;
+    width: 100% !important;
   }
-  #label-print *, #label-print { visibility: visible !important; }
   .label-page-break {
+    display: block !important;
     page-break-after: always !important;
     break-after: page !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
   .no-print { display: none !important; visibility: hidden !important; }
   
