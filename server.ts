@@ -10,6 +10,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import AdmZip from 'adm-zip';
 // Vite import moved inside startServer for better production compatibility
 
 
@@ -397,6 +398,175 @@ async function startServer() {
   });
 
   // --- NEW ROUTES REQUESTED BY USER ---
+
+  /**
+   * @route GET /api/admin/full-system-backup
+   * @desc Backup all database data and uploads folder into one ZIP
+   */
+  app.get('/api/admin/full-system-backup', async (req: Request, res: Response) => {
+    try {
+      const zip = new AdmZip();
+      
+      // 1. Fetch all database data
+      const allowedTypes = ['products', 'sales', 'customers', 'scraps', 'settings'];
+      const allData: any = {};
+      
+      for (const type of allowedTypes) {
+        const [rows] = await pool.execute(`SELECT content FROM ${type}`);
+        allData[type] = (rows as any[]).map(row => JSON.parse(row.content));
+        if (type === 'settings') allData[type] = allData[type][0] || null;
+      }
+      
+      const backupMetadata = {
+        data: allData,
+        version: '1.0',
+        timestamp: new Date().toISOString(),
+        type: 'full_system_backup'
+      };
+      
+      zip.addFile('backup_data.json', Buffer.from(JSON.stringify(backupMetadata, null, 2)));
+      
+      // 2. Add uploads folder
+      if (fs.existsSync(uploadDir)) {
+        zip.addLocalFolder(uploadDir, 'uploads');
+      }
+      
+      const zipBuffer = zip.toBuffer();
+      res.set('Content-Type', 'application/zip');
+      res.set('Content-Disposition', `attachment; filename=nekogold_full_backup_${Date.now()}.zip`);
+      res.send(zipBuffer);
+    } catch (error) {
+      console.error('Full backup failed:', error);
+      res.status(500).json({ error: 'Full backup failed' });
+    }
+  });
+
+  /**
+   * @route POST /api/admin/full-system-restore
+   * @desc Restore all database data and uploads folder from a ZIP
+   */
+  app.post('/api/admin/full-system-restore', upload.single('backup'), async (req: Request, res: Response) => {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No backup file uploaded' });
+    }
+
+    const connection = await pool.getConnection();
+    try {
+      const zip = new AdmZip(req.file.path);
+      const zipEntries = zip.getEntries();
+      
+      // 1. Restore Database Data
+      const dataEntry = zipEntries.find((e: any) => e.entryName === 'backup_data.json');
+      if (dataEntry) {
+        const backupMetadata = JSON.parse(dataEntry.getData().toString('utf8'));
+        const allData = backupMetadata.data;
+        
+        await connection.beginTransaction();
+        
+        const allowedTypes = ['products', 'sales', 'customers', 'scraps', 'settings'];
+        for (const type of allowedTypes) {
+          const data = allData[type];
+          if (!data) continue;
+          
+          await connection.execute(`DELETE FROM ${type}`);
+          
+          if (type === 'settings') {
+            const content = JSON.stringify(data);
+            await connection.execute(
+              `INSERT INTO settings (id, content) VALUES ('current', ?)`,
+              [content]
+            );
+          } else if (Array.isArray(data) && data.length > 0) {
+            for (const item of data) {
+              const content = JSON.stringify(item);
+              const id = item.id || Math.random().toString(36).substr(2, 9);
+              await connection.execute(`INSERT INTO ${type} (id, content) VALUES (?, ?)`, [id, content]);
+            }
+          }
+        }
+        await connection.commit();
+      }
+      
+      // 2. Restore Uploads Folder
+      // We look for entries starting with 'uploads/'
+      zipEntries.forEach((entry: any) => {
+        if (entry.entryName.startsWith('uploads/') && !entry.isDirectory) {
+          const relativePath = entry.entryName.replace('uploads/', '');
+          const targetPath = path.join(uploadDir, relativePath);
+          const targetDirPath = path.dirname(targetPath);
+          
+          if (!fs.existsSync(targetDirPath)) {
+            fs.mkdirSync(targetDirPath, { recursive: true });
+          }
+          
+          fs.writeFileSync(targetPath, entry.getData());
+        }
+      });
+      
+      // Clean up the temporary backup file
+      fs.unlinkSync(req.file.path);
+
+      res.json({ message: 'Full system restore successful' });
+    } catch (error) {
+      await connection.rollback();
+      console.error('Full restore failed:', error);
+      res.status(500).json({ error: 'Full restore failed', details: String(error) });
+    } finally {
+      connection.release();
+    }
+  });
+
+  /**
+   * @route GET /api/admin/backup-uploads
+   * @desc Backup the entire uploads directory as a ZIP file
+   */
+  app.get('/api/admin/backup-uploads', (req: Request, res: Response) => {
+    try {
+      const zip = new AdmZip();
+      if (fs.existsSync(uploadDir)) {
+        zip.addLocalFolder(uploadDir);
+        const zipBuffer = zip.toBuffer();
+        
+        res.set('Content-Type', 'application/zip');
+        res.set('Content-Disposition', `attachment; filename=uploads_backup_${Date.now()}.zip`);
+        res.send(zipBuffer);
+      } else {
+        res.status(404).json({ error: 'Uploads directory not found' });
+      }
+    } catch (error) {
+      console.error('Backup failed:', error);
+      res.status(500).json({ error: 'Backup failed' });
+    }
+  });
+
+  /**
+   * @route POST /api/admin/restore-uploads
+   * @desc Restore the uploads directory from a ZIP file
+   */
+  app.post('/api/admin/restore-uploads', upload.single('backup'), (req: Request, res: Response) => {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No backup file uploaded' });
+    }
+
+    try {
+      const zip = new AdmZip(req.file.path);
+      
+      // Ensure uploadDir exists and is empty or we overwrite
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+
+      zip.extractAllTo(uploadDir, true);
+      
+      // Clean up the temporary backup file
+      fs.unlinkSync(req.file.path);
+
+      res.json({ message: 'Uploads restored successfully' });
+    } catch (error) {
+      console.error('Restore failed:', error);
+      res.status(500).json({ error: 'Restore failed' });
+    }
+  });
 
   /**
    * @route POST /api/upload-image

@@ -680,29 +680,46 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                <form id="fullEditForm" onSubmit={handleUpdateProduct} className="space-y-8">
                   <div className="flex flex-col items-center space-y-4">
                     <div 
-                      onClick={() => (editForm.imageUrl || selectedProduct.imageUrl) && setZoomedImage(editForm.imageUrl || selectedProduct.imageUrl || null)} 
+                      onClick={() => (editForm.imageUrl || selectedProduct.imageUrl) && !isCameraOpen && setZoomedImage(editForm.imageUrl || selectedProduct.imageUrl || null)} 
                       className="relative w-48 h-48 border-4 border-dashed border-stone-100 rounded-[2rem] bg-stone-50 flex items-center justify-center overflow-hidden cursor-zoom-in group shadow-inner"
                     >
-                      {editForm.imageUrl || selectedProduct.imageUrl ? (
-                        <img 
-                          src={editForm.imageUrl || selectedProduct.imageUrl} 
-                          referrerPolicy="no-referrer" 
-                          className="w-full h-full object-contain p-4" 
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).style.display = 'none';
-                            (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="text-stone-200 flex flex-col items-center"><svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg><p class="text-[10px] font-black uppercase mt-2 opacity-50">Şəkil tapılmadı</p></div>';
-                          }}
-                        />
+                      {isCameraOpen ? (
+                        <div className="absolute inset-0 bg-black flex flex-col">
+                           <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+                           <div className="absolute bottom-4 left-0 right-0 flex justify-center space-x-3 px-4">
+                              <button type="button" onClick={() => capturePhoto(true)} className="bg-amber-500 text-stone-950 px-4 py-2 rounded-xl shadow-xl font-black text-[9px] uppercase flex items-center space-x-2"><Camera size={12} /> <span>ÇƏK</span></button>
+                              <button type="button" onClick={stopCamera} className="bg-white/20 backdrop-blur-md text-white p-2 rounded-xl"><X size={12} /></button>
+                           </div>
+                        </div>
                       ) : (
-                        <ImageIcon size={48} className="text-stone-200" />
+                        <>
+                          {editForm.imageUrl || selectedProduct.imageUrl ? (
+                            <img 
+                              src={editForm.imageUrl || selectedProduct.imageUrl} 
+                              referrerPolicy="no-referrer" 
+                              className="w-full h-full object-contain p-4" 
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                                (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="text-stone-200 flex flex-col items-center"><svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg><p class="text-[10px] font-black uppercase mt-2 opacity-50">Şəkil tapılmadı</p></div>';
+                              }}
+                            />
+                          ) : (
+                            <ImageIcon size={48} className="text-stone-200" />
+                          )}
+                        </>
                       )}
                     </div>
-                    <button type="button" onClick={() => editFileInputRef.current?.click()} className="bg-stone-100 px-6 py-2 rounded-xl text-[10px] font-black text-stone-600 hover:bg-amber-100 transition-all uppercase">Şəkli Dəyiş</button>
+                    <div className="flex space-x-2">
+                      <button type="button" onClick={startCamera} className="bg-stone-900 text-white px-6 py-2.5 rounded-xl text-[10px] font-black hover:bg-black transition-all uppercase flex items-center space-x-2"><Camera size={14} /> <span>KAMERA</span></button>
+                      <button type="button" onClick={() => editFileInputRef.current?.click()} className="bg-stone-100 px-6 py-2.5 rounded-xl text-[10px] font-black text-stone-600 hover:bg-amber-100 transition-all uppercase flex items-center space-x-2"><Upload size={14} /> <span>YÜKLƏ</span></button>
+                    </div>
                     <input type="file" ref={editFileInputRef} onChange={(e) => handleImageUpload(e, true)} className="hidden" />
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                       <div className="space-y-1.5"><label className="text-[10px] font-black text-stone-400 uppercase ml-2">Məhsul Kodu</label><input type="text" value={editForm.code || ''} onChange={(e) => setEditForm({...editForm, code: e.target.value})} className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-4 px-5 font-black text-stone-800 outline-none" /></div>
                        <div className="space-y-1.5"><label className="text-[10px] font-black text-stone-400 uppercase ml-2">Ad</label><input type="text" value={editForm.name || ''} onChange={(e) => setEditForm({...editForm, name: e.target.value})} className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-4 px-5 font-black text-stone-800 outline-none" /></div>
                        <div className="space-y-1.5"><label className="text-[10px] font-black text-stone-400 uppercase ml-2">Çəki (gr)</label><input type="number" step="0.001" value={editForm.weight || ''} onChange={(e) => setEditForm({...editForm, weight: Number(e.target.value)})} className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-4 px-5 font-black text-stone-800 outline-none" /></div>
+                       <div className="space-y-1.5"><label className="text-[10px] font-black text-stone-400 uppercase ml-2">Tədarükçü</label><select value={editForm.supplier || ''} onChange={(e) => setEditForm({...editForm, supplier: e.target.value})} className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-4 px-5 font-black text-stone-800 outline-none cursor-pointer">{settings.suppliers.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
                        <div className="space-y-1.5 md:col-span-2"><label className="text-[10px] font-black text-amber-600 uppercase ml-2">Qiymət (₼)</label><input type="number" value={editForm.price || ''} onChange={(e) => setEditForm({...editForm, price: Number(e.target.value)})} className="w-full bg-amber-50 border-2 border-amber-200 rounded-xl py-6 px-6 font-black text-4xl text-amber-900 text-center outline-none" /></div>
                   </div>
                </form>

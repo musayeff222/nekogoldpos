@@ -518,11 +518,69 @@ const SettingsModule: React.FC<SettingsProps> = ({
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <Database className="text-amber-500" size={32} />
-            <h3 className="text-xl font-black text-stone-900 uppercase">Backup & Bərpa (Export/Import)</h3>
+            <h3 className="text-xl font-black text-stone-900 uppercase">Tam Sistem Backup & Bərpa (Bütün Məlumatlar + Şəkillər)</h3>
           </div>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="p-8 bg-amber-50/50 rounded-[2rem] border-2 border-dashed border-amber-200 space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="flex-1 space-y-2">
+              <h4 className="text-lg font-black text-amber-900 uppercase tracking-tight">Full System Backup (Tövsiyə Olunur)</h4>
+              <p className="text-xs text-amber-700 font-bold leading-relaxed">
+                Bu seçim həm bütün bazanı (məhsullar, satışlar və s.), həm də <strong>uploads</strong> qovluğundakı bütün şəkilləri bir ZIP faylına yığır. Hostinger-ə köçərkən və ya sistemi yeniləyərkən ən etibarlı üsuldur.
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <a 
+                href="/api/admin/full-system-backup"
+                className="bg-amber-600 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-amber-700 transition-all shadow-lg flex items-center justify-center space-x-2"
+              >
+                <Download size={18} />
+                <span>FULL BACKUP YÜKLƏ (ZIP)</span>
+              </a>
+              
+              <label className="bg-stone-900 text-amber-500 px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-black transition-all shadow-lg flex items-center justify-center space-x-2 cursor-pointer">
+                <Upload size={18} />
+                <span>FULL BACKUP-I BƏRPA ET</span>
+                <input 
+                  type="file" 
+                  accept=".zip"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    
+                    if (!confirm("DİQQƏT: Bu əməliyyat bütün mövcud məlumatları və şəkilləri silib backup-dakı ilə əvəz edəcək. Davam edilsin?")) return;
+                    
+                    const formData = new FormData();
+                    formData.append('backup', file);
+                    
+                    alert("Sistem bərpa olunur, zəhmət olmasa səhifəni bağlamayın...");
+                    
+                    try {
+                      const res = await fetch('/api/admin/full-system-restore', {
+                        method: 'POST',
+                        body: formData
+                      });
+                      
+                      if (res.ok) {
+                        alert("Sistem uğurla bərpa olundu! Səhifə yenilənir...");
+                        window.location.reload();
+                      } else {
+                        const err = await res.json();
+                        alert("Xəta baş verdi: " + (err.details || err.error));
+                      }
+                    } catch (err) {
+                      alert("Serverlə bağlantı kəsildi.");
+                    }
+                  }}
+                />
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 opacity-60">
           <div className="p-8 bg-stone-50 rounded-[2rem] border border-stone-100 space-y-4">
             <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mb-4">
               <Download size={24} />
@@ -553,6 +611,77 @@ const SettingsModule: React.FC<SettingsProps> = ({
               <span>BACKUP-I BƏRPA ET</span>
               <input type="file" onChange={handleFullRestore} accept=".json" className="hidden" />
             </label>
+          </div>
+        </div>
+
+        {/* MEDIA BACKUP SECTION */}
+        <div className="pt-8 border-t border-stone-100">
+          <div className="flex items-center space-x-4 mb-8">
+            <RefreshCw className="text-amber-500" size={32} />
+            <h3 className="text-xl font-black text-stone-900 uppercase">Resimlerin Backup-ı (Uploads)</h3>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="p-8 bg-stone-50 rounded-[2rem] border border-stone-100 space-y-4">
+              <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mb-4">
+                <Download size={24} />
+              </div>
+              <h4 className="text-lg font-black text-stone-800 uppercase tracking-tight">Resimleri Yüklə (ZIP)</h4>
+              <p className="text-xs text-stone-400 font-bold leading-relaxed">
+                Bütün yüklənmiş şəkilləri (uploads qovluğunu) bir ZIP faylı olaraq yükləyin. Hostinger-ə keçid edərkən bu faylı istifadə edə bilərsiniz.
+              </p>
+              <a 
+                href="/api/admin/backup-uploads"
+                className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg flex items-center justify-center space-x-2"
+              >
+                <Download size={16} />
+                <span>RESİMLERİ YÜKLƏ (ZIP)</span>
+              </a>
+            </div>
+
+            <div className="p-8 bg-stone-50 rounded-[2rem] border border-stone-100 space-y-4">
+              <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center mb-4">
+                <Upload size={24} />
+              </div>
+              <h4 className="text-lg font-black text-stone-800 uppercase tracking-tight">Resimleri Bərpa Et (ZIP)</h4>
+              <p className="text-xs text-stone-400 font-bold leading-relaxed">
+                Əvvəllər yüklədiyiniz uploads ZIP faylını seçərək şəkilləri bərpa edin. <span className="text-red-500">Bu, mövcud şəkillərin üzərinə yazacaq.</span>
+              </p>
+              <label className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg flex items-center justify-center space-x-2 cursor-pointer">
+                <Upload size={16} />
+                <span>RESİMLERİ BƏRPA ET</span>
+                <input 
+                  type="file" 
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    
+                    if (!confirm("Bu əməliyyat mövcud şəkilləri əvəz edəcək. Davam edilsin?")) return;
+                    
+                    const formData = new FormData();
+                    formData.append('backup', file);
+                    
+                    try {
+                      const res = await fetch('/api/admin/restore-uploads', {
+                        method: 'POST',
+                        body: formData
+                      });
+                      
+                      if (res.ok) {
+                        alert("Şəkillər uğurla bərpa olundu!");
+                        window.location.reload();
+                      } else {
+                        alert("Xəta baş verdi.");
+                      }
+                    } catch (err) {
+                      alert("Serverlə bağlantı kəsildi.");
+                    }
+                  }} 
+                  accept=".zip" 
+                  className="hidden" 
+                />
+              </label>
+            </div>
           </div>
         </div>
       </div>
