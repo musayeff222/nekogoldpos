@@ -127,5 +127,6 @@ export enum Page {
   Return = 'RETURN',
   Scrap = 'SCRAP',
   Settings = 'SETTINGS',
-  Reports = 'REPORTS'
+  Reports = 'REPORTS',
+  Debt = 'DEBT'
 }

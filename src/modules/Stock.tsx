@@ -30,7 +30,8 @@ import {
   Box,
   Maximize2,
   AlertCircle,
-  User
+  User,
+  Truck
 } from 'lucide-react';
 import { Product, ProductType, AppSettings, ProductLog, Sale } from '@/types';
 import { LabelPrint } from '@/components/LabelPrint';
@@ -80,7 +81,40 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
   const [bulkPricePerGram, setBulkPricePerGram] = useState<number | ''>('');
   const [bulkPrintList, setBulkPrintList] = useState<Product[]>([]);
 
+  const [viewMode, setViewMode] = useState<'folders' | 'printList'>('folders');
+  const [stockPrintList, setStockPrintList] = useState<Product[]>([]);
+  const [printSupplier, setPrintSupplier] = useState<string>('all');
+  const [printCategory, setPrintCategory] = useState<string>('all');
+
   const [editForm, setEditForm] = useState<Partial<Product>>({});
+
+  // Update print list when filters change
+  useEffect(() => {
+    if (viewMode === 'printList') {
+      let filtered = [...activeProducts];
+      
+      if (printSupplier !== 'all') {
+        filtered = filtered.filter(p => p.supplier === printSupplier);
+      }
+      
+      if (printCategory !== 'all') {
+        filtered = filtered.filter(p => p.type === printCategory);
+      }
+      
+      // Sort by code ascending (Kod azdan çoxa doğru)
+      filtered.sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true, sensitivity: 'base' }));
+      
+      setStockPrintList(filtered);
+    }
+  }, [printSupplier, printCategory, products, viewMode]);
+
+  const removeFromPrintList = (id: string) => {
+    setStockPrintList(prev => prev.filter(item => item.id !== id));
+  };
+
+  const handlePrintStockList = () => {
+    window.print();
+  };
 
   const handleBulkPrint = () => {
     if (!bulkPricePerGram || !activeFolder) return;
@@ -134,8 +168,12 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     }
   }, [newProduct.type, isAddingNew]);
 
-  // Yalnız stokda olan (1 ədəd) məhsulları süzgəcdən keçiririk
-  const activeProducts = products.filter(p => p.stockCount === 1);
+  // Stokda olan məhsulları süzgəcdən keçiririk
+  const activeProducts = products.filter(p => (Number(p.stockCount) || 0) > 0);
+
+  // Unique suppliers and categories for filters
+  const suppliers = Array.from(new Set(activeProducts.map(p => p.supplier).filter(Boolean)));
+  const categories = settings.productGroups.map(g => g.name);
 
   useEffect(() => {
     if (newProduct.weight !== '' && !isNaN(Number(newProduct.weight))) {
@@ -366,6 +404,8 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
         p.code.toLowerCase().includes(term) || p.name.toLowerCase().includes(term) || p.weight?.toString().includes(term)
       );
     }
+    // Sort by code ascending (Kod azdan çoxa doğru)
+    list.sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true, sensitivity: 'base' }));
     return list;
   };
 
@@ -558,117 +598,297 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
 
   return (
     <div className="space-y-4 md:space-y-6 pb-24 md:pb-0 animate-in fade-in duration-500">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center space-x-2 text-sm">
-          <button onClick={() => {setActiveFolder(null); setSearchTerm('');}} className={`font-black uppercase tracking-tighter ${!activeFolder ? 'text-amber-600' : 'text-stone-400 hover:text-stone-600'}`}>Stok</button>
-          {activeFolder && <><span className="text-stone-300">/</span><span className="text-stone-800 font-black uppercase tracking-tighter">{activeFolder}</span></>}
-        </div>
-        <button onClick={() => { setDuplicateInStock(null); setDuplicateInSales(null); setIsAddingNew(true); }} className="w-full sm:w-auto bg-stone-900 text-amber-500 px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-black transition-all flex items-center justify-center shadow-xl"><Plus className="w-5 h-5 mr-2" /> Yeni Məhsul</button>
-      </div>
-
-      <div className="relative group">
-        <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-stone-300 w-5 h-5 group-focus-within:text-amber-500 transition-colors" />
-        <input type="text" placeholder="Kod və ya çəki ilə axtarış..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-white border-2 border-stone-100 rounded-2xl md:rounded-[2.5rem] py-5 md:py-6 pl-16 pr-6 focus:ring-8 focus:ring-amber-50 outline-none shadow-xl text-sm font-bold" />
-      </div>
-
-      {!activeFolder && !searchTerm ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-6">
-          {(settings.productGroups || []).map((group) => {
-            const countInStock = activeProducts.filter(p => p.type === group.name).length;
-            return (
-              <button key={group.name} onClick={() => setActiveFolder(group.name)} className="bg-white p-6 rounded-[2.5rem] border border-stone-200 shadow-sm hover:shadow-2xl hover:border-amber-300 transition-all flex flex-col items-center group relative overflow-hidden">
-                <div className="w-16 h-16 md:w-20 md:h-20 bg-stone-50 rounded-2xl flex items-center justify-center text-amber-500 mb-4 group-hover:scale-110 group-hover:bg-amber-50 transition-all"><Folder className="w-8 h-8 md:w-10 md:h-10" /></div>
-                <h4 className="font-black text-stone-800 text-xs md:text-sm uppercase tracking-tighter">{group.name}</h4>
-                <p className={`text-[10px] mt-1 font-bold ${countInStock > 0 ? 'text-amber-600' : 'text-stone-300'}`}>{countInStock} Çeşid</p>
-              </button>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {activeFolder && (
-            <div className="bg-white p-6 rounded-[2rem] border border-stone-100 shadow-xl flex flex-col md:flex-row items-center justify-between gap-6 animate-in slide-in-from-top-4">
-              <div className="flex items-center space-x-4">
-                <div className="w-12 h-12 bg-amber-500 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-amber-200">
-                  <Printer size={24} />
-                </div>
-                <div>
-                  <h3 className="text-sm font-black text-stone-900 uppercase tracking-widest">Toplu Qiymət & Çap</h3>
-                  <p className="text-[10px] font-bold text-stone-400 uppercase mt-1">Bütün "{activeFolder}" kateqoriyası üçün</p>
-                </div>
+      
+      {/* ÇAP KONTEYNERİ (80MM Receipt Design) */}
+      <div id="receipt-print" className="hidden print:block bg-white text-black">
+          <header className="text-center mb-6">
+              <h1 className="brand-font text-3xl font-black mb-1">{settings.shopName || 'NEKO GOLD'}</h1>
+              <h2 className="text-sm font-bold tracking-widest mb-4">STOKDA OLAN MALLAR</h2>
+              <div className="text-left text-xs border-b border-black pb-1 mb-4">
+                  <span>TARİX: {new Date().toLocaleDateString('az-AZ')} {printCategory !== 'all' ? `| KAT: ${printCategory}` : ''} {printSupplier !== 'all' ? `| TƏD: ${printSupplier}` : ''}</span>
               </div>
-              
-              <div className="flex flex-1 max-w-md items-center space-x-3">
-                <div className="relative flex-1">
-                  <Scale className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 w-4 h-4" />
-                  <input 
-                    type="number" 
-                    placeholder="1 qr Qiyməti (₼)" 
-                    value={bulkPricePerGram}
-                    onChange={(e) => setBulkPricePerGram(e.target.value === '' ? '' : Number(e.target.value))}
-                    className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-3 pl-10 pr-4 font-black text-sm outline-none focus:border-amber-400 transition-all"
-                  />
+          </header>
+
+          <section className="mb-4">
+              <table className="receipt-table">
+                  <thead>
+                      <tr>
+                          <th style={{ width: '15%' }}>KOD</th>
+                          <th style={{ width: '30%' }}>MƏHSUL ADI</th>
+                          <th style={{ width: '8%' }}>ƏYAR</th>
+                          <th style={{ width: '15%' }}>ÇƏKİ</th>
+                          <th style={{ width: '10%' }}>SAY</th>
+                          <th style={{ width: '10%' }}>BR</th>
+                          <th style={{ width: '12%' }}>V</th>
+                      </tr>
+                  </thead>
+                  <tbody>
+                      {stockPrintList.map((item, idx) => (
+                          <tr key={idx}>
+                              <td>{item.code}</td>
+                              <td style={{ textAlign: 'left', fontWeight: 'bold' }}>{item.name}</td>
+                              <td>{item.carat}</td>
+                              <td style={{ fontWeight: 'bold' }}>{item.weight}g</td>
+                              <td style={{ fontWeight: 'bold' }}>{item.stockCount}</td>
+                              <td>{item.brilliant ? '*' : ''}</td>
+                              <td>
+                                  <div style={{ width: '15px', height: '15px', border: '1px solid #ccc', margin: 'auto' }}></div>
+                              </td>
+                          </tr>
+                      ))}
+                      {stockPrintList.length < 3 && Array.from({ length: 3 - stockPrintList.length }).map((_, i) => (
+                        <tr key={`empty-${i}`} style={{ height: '25px' }}>
+                          <td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+                        </tr>
+                      ))}
+                  </tbody>
+              </table>
+          </section>
+
+          <section className="mb-8">
+              <div className="flex justify-between items-center text-xs border-b border-black pb-2">
+                  <div className="flex flex-col">
+                      <span className="uppercase text-[9px]">CƏMİ SAY:</span>
+                      <span className="text-sm font-bold">{stockPrintList.reduce((acc, i) => acc + (Number(i.stockCount) || 0), 0)} ədəd</span>
+                  </div>
+                  <div className="flex flex-row items-end gap-2">
+                      <span className="uppercase text-[9px]">CƏMİ ÇƏKİ:</span>
+                      <span className="text-sm font-bold">{stockPrintList.reduce((acc, i) => acc + (Number(i.weight) || 0), 0).toFixed(2)} gr</span>
+                  </div>
+              </div>
+          </section>
+
+          <footer className="mt-12 flex justify-between px-2 text-[10px] font-bold uppercase">
+              <div className="flex flex-col items-center">
+                  <div className="w-24 border-b border-black mb-1"></div>
+                  <span>HAZIRLAYAN</span>
+              </div>
+              <div className="flex flex-col items-center">
+                  <div className="w-24 border-b border-black mb-1"></div>
+                  <span>TƏSDİQLƏYƏN</span>
+              </div>
+          </footer>
+      </div>
+
+      {/* ÜST TABLAR (NO-PRINT) */}
+      <div className="flex justify-center no-print">
+        <div className="bg-white p-2 rounded-[2rem] shadow-xl border border-stone-200 flex space-x-2">
+          <button 
+            onClick={() => setViewMode('folders')}
+            className={`px-8 md:px-12 py-3 md:py-4 rounded-[1.5rem] font-black text-xs md:text-sm uppercase tracking-widest transition-all flex items-center space-x-3 ${viewMode === 'folders' ? 'bg-stone-900 text-amber-500 shadow-lg' : 'text-stone-500 hover:bg-stone-50'}`}
+          >
+            <Box size={20} />
+            <span>STOKDA OLANLAR</span>
+          </button>
+          <button 
+            onClick={() => setViewMode('printList')}
+            className={`px-8 md:px-12 py-3 md:py-4 rounded-[1.5rem] font-black text-xs md:text-sm uppercase tracking-widest transition-all flex items-center space-x-3 ${viewMode === 'printList' ? 'bg-stone-900 text-amber-500 shadow-lg' : 'text-stone-500 hover:bg-stone-50'}`}
+          >
+            <Printer size={20} />
+            <span>SİYAHI ÇAPI (80MM)</span>
+          </button>
+        </div>
+      </div>
+
+      {viewMode === 'folders' ? (
+        <>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 no-print">
+            <div className="flex items-center space-x-2 text-sm">
+              <button onClick={() => {setActiveFolder(null); setSearchTerm('');}} className={`font-black uppercase tracking-tighter ${!activeFolder ? 'text-amber-600' : 'text-stone-400 hover:text-stone-600'}`}>Stok</button>
+              {activeFolder && <><span className="text-stone-300">/</span><span className="text-stone-800 font-black uppercase tracking-tighter">{activeFolder}</span></>}
+            </div>
+            <button onClick={() => { setDuplicateInStock(null); setDuplicateInSales(null); setIsAddingNew(true); }} className="w-full sm:w-auto bg-stone-900 text-amber-500 px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-black transition-all flex items-center justify-center shadow-xl"><Plus className="w-5 h-5 mr-2" /> Yeni Məhsul</button>
+          </div>
+
+          <div className="relative group no-print">
+            <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-stone-300 w-5 h-5 group-focus-within:text-amber-500 transition-colors" />
+            <input type="text" placeholder="Kod və ya çəki ilə axtarış..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-white border-2 border-stone-100 rounded-2xl md:rounded-[2.5rem] py-5 md:py-6 pl-16 pr-6 focus:ring-8 focus:ring-amber-50 outline-none shadow-xl text-sm font-bold" />
+          </div>
+
+          {!activeFolder && !searchTerm ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-6 no-print">
+              {(settings.productGroups || []).map((group) => {
+                const countInStock = activeProducts.filter(p => p.type === group.name).length;
+                return (
+                  <button key={group.name} onClick={() => setActiveFolder(group.name)} className="bg-white p-6 rounded-[2.5rem] border border-stone-200 shadow-sm hover:shadow-2xl hover:border-amber-300 transition-all flex flex-col items-center group relative overflow-hidden">
+                    <div className="w-16 h-16 md:w-20 md:h-20 bg-stone-50 rounded-2xl flex items-center justify-center text-amber-500 mb-4 group-hover:scale-110 group-hover:bg-amber-50 transition-all"><Folder className="w-8 h-8 md:w-10 md:h-10" /></div>
+                    <h4 className="font-black text-stone-800 text-xs md:text-sm uppercase tracking-tighter">{group.name}</h4>
+                    <p className={`text-[10px] mt-1 font-bold ${countInStock > 0 ? 'text-amber-600' : 'text-stone-300'}`}>{countInStock} Çeşid</p>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="space-y-4 no-print">
+              {activeFolder && (
+                <div className="bg-white p-6 rounded-[2rem] border border-stone-100 shadow-xl flex flex-col md:flex-row items-center justify-between gap-6 animate-in slide-in-from-top-4">
+                  <div className="flex items-center space-x-4">
+                    <div className="w-12 h-12 bg-amber-500 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-amber-200">
+                      <Printer size={24} />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-black text-stone-900 uppercase tracking-widest">Toplu Qiymət & Çap</h3>
+                      <p className="text-[10px] font-bold text-stone-400 uppercase mt-1">Bütün "{activeFolder}" kateqoriyası üçün</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-1 max-w-md items-center space-x-3">
+                    <div className="relative flex-1">
+                      <Scale className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 w-4 h-4" />
+                      <input 
+                        type="number" 
+                        placeholder="1 qr Qiyməti (₼)" 
+                        value={bulkPricePerGram}
+                        onChange={(e) => setBulkPricePerGram(e.target.value === '' ? '' : Number(e.target.value))}
+                        className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-3 pl-10 pr-4 font-black text-sm outline-none focus:border-amber-400 transition-all"
+                      />
+                    </div>
+                    <button 
+                      onClick={handleBulkPrint}
+                      disabled={!bulkPricePerGram}
+                      className={`px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg flex items-center space-x-2 ${bulkPricePerGram ? 'bg-stone-900 text-amber-500 hover:bg-black' : 'bg-stone-100 text-stone-300 cursor-not-allowed'}`}
+                    >
+                      <Zap size={16} />
+                      <span>Toplu Çap Et</span>
+                    </button>
+                  </div>
                 </div>
-                <button 
-                  onClick={handleBulkPrint}
-                  disabled={!bulkPricePerGram}
-                  className={`px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg flex items-center space-x-2 ${bulkPricePerGram ? 'bg-stone-900 text-amber-500 hover:bg-black' : 'bg-stone-100 text-stone-300 cursor-not-allowed'}`}
-                >
-                  <Zap size={16} />
-                  <span>Toplu Çap Et</span>
-                </button>
+              )}
+
+              <div className="bg-white rounded-[2.5rem] border border-stone-100 shadow-2xl overflow-hidden flex flex-col min-h-[500px]">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[800px]">
+                  <thead>
+                    <tr className="bg-stone-50 border-b border-stone-100">
+                      <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest">Şəkil</th>
+                      <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest">Kod</th>
+                      <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest">Məhsul Adı</th>
+                      <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest text-center">Çəki</th>
+                      <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest text-center">Say</th>
+                      <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest text-right">Qiymət</th>
+                      <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest text-center">Əməliyyat</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-50">
+                    {filteredProducts.map((p) => (
+                      <tr key={p.id} onClick={() => openDetailModal(p)} className="hover:bg-amber-50/20 transition-all group cursor-pointer">
+                        <td className="px-8 py-5">
+                          <div className="w-14 h-14 rounded-xl overflow-hidden border-2 border-stone-100 shadow-sm bg-stone-50 flex items-center justify-center">
+                            {p.imageUrl ? (
+                              <img 
+                                src={p.imageUrl} 
+                                referrerPolicy="no-referrer" 
+                                className="w-full h-full object-cover" 
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.display = 'none';
+                                  (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="text-stone-200"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></div>';
+                                }}
+                              />
+                            ) : (
+                              <div className="text-stone-200"><ImageIcon size={24} /></div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-8 py-5 font-black text-stone-500 text-xs uppercase tracking-widest">{p.code}</td>
+                        <td className="px-8 py-5"><p className="font-black text-stone-800 text-sm uppercase leading-none">{p.name}</p>{p.brilliant && <p className="text-[10px] text-amber-600 font-bold mt-1.5 flex items-center"><Gem size={12} className="mr-1.5"/> {p.brilliant}</p>}</td>
+                        <td className="px-8 py-5 font-black text-stone-900 text-sm text-center">{p.weight} gr</td>
+                        <td className="px-8 py-5 font-black text-stone-900 text-sm text-center">{p.stockCount}</td>
+                        <td className="px-8 py-5 text-stone-900 font-black text-right text-xl tracking-tighter">{(Number(p.price) || 0).toLocaleString()} ₼</td>
+                        <td className="px-8 py-5 text-center"><button onClick={(e) => { e.stopPropagation(); openDetailModal(p); }} className="p-4 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded-2xl transition-all shadow-sm"><Edit2 size={20} /></button></td>
+                      </tr>
+                    ))}
+                    {filteredProducts.length === 0 && <tr><td colSpan={7} className="px-10 py-20 text-center"><p className="text-stone-300 font-black uppercase text-xs tracking-widest">Məlumat tapılmadı</p></td></tr>}
+                  </tbody>
+                </table>
               </div>
             </div>
-          )}
-
-          <div className="bg-white rounded-[2.5rem] border border-stone-100 shadow-2xl overflow-hidden flex flex-col min-h-[500px]">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[800px]">
-              <thead>
-                <tr className="bg-stone-50 border-b border-stone-100">
-                  <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest">Şəkil</th>
-                  <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest">Kod</th>
-                  <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest">Məhsul Adı</th>
-                  <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest text-center">Çəki</th>
-                  <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest text-right">Qiymət</th>
-                  <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest text-center">Əməliyyat</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-stone-50">
-                {filteredProducts.map((p) => (
-                  <tr key={p.id} onClick={() => openDetailModal(p)} className="hover:bg-amber-50/20 transition-all group cursor-pointer">
-                    <td className="px-8 py-5">
-                      <div className="w-14 h-14 rounded-xl overflow-hidden border-2 border-stone-100 shadow-sm bg-stone-50 flex items-center justify-center">
-                        {p.imageUrl ? (
-                          <img 
-                            src={p.imageUrl} 
-                            referrerPolicy="no-referrer" 
-                            className="w-full h-full object-cover" 
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).style.display = 'none';
-                              (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="text-stone-200"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></div>';
-                            }}
-                          />
-                        ) : (
-                          <div className="text-stone-200"><ImageIcon size={24} /></div>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-8 py-5 font-black text-stone-500 text-xs uppercase tracking-widest">{p.code}</td>
-                    <td className="px-8 py-5"><p className="font-black text-stone-800 text-sm uppercase leading-none">{p.name}</p>{p.brilliant && <p className="text-[10px] text-amber-600 font-bold mt-1.5 flex items-center"><Gem size={12} className="mr-1.5"/> {p.brilliant}</p>}</td>
-                    <td className="px-8 py-5 font-black text-stone-900 text-sm text-center">{p.weight} gr</td>
-                    <td className="px-8 py-5 text-stone-900 font-black text-right text-xl tracking-tighter">{(Number(p.price) || 0).toLocaleString()} ₼</td>
-                    <td className="px-8 py-5 text-center"><button onClick={(e) => { e.stopPropagation(); openDetailModal(p); }} className="p-4 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded-2xl transition-all shadow-sm"><Edit2 size={20} /></button></td>
-                  </tr>
-                ))}
-                {filteredProducts.length === 0 && <tr><td colSpan={6} className="px-10 py-20 text-center"><p className="text-stone-300 font-black uppercase text-xs tracking-widest">Məlumat tapılmadı</p></td></tr>}
-              </tbody>
-            </table>
           </div>
-        </div>
-      </div>
-    )}
+        )}
+        </>
+      ) : (
+        /* SİFARİŞ ÜÇÜN ÇAP BÖLMƏSİ (NO-PRINT) */
+        <div className="max-w-6xl mx-auto w-full animate-in slide-in-from-bottom-8 duration-500 no-print space-y-8">
+            <div className="bg-white rounded-[2.5rem] border-2 border-stone-200 shadow-2xl p-6 md:p-10 space-y-10">
+                <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                   <div className="flex items-center space-x-4">
+                      <div className="w-12 h-12 bg-amber-500 text-stone-950 rounded-2xl flex items-center justify-center shadow-lg"><Printer size={28}/></div>
+                      <div>
+                        <h3 className="text-xl font-black text-stone-900 uppercase tracking-tighter">Stok Siyahısı Çapı</h3>
+                        <p className="text-[10px] font-bold text-stone-500 uppercase tracking-widest">80mm qəbz formatında siyahı hazırlayın</p>
+                      </div>
+                   </div>
+                   <button onClick={handlePrintStockList} className="bg-stone-900 text-amber-500 px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-black transition-all shadow-xl flex items-center justify-center border-b-4 border-stone-800">
+                      <Printer size={20} className="mr-3"/> SİYAHINI ÇAP ET
+                   </button>
+                </header>
 
+                {/* FİLTRLƏR */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-stone-50 p-6 rounded-[2rem] border-2 border-stone-100">
+                   <div className="space-y-2">
+                      <label className="text-[10px] font-black text-stone-600 uppercase ml-4">Kateqoriya</label>
+                      <div className="relative group">
+                        <Folder className="absolute left-5 top-1/2 -translate-y-1/2 text-stone-400 group-focus-within:text-amber-600 transition-colors" />
+                        <select value={printCategory} onChange={(e) => setPrintCategory(e.target.value)} className="w-full bg-white border-2 border-stone-200 rounded-2xl py-4 pl-14 pr-6 font-black text-stone-900 outline-none focus:border-amber-500 transition-all appearance-none">
+                           <option value="all">Bütün Kateqoriyalar</option>
+                           {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+                   </div>
+                   <div className="space-y-2">
+                      <label className="text-[10px] font-black text-stone-600 uppercase ml-4">Tədarükçü (Topdançı)</label>
+                      <div className="relative group">
+                        <Truck className="absolute left-5 top-1/2 -translate-y-1/2 text-stone-400 group-focus-within:text-amber-600 transition-colors" />
+                        <select value={printSupplier} onChange={(e) => setPrintSupplier(e.target.value)} className="w-full bg-white border-2 border-stone-200 rounded-2xl py-4 pl-14 pr-6 font-black text-stone-900 outline-none focus:border-amber-500 transition-all appearance-none">
+                           <option value="all">Bütün Tədarükçülər</option>
+                           {suppliers.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </div>
+                   </div>
+                </div>
+
+                {/* SİYAHI */}
+                <div className="space-y-4">
+                   <div className="flex justify-between items-center px-4">
+                      <h4 className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em]">Seçilmiş Mallar ({stockPrintList.length})</h4>
+                      <p className="text-[10px] font-black text-amber-600 uppercase">Cəmi Çəki: {stockPrintList.reduce((a,i)=>a+(Number(i.weight)||0), 0).toFixed(2)} gr</p>
+                   </div>
+                   <div className="grid grid-cols-1 gap-3">
+                      {stockPrintList.map((item, idx) => (
+                        <div key={item.id} className="flex items-center justify-between p-4 bg-white border-2 border-stone-100 rounded-[1.5rem] hover:border-amber-200 transition-all group shadow-sm">
+                           <div className="flex items-center space-x-4">
+                              <div className="w-10 h-10 bg-stone-50 rounded-xl flex items-center justify-center text-amber-500 font-black text-[10px] uppercase border border-stone-200">{item.code.slice(0,2)}</div>
+                              <div>
+                                 <p className="text-sm font-black text-stone-900 uppercase leading-none">{item.name}</p>
+                                 <div className="flex items-center space-x-2 mt-1.5">
+                                    <span className="text-[10px] font-black text-stone-500">{item.code}</span>
+                                    <span className="w-1 h-1 bg-stone-200 rounded-full"></span>
+                                    <span className="text-[10px] font-black text-amber-600">{item.weight} gr | {item.carat}K</span>
+                                    {item.brilliant && (
+                                       <>
+                                         <span className="w-1 h-1 bg-stone-200 rounded-full"></span>
+                                         <span className="text-[9px] font-bold text-amber-500 uppercase">{item.brilliant}</span>
+                                       </>
+                                    )}
+                                    {item.supplier && (
+                                       <span className="text-[9px] font-bold bg-stone-100 text-stone-400 px-2 py-0.5 rounded uppercase tracking-tighter ml-2">{item.supplier}</span>
+                                    )}
+                                 </div>
+                              </div>
+                           </div>
+                           <button onClick={() => removeFromPrintList(item.id)} className="p-3 text-stone-300 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={20}/></button>
+                        </div>
+                      ))}
+                      {stockPrintList.length === 0 && (
+                        <div className="p-20 text-center bg-stone-50 rounded-[2rem] border-4 border-dashed border-stone-100 opacity-40">
+                           <Printer size={48} className="mx-auto text-stone-200 mb-4" />
+                           <p className="text-sm font-black text-stone-400 uppercase tracking-widest">Bu kriteriyalara uyğun mal tapılmadı</p>
+                        </div>
+                      )}
+                   </div>
+                </div>
+            </div>
+        </div>
+      )}
       {showDetailModal && selectedProduct && (
         <div className="fixed inset-0 bg-stone-950/80 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
           <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[95vh] animate-in zoom-in-95">

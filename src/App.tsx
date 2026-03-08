@@ -12,7 +12,8 @@ import {
   Menu,
   ChevronLeft,
   LayoutGrid,
-  History
+  History,
+  Wallet
 } from 'lucide-react';
 import { Page, Product, Sale, Customer, ScrapGold, AppSettings } from '@/types';
 import SalesModule from '@/modules/Sales';
@@ -23,6 +24,7 @@ import ReturnsModule from '@/modules/Returns';
 import ScrapModule from '@/modules/Scrap';
 import SettingsModule from '@/modules/Settings';
 import ReportsModule from '@/modules/Reports';
+import DebtModule from '@/modules/Debt';
 import Login from '@/modules/Login';
 import { LogOut } from 'lucide-react';
 
@@ -394,6 +396,7 @@ const App: React.FC = () => {
     { id: Page.SoldProducts, icon: <History size={24} />, label: 'Satılan Mallar' },
     { id: Page.Return, icon: <RotateCcw size={24} />, label: 'Qaytarma' },
     { id: Page.Scrap, icon: <Flame size={24} />, label: 'Lom' },
+    { id: Page.Debt, icon: <Wallet size={24} />, label: 'Borclar' },
     { id: Page.Reports, icon: <BarChart3 size={24} />, label: 'Hesabat' },
     { id: Page.Settings, icon: <SettingsIcon size={24} />, label: 'Ayarlar' },
   ];
@@ -437,6 +440,7 @@ const App: React.FC = () => {
       case Page.SoldProducts: return <SoldProductsModule sales={sales} />;
       case Page.Return: return <ReturnsModule sales={sales} setSales={setSales} products={products} setProducts={setProducts} />;
       case Page.Scrap: return <ScrapModule scraps={scraps} setScraps={setScraps} />;
+      case Page.Debt: return <DebtModule customers={customers} setCustomers={setCustomers} />;
       case Page.Reports: return <ReportsModule sales={sales} products={products} scraps={scraps} customers={customers} />;
       case Page.Settings: return <SettingsModule 
         settings={settings} 
