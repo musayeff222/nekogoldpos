@@ -50,15 +50,11 @@ body {
   #receipt-print, #label-print {
     display: block !important;
     visibility: visible !important;
+    opacity: 1 !important;
     background: white !important;
     color: #000000 !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
-    image-rendering: pixelated !important;
-    -webkit-font-smoothing: none !important;
-    -moz-osx-font-smoothing: grayscale !important;
-    font-smoothing: none !important;
-    text-rendering: geometricPrecision !important;
     width: 100% !important;
   }
   

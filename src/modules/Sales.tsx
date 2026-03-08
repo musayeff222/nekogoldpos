@@ -244,7 +244,7 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
     window.focus();
     setTimeout(() => {
         window.print();
-    }, 10);
+    }, 250);
   };
 
   const subtotalValue = cart.reduce((acc, p) => acc + (Number(p.price) || 0), 0);

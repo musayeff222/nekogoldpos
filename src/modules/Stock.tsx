@@ -113,7 +113,10 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
   };
 
   const handlePrintStockList = () => {
-    window.print();
+    window.focus();
+    setTimeout(() => {
+      window.print();
+    }, 250);
   };
 
   const handleBulkPrint = () => {
@@ -599,76 +602,79 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
   return (
     <div className="space-y-4 md:space-y-6 pb-24 md:pb-0 animate-in fade-in duration-500">
       
-      {/* ÇAP KONTEYNERİ (80MM Receipt Design) */}
-      <div id="receipt-print" className="hidden print:block bg-white text-black">
-          <header className="text-center mb-6">
-              <h1 className="brand-font text-3xl font-black mb-1">{settings.shopName || 'NEKO GOLD'}</h1>
-              <h2 className="text-sm font-bold tracking-widest mb-4">STOKDA OLAN MALLAR</h2>
-              <div className="text-left text-xs border-b border-black pb-1 mb-4">
-                  <span>TARİX: {new Date().toLocaleDateString('az-AZ')} {printCategory !== 'all' ? `| KAT: ${printCategory}` : ''} {printSupplier !== 'all' ? `| TƏD: ${printSupplier}` : ''}</span>
-              </div>
-          </header>
+      {/* ÇAP KONTEYNERİ (80MM Receipt Design) - PORTAL */}
+      {viewMode === 'printList' && createPortal(
+        <div id="receipt-print" className="bg-white text-black">
+            <header className="text-center mb-6">
+                <h1 className="brand-font text-3xl font-black mb-1">{settings.shopName || 'NEKO GOLD'}</h1>
+                <h2 className="text-sm font-bold tracking-widest mb-4">STOKDA OLAN MALLAR</h2>
+                <div className="text-left text-xs border-b border-black pb-1 mb-4">
+                    <span>TARİX: {new Date().toLocaleDateString('az-AZ')} {printCategory !== 'all' ? `| KAT: ${printCategory}` : ''} {printSupplier !== 'all' ? `| TƏD: ${printSupplier}` : ''}</span>
+                </div>
+            </header>
 
-          <section className="mb-4">
-              <table className="receipt-table">
-                  <thead>
-                      <tr>
-                          <th style={{ width: '15%' }}>KOD</th>
-                          <th style={{ width: '30%' }}>MƏHSUL ADI</th>
-                          <th style={{ width: '8%' }}>ƏYAR</th>
-                          <th style={{ width: '15%' }}>ÇƏKİ</th>
-                          <th style={{ width: '10%' }}>SAY</th>
-                          <th style={{ width: '10%' }}>BR</th>
-                          <th style={{ width: '12%' }}>V</th>
-                      </tr>
-                  </thead>
-                  <tbody>
-                      {stockPrintList.map((item, idx) => (
-                          <tr key={idx}>
-                              <td>{item.code}</td>
-                              <td style={{ textAlign: 'left', fontWeight: 'bold' }}>{item.name}</td>
-                              <td>{item.carat}</td>
-                              <td style={{ fontWeight: 'bold' }}>{item.weight}g</td>
-                              <td style={{ fontWeight: 'bold' }}>{item.stockCount}</td>
-                              <td>{item.brilliant ? '*' : ''}</td>
-                              <td>
-                                  <div style={{ width: '15px', height: '15px', border: '1px solid #ccc', margin: 'auto' }}></div>
-                              </td>
-                          </tr>
-                      ))}
-                      {stockPrintList.length < 3 && Array.from({ length: 3 - stockPrintList.length }).map((_, i) => (
-                        <tr key={`empty-${i}`} style={{ height: '25px' }}>
-                          <td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+            <section className="mb-4">
+                <table className="receipt-table">
+                    <thead>
+                        <tr>
+                            <th style={{ width: '15%' }}>KOD</th>
+                            <th style={{ width: '30%' }}>MƏHSUL ADI</th>
+                            <th style={{ width: '8%' }}>ƏYAR</th>
+                            <th style={{ width: '15%' }}>ÇƏKİ</th>
+                            <th style={{ width: '10%' }}>SAY</th>
+                            <th style={{ width: '10%' }}>BR</th>
+                            <th style={{ width: '12%' }}>V</th>
                         </tr>
-                      ))}
-                  </tbody>
-              </table>
-          </section>
+                    </thead>
+                    <tbody>
+                        {stockPrintList.map((item, idx) => (
+                            <tr key={idx}>
+                                <td>{item.code}</td>
+                                <td style={{ textAlign: 'left', fontWeight: 'bold' }}>{item.name}</td>
+                                <td>{item.carat}</td>
+                                <td style={{ fontWeight: 'bold' }}>{item.weight}g</td>
+                                <td style={{ fontWeight: 'bold' }}>{item.stockCount}</td>
+                                <td>{item.brilliant ? '*' : ''}</td>
+                                <td>
+                                    <div style={{ width: '15px', height: '15px', border: '1px solid #ccc', margin: 'auto' }}></div>
+                                </td>
+                            </tr>
+                        ))}
+                        {stockPrintList.length < 3 && Array.from({ length: 3 - stockPrintList.length }).map((_, i) => (
+                          <tr key={`empty-${i}`} style={{ height: '25px' }}>
+                            <td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+                          </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </section>
 
-          <section className="mb-8">
-              <div className="flex justify-between items-center text-xs border-b border-black pb-2">
-                  <div className="flex flex-col">
-                      <span className="uppercase text-[9px]">CƏMİ SAY:</span>
-                      <span className="text-sm font-bold">{stockPrintList.reduce((acc, i) => acc + (Number(i.stockCount) || 0), 0)} ədəd</span>
-                  </div>
-                  <div className="flex flex-row items-end gap-2">
-                      <span className="uppercase text-[9px]">CƏMİ ÇƏKİ:</span>
-                      <span className="text-sm font-bold">{stockPrintList.reduce((acc, i) => acc + (Number(i.weight) || 0), 0).toFixed(2)} gr</span>
-                  </div>
-              </div>
-          </section>
+            <section className="mb-8">
+                <div className="flex justify-between items-center text-xs border-b border-black pb-2">
+                    <div className="flex flex-col">
+                        <span className="uppercase text-[9px]">CƏMİ SAY:</span>
+                        <span className="text-sm font-bold">{stockPrintList.reduce((acc, i) => acc + (Number(i.stockCount) || 0), 0)} ədəd</span>
+                    </div>
+                    <div className="flex flex-row items-end gap-2">
+                        <span className="uppercase text-[9px]">CƏMİ ÇƏKİ:</span>
+                        <span className="text-sm font-bold">{stockPrintList.reduce((acc, i) => acc + (Number(i.weight) || 0), 0).toFixed(2)} gr</span>
+                    </div>
+                </div>
+            </section>
 
-          <footer className="mt-12 flex justify-between px-2 text-[10px] font-bold uppercase">
-              <div className="flex flex-col items-center">
-                  <div className="w-24 border-b border-black mb-1"></div>
-                  <span>HAZIRLAYAN</span>
-              </div>
-              <div className="flex flex-col items-center">
-                  <div className="w-24 border-b border-black mb-1"></div>
-                  <span>TƏSDİQLƏYƏN</span>
-              </div>
-          </footer>
-      </div>
+            <footer className="mt-12 flex justify-between px-2 text-[10px] font-bold uppercase">
+                <div className="flex flex-col items-center">
+                    <div className="w-24 border-b border-black mb-1"></div>
+                    <span>HAZIRLAYAN</span>
+                </div>
+                <div className="flex flex-col items-center">
+                    <div className="w-24 border-b border-black mb-1"></div>
+                    <span>TƏSDİQLƏYƏN</span>
+                </div>
+            </footer>
+        </div>,
+        document.body
+      )}
 
       {/* ÜST TABLAR (NO-PRINT) */}
       <div className="flex justify-center no-print">
