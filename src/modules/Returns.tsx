@@ -75,12 +75,21 @@ const ReturnsModule: React.FC<ReturnsProps> = ({ sales, setSales, products, setP
     // 2. Məhsulu stoka əlavə et
     setProducts((prev: Product[]) => prev.map((p: Product) => {
         if (p.id === selectedSale.productId) {
-            return { 
+            const updatedProduct = { 
                 ...p, 
                 stockCount: p.stockCount + 1, 
                 code: finalCode,
                 logs: [{ date: new Date().toISOString(), action: `${actionText} prosesi ilə geri qayıtdı. ${note}` }, ...(p.logs || [])]
             };
+            
+            // Save to server immediately
+            fetch(`/api/products/${updatedProduct.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ product: updatedProduct })
+            }).catch(err => console.error('Failed to update product in database during return:', err));
+
+            return updatedProduct;
         }
         return p;
     }));

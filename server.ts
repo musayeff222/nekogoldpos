@@ -277,6 +277,84 @@ async function startServer() {
     }
   });
 
+  // --- PRODUCT MANAGEMENT ENDPOINTS ---
+  app.post('/api/products/add', async (req: Request, res: Response) => {
+    const { product } = req.body;
+    if (!product || !product.id) {
+      return res.status(400).json({ error: 'Product data is required' });
+    }
+
+    try {
+      const content = JSON.stringify(product);
+      await pool.execute(
+        'INSERT INTO products (id, content) VALUES (?, ?)',
+        [product.id, content]
+      );
+      res.json({ status: 'success', message: 'Product added successfully' });
+    } catch (error: any) {
+      console.error('Failed to add product:', error);
+      res.status(500).json({ error: 'Failed to add product', details: error.message });
+    }
+  });
+
+  app.put('/api/products/:id', async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { product } = req.body;
+    if (!product) {
+      return res.status(400).json({ error: 'Product data is required' });
+    }
+
+    try {
+      const content = JSON.stringify(product);
+      await pool.execute(
+        'UPDATE products SET content = ? WHERE id = ?',
+        [content, id]
+      );
+      res.json({ status: 'success', message: 'Product updated successfully' });
+    } catch (error: any) {
+      console.error('Failed to update product:', error);
+      res.status(500).json({ error: 'Failed to update product', details: error.message });
+    }
+  });
+
+  app.delete('/api/products/:id', async (req: Request, res: Response) => {
+    const { id } = req.params;
+    try {
+      await pool.execute('DELETE FROM products WHERE id = ?', [id]);
+      res.json({ status: 'success', message: 'Product deleted successfully' });
+    } catch (error: any) {
+      console.error('Failed to delete product:', error);
+      res.status(500).json({ error: 'Failed to delete product', details: error.message });
+    }
+  });
+
+  app.post('/api/products/bulk-update', async (req: Request, res: Response) => {
+    const { products } = req.body;
+    if (!Array.isArray(products)) {
+      return res.status(400).json({ error: 'Products array is required' });
+    }
+
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      for (const product of products) {
+        const content = JSON.stringify(product);
+        await connection.execute(
+          'UPDATE products SET content = ? WHERE id = ?',
+          [content, product.id]
+        );
+      }
+      await connection.commit();
+      res.json({ status: 'success', message: `${products.length} products updated successfully` });
+    } catch (error: any) {
+      await connection.rollback();
+      console.error('Failed to bulk update products:', error);
+      res.status(500).json({ error: 'Failed to bulk update products', details: error.message });
+    } finally {
+      connection.release();
+    }
+  });
+
   // Generic Data Sync Endpoints
   app.get('/api/data/:type', async (req: Request, res: Response) => {
     const { type } = req.params;

@@ -180,9 +180,21 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
     setSales([...newSalesRecords, ...sales]);
     
     const cartIds = cart.map(p => p.id);
-    setProducts(prevProducts => prevProducts.map(p => 
-      cartIds.includes(p.id) ? { ...p, stockCount: 0 } : p
-    ));
+    setProducts(prevProducts => prevProducts.map(p => {
+      if (cartIds.includes(p.id)) {
+        const updatedProduct = { ...p, stockCount: 0 };
+        
+        // Save to server immediately
+        fetch(`/api/products/${updatedProduct.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ product: updatedProduct })
+        }).catch(err => console.error('Failed to update product in database during sale:', err));
+
+        return updatedProduct;
+      }
+      return p;
+    }));
 
     setShowCreditModal(false);
     setStep(4);

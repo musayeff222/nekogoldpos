@@ -226,41 +226,9 @@ const App: React.FC = () => {
   };
 
   // Sync data to backend on changes - ONLY after initial load is complete
-  useEffect(() => {
-    if (!isLoaded || products === null) return;
-    
-    const currentData = JSON.stringify(products);
-    if (currentData === lastSyncedProducts.current) return;
-
-    const syncData = async () => {
-      setIsSyncing(true);
-      try {
-        const payload = JSON.stringify({ data: products });
-        console.log(`Syncing products, payload size: ${(payload.length / 1024).toFixed(2)} KB`);
-        
-        const res = await fetch('/api/data/products', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: payload
-        });
-        if (!res.ok) {
-          const errorData = await res.json().catch(() => ({}));
-          throw new Error(errorData.details || errorData.error || 'Sync failed');
-        }
-        lastSyncedProducts.current = currentData;
-        setSyncError(null);
-      } catch (err: any) {
-        console.error('Failed to sync products:', err);
-        setSyncError(`Məlumatlar yadda saxlanılmadı: ${err.message}`);
-      } finally {
-        setIsSyncing(false);
-      }
-    };
-    
-    const timeoutId = setTimeout(syncData, 1000);
-    return () => clearTimeout(timeoutId);
-  }, [products, isLoaded]);
-
+  // NOTE: Products are now handled individually in modules (Stock, Sales, Returns) 
+  // to avoid performance issues with large Base64 images in a single massive payload.
+  
   useEffect(() => {
     if (!isLoaded || sales === null) return;
 

@@ -24,6 +24,8 @@ export interface Product {
   price: number | '';
   stockCount: number;
   isArchived?: boolean;
+  isReturned?: boolean;
+  returnReason?: string;
   imageUrl?: string;
   purchaseDate: string; // Alış tarixi
   logs: ProductLog[]; // Dəyişiklik tarixçəsi

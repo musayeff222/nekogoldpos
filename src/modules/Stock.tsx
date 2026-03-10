@@ -141,6 +141,24 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     
     setProducts(updatedProducts);
     
+    // Save to server immediately (bulk)
+    const saveBulkUpdate = async () => {
+      try {
+        const productsToUpdate = updatedProducts.filter(p => p.type === activeFolder && !p.isArchived);
+        const res = await fetch('/api/products/bulk-update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ products: productsToUpdate })
+        });
+        if (!res.ok) throw new Error('Failed to bulk update in database');
+        console.log('Bulk products updated successfully in database');
+      } catch (err) {
+        console.error('Database bulk update error:', err);
+        alert('Qiymətlər bazada yenilənmədi. Yenidən cəhd edin.');
+      }
+    };
+    saveBulkUpdate();
+    
     // Prepare for printing
     const printList = productsInFolder.map(p => {
       const newPrice = Math.round((Number(p.weight) * pricePerGram) / 10) * 10;
@@ -242,6 +260,23 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
       purchaseDate: newProduct.purchaseDate,
       logs: [{ date: new Date().toISOString(), action: 'Sistemə əlavə edildi' }]
     };
+
+    // Save to server immediately
+    const saveProduct = async () => {
+      try {
+        const res = await fetch('/api/products/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ product: productToAdd })
+        });
+        if (!res.ok) throw new Error('Failed to save to database');
+        console.log('Product saved successfully to database');
+      } catch (err) {
+        console.error('Database save error:', err);
+        alert('Məhsul bazaya əlavə edilmədi. Yenidən cəhd edin.');
+      }
+    };
+    saveProduct();
 
     setProducts((prev: Product[]) => [productToAdd, ...prev]);
     setLastAddedProduct(productToAdd);
@@ -395,11 +430,47 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     setShowDetailModal(true);
   };
 
+  const handleDeleteProduct = async (id: string) => {
+    if (!confirm('Bu məhsulu silmək istədiyinizə əminsiniz?')) return;
+
+    try {
+      const res = await fetch(`/api/products/${id}`, {
+        method: 'DELETE'
+      });
+
+      if (!res.ok) throw new Error('Failed to delete product from database');
+
+      setProducts(prev => prev.filter(p => p.id !== id));
+      alert('Məhsul uğurla silindi.');
+    } catch (err) {
+      console.error('Delete product error:', err);
+      alert('Məhsul silinərkən xəta baş verdi.');
+    }
+  };
+
   const handleUpdateProduct = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedProduct || !editForm.code || !editForm.name) return;
 
     const updatedProduct: Product = { ...selectedProduct, ...editForm } as Product;
+    
+    // Save to server immediately
+    const saveUpdate = async () => {
+      try {
+        const res = await fetch(`/api/products/${updatedProduct.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ product: updatedProduct })
+        });
+        if (!res.ok) throw new Error('Failed to update in database');
+        console.log('Product updated successfully in database');
+      } catch (err) {
+        console.error('Database update error:', err);
+        alert('Məhsul bazada yenilənmədi. Yenidən cəhd edin.');
+      }
+    };
+    saveUpdate();
+
     setProducts((prev: Product[]) => prev.map((p: Product) => p.id === selectedProduct.id ? updatedProduct : p));
     setSelectedProduct(updatedProduct);
     alert("Məhsul məlumatları uğurla yeniləndi.");
@@ -408,9 +479,21 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
   const handleMoveToArchive = () => {
     if (selectedForArchive.length === 0) return;
     
-    setProducts(prev => prev.map(p => 
-      selectedForArchive.includes(p.id) ? { ...p, isArchived: true } : p
-    ));
+    setProducts(prev => prev.map(p => {
+      if (selectedForArchive.includes(p.id)) {
+        const updatedProduct = { ...p, isArchived: true };
+        
+        // Save to server immediately
+        fetch(`/api/products/${updatedProduct.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ product: updatedProduct })
+        }).catch(err => console.error('Failed to update product in database during archive:', err));
+
+        return updatedProduct;
+      }
+      return p;
+    }));
     
     setSelectedForArchive([]);
     setShowMoveToArchiveModal(false);
@@ -838,7 +921,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                       <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest">Kod</th>
                       <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest">Məhsul Adı</th>
                       <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest text-center">Çəki</th>
-                      <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest text-center">Say</th>
+                      <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest text-center">Əyar</th>
                       <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest text-right">Qiymət</th>
                       <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest text-center">Əməliyyat</th>
                     </tr>
@@ -864,11 +947,36 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                           </div>
                         </td>
                         <td className="px-8 py-5 font-black text-stone-500 text-xs uppercase tracking-widest">{p.code}</td>
-                        <td className="px-8 py-5"><p className="font-black text-stone-800 text-sm uppercase leading-none">{p.name}</p>{p.brilliant && <p className="text-[10px] text-amber-600 font-bold mt-1.5 flex items-center"><Gem size={12} className="mr-1.5"/> {p.brilliant}</p>}</td>
+                        <td className="px-8 py-5">
+                          <div className="flex flex-col">
+                            <p className="font-black text-stone-800 text-sm uppercase leading-none">{p.name}</p>
+                            <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                              {p.brilliant && <p className="text-[10px] text-amber-600 font-bold flex items-center"><Gem size={12} className="mr-1.5"/> {p.brilliant}</p>}
+                              {p.isReturned && (
+                                <div className="bg-red-500 text-white text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-widest flex items-center">
+                                  <AlertCircle size={10} className="mr-1" /> VAZVİRAT OLUNDU
+                                </div>
+                              )}
+                            </div>
+                            {p.isReturned && p.returnReason && (
+                              <p className="text-[9px] font-bold text-red-400 uppercase mt-1 italic">Səbəb: {p.returnReason}</p>
+                            )}
+                          </div>
+                        </td>
                         <td className="px-8 py-5 font-black text-stone-900 text-sm text-center">{p.weight} gr</td>
-                        <td className="px-8 py-5 font-black text-stone-900 text-sm text-center">{p.stockCount}</td>
+                        <td className="px-8 py-5 font-black text-stone-900 text-sm text-center">
+                          <div className="flex flex-col items-center">
+                            <span className="text-amber-600">{p.carat}</span>
+                            {p.brilliant && <span className="text-[9px] text-stone-400 font-bold uppercase mt-0.5">{p.brilliant}</span>}
+                          </div>
+                        </td>
                         <td className="px-8 py-5 text-stone-900 font-black text-right text-xl tracking-tighter">{(Number(p.price) || 0).toLocaleString()} ₼</td>
-                        <td className="px-8 py-5 text-center"><button onClick={(e) => { e.stopPropagation(); openDetailModal(p); }} className="p-4 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded-2xl transition-all shadow-sm"><Edit2 size={20} /></button></td>
+                        <td className="px-8 py-5 text-center">
+                          <div className="flex items-center justify-center space-x-2">
+                            <button onClick={(e) => { e.stopPropagation(); openDetailModal(p); }} className="p-4 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded-2xl transition-all shadow-sm"><Edit2 size={20} /></button>
+                            <button onClick={(e) => { e.stopPropagation(); handleDeleteProduct(p.id); }} className="p-4 bg-red-50 text-red-600 hover:bg-red-100 rounded-2xl transition-all shadow-sm"><Trash2 size={20} /></button>
+                          </div>
+                        </td>
                       </tr>
                     ))}
                     {filteredProducts.length === 0 && <tr><td colSpan={7} className="px-10 py-20 text-center"><p className="text-stone-300 font-black uppercase text-xs tracking-widest">Məlumat tapılmadı</p></td></tr>}
@@ -1024,6 +1132,29 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                             className="w-5 h-5 accent-amber-500 rounded cursor-pointer"
                           />
                           <label htmlFor="isArchived" className="text-xs font-black text-stone-600 uppercase cursor-pointer select-none">Bu məhsulu arxivə daşı (Toplu çapda görünməyəcək)</label>
+                       </div>
+                       <div className="md:col-span-2 flex flex-col space-y-3 bg-red-50 p-4 rounded-2xl border border-red-100">
+                          <div className="flex items-center space-x-3">
+                             <input 
+                               type="checkbox" 
+                               id="isReturned" 
+                               checked={!!editForm.isReturned} 
+                               onChange={(e) => setEditForm({...editForm, isReturned: e.target.checked})} 
+                               className="w-5 h-5 accent-red-500 rounded cursor-pointer"
+                             />
+                             <label htmlFor="isReturned" className="text-xs font-black text-red-600 uppercase cursor-pointer select-none">Məhsul Geri Qaytarılıb (Vazvirat)</label>
+                          </div>
+                          {editForm.isReturned && (
+                            <div className="space-y-1.5 animate-in slide-in-from-top-2">
+                              <label className="text-[9px] font-black text-red-400 uppercase ml-2">Qaytarılma Səbəbi</label>
+                              <textarea 
+                                value={editForm.returnReason || ''} 
+                                onChange={(e) => setEditForm({...editForm, returnReason: e.target.value})} 
+                                placeholder="Səbəbi bura yazın..."
+                                className="w-full bg-white border-2 border-red-100 rounded-xl py-3 px-4 font-bold text-stone-800 outline-none focus:border-red-300 transition-all text-xs h-20 resize-none"
+                              />
+                            </div>
+                          )}
                        </div>
                   </div>
                </form>
