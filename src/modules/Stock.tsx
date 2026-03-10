@@ -31,7 +31,9 @@ import {
   Maximize2,
   AlertCircle,
   User,
-  Truck
+  Truck,
+  Archive,
+  ArrowDownToLine
 } from 'lucide-react';
 import { Product, ProductType, AppSettings, ProductLog, Sale } from '@/types';
 import { LabelPrint } from '@/components/LabelPrint';
@@ -51,6 +53,9 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [lastAddedProduct, setLastAddedProduct] = useState<Product | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
+  const [showMoveToArchiveModal, setShowMoveToArchiveModal] = useState(false);
+  const [selectedForArchive, setSelectedForArchive] = useState<string[]>([]);
   
   // Təkrarlanan kod üçün xəta halları
   const [duplicateInStock, setDuplicateInStock] = useState<Product | null>(null);
@@ -91,7 +96,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
   // Update print list when filters change
   useEffect(() => {
     if (viewMode === 'printList') {
-      let filtered = [...activeProducts];
+      let filtered = activeProducts.filter(p => !p.isArchived);
       
       if (printSupplier !== 'all') {
         filtered = filtered.filter(p => p.supplier === printSupplier);
@@ -123,11 +128,11 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     if (!bulkPricePerGram || !activeFolder) return;
     
     const pricePerGram = Number(bulkPricePerGram);
-    const productsInFolder = activeProducts.filter(p => p.type === activeFolder);
+    const productsInFolder = activeProducts.filter(p => p.type === activeFolder && !p.isArchived);
     
     // Update products in state
     const updatedProducts = products.map(p => {
-      if (p.type === activeFolder) {
+      if (p.type === activeFolder && !p.isArchived) {
         const newPrice = Math.round((Number(p.weight) * pricePerGram) / 10) * 10;
         return { ...p, price: newPrice };
       }
@@ -256,24 +261,25 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
   };
 
   const resetForm = () => {
-    const defaultGroup = settings.productGroups?.[0];
-    const defaultType = defaultGroup?.name || '';
-    const prefix = defaultGroup?.prefix || '';
-    
-    setNewProduct(prev => ({
-      ...prev,
-      code: getNextCode(prefix),
-      name: '',
-      // Keep the previous carat selection
-      carat: prev.carat,
-      type: defaultType,
-      supplier: settings.suppliers[0] || '',
-      brilliant: '',
-      weight: '',
-      price: '',
-      imageUrl: '',
-      purchaseDate: new Date().toISOString().split('T')[0]
-    }));
+    setNewProduct(prev => {
+      const currentGroup = settings.productGroups.find(g => g.name === prev.type) || settings.productGroups[0];
+      const prefix = currentGroup?.prefix || '';
+      
+      return {
+        ...prev,
+        code: getNextCode(prefix),
+        name: '',
+        // Keep the previous selections
+        carat: prev.carat,
+        type: prev.type,
+        supplier: prev.supplier,
+        brilliant: '',
+        weight: '',
+        price: '',
+        imageUrl: '',
+        purchaseDate: new Date().toISOString().split('T')[0]
+      };
+    });
     setDuplicateInStock(null);
     setDuplicateInSales(null);
     stopCamera();
@@ -399,8 +405,24 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     alert("Məhsul məlumatları uğurla yeniləndi.");
   };
 
+  const handleMoveToArchive = () => {
+    if (selectedForArchive.length === 0) return;
+    
+    setProducts(prev => prev.map(p => 
+      selectedForArchive.includes(p.id) ? { ...p, isArchived: true } : p
+    ));
+    
+    setSelectedForArchive([]);
+    setShowMoveToArchiveModal(false);
+    alert(`${selectedForArchive.length} məhsul arxivə daşındı.`);
+  };
+
   const getFilteredProducts = () => {
     let list = activeFolder ? activeProducts.filter(p => p.type === activeFolder) : activeProducts;
+    
+    // Filter by archive status
+    list = list.filter(p => !!p.isArchived === showArchived);
+
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
       list = list.filter(p => 
@@ -698,12 +720,30 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
 
       {viewMode === 'folders' ? (
         <>
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 no-print">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 no-print">
             <div className="flex items-center space-x-2 text-sm">
-              <button onClick={() => {setActiveFolder(null); setSearchTerm('');}} className={`font-black uppercase tracking-tighter ${!activeFolder ? 'text-amber-600' : 'text-stone-400 hover:text-stone-600'}`}>Stok</button>
+              <button onClick={() => {setActiveFolder(null); setSearchTerm(''); setShowArchived(false);}} className={`font-black uppercase tracking-tighter ${!activeFolder ? 'text-amber-600' : 'text-stone-400 hover:text-stone-600'}`}>Stok</button>
               {activeFolder && <><span className="text-stone-300">/</span><span className="text-stone-800 font-black uppercase tracking-tighter">{activeFolder}</span></>}
             </div>
-            <button onClick={() => { setDuplicateInStock(null); setDuplicateInSales(null); setIsAddingNew(true); }} className="w-full sm:w-auto bg-stone-900 text-amber-500 px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-black transition-all flex items-center justify-center shadow-xl"><Plus className="w-5 h-5 mr-2" /> Yeni Məhsul</button>
+            <div className="flex items-center space-x-3">
+              {activeFolder && (
+                <div className="bg-white p-1 rounded-xl border border-stone-200 flex">
+                  <button 
+                    onClick={() => setShowArchived(false)}
+                    className={`px-4 py-2 rounded-lg font-black text-[10px] uppercase tracking-widest transition-all ${!showArchived ? 'bg-stone-900 text-amber-500 shadow-md' : 'text-stone-400 hover:bg-stone-50'}`}
+                  >
+                    Əsas
+                  </button>
+                  <button 
+                    onClick={() => setShowArchived(true)}
+                    className={`px-4 py-2 rounded-lg font-black text-[10px] uppercase tracking-widest transition-all ${showArchived ? 'bg-stone-900 text-amber-500 shadow-md' : 'text-stone-400 hover:bg-stone-50'}`}
+                  >
+                    Arxiv
+                  </button>
+                </div>
+              )}
+              <button onClick={() => { setDuplicateInStock(null); setDuplicateInSales(null); setIsAddingNew(true); }} className="w-full sm:w-auto bg-stone-900 text-amber-500 px-8 py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-black transition-all flex items-center justify-center shadow-xl"><Plus className="w-5 h-5 mr-2" /> Yeni Məhsul</button>
+            </div>
           </div>
 
           <div className="relative group no-print">
@@ -714,12 +754,17 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
           {!activeFolder && !searchTerm ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-6 no-print">
               {(settings.productGroups || []).map((group) => {
-                const countInStock = activeProducts.filter(p => p.type === group.name).length;
+                const groupProducts = activeProducts.filter(p => p.type === group.name);
+                const activeCount = groupProducts.filter(p => !p.isArchived).length;
+                const archivedCount = groupProducts.filter(p => p.isArchived).length;
                 return (
                   <button key={group.name} onClick={() => setActiveFolder(group.name)} className="bg-white p-6 rounded-[2.5rem] border border-stone-200 shadow-sm hover:shadow-2xl hover:border-amber-300 transition-all flex flex-col items-center group relative overflow-hidden">
                     <div className="w-16 h-16 md:w-20 md:h-20 bg-stone-50 rounded-2xl flex items-center justify-center text-amber-500 mb-4 group-hover:scale-110 group-hover:bg-amber-50 transition-all"><Folder className="w-8 h-8 md:w-10 md:h-10" /></div>
                     <h4 className="font-black text-stone-800 text-xs md:text-sm uppercase tracking-tighter">{group.name}</h4>
-                    <p className={`text-[10px] mt-1 font-bold ${countInStock > 0 ? 'text-amber-600' : 'text-stone-300'}`}>{countInStock} Çeşid</p>
+                    <div className="flex flex-col items-center mt-1">
+                      <p className={`text-[10px] font-bold ${activeCount > 0 ? 'text-amber-600' : 'text-stone-300'}`}>{activeCount} Aktiv</p>
+                      {archivedCount > 0 && <p className="text-[9px] font-bold text-stone-400">{archivedCount} Arxiv</p>}
+                    </div>
                   </button>
                 );
               })}
@@ -728,36 +773,59 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
             <div className="space-y-4 no-print">
               {activeFolder && (
                 <div className="bg-white p-6 rounded-[2rem] border border-stone-100 shadow-xl flex flex-col md:flex-row items-center justify-between gap-6 animate-in slide-in-from-top-4">
-                  <div className="flex items-center space-x-4">
-                    <div className="w-12 h-12 bg-amber-500 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-amber-200">
-                      <Printer size={24} />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-black text-stone-900 uppercase tracking-widest">Toplu Qiymət & Çap</h3>
-                      <p className="text-[10px] font-bold text-stone-400 uppercase mt-1">Bütün "{activeFolder}" kateqoriyası üçün</p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex flex-1 max-w-md items-center space-x-3">
-                    <div className="relative flex-1">
-                      <Scale className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 w-4 h-4" />
-                      <input 
-                        type="number" 
-                        placeholder="1 qr Qiyməti (₼)" 
-                        value={bulkPricePerGram}
-                        onChange={(e) => setBulkPricePerGram(e.target.value === '' ? '' : Number(e.target.value))}
-                        className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-3 pl-10 pr-4 font-black text-sm outline-none focus:border-amber-400 transition-all"
-                      />
-                    </div>
-                    <button 
-                      onClick={handleBulkPrint}
-                      disabled={!bulkPricePerGram}
-                      className={`px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg flex items-center space-x-2 ${bulkPricePerGram ? 'bg-stone-900 text-amber-500 hover:bg-black' : 'bg-stone-100 text-stone-300 cursor-not-allowed'}`}
-                    >
-                      <Zap size={16} />
-                      <span>Toplu Çap Et</span>
-                    </button>
-                  </div>
+                  {showArchived ? (
+                    <>
+                      <div className="flex items-center space-x-4">
+                        <div className="w-12 h-12 bg-stone-900 text-amber-500 rounded-2xl flex items-center justify-center shadow-lg">
+                          <Archive size={24} />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-black text-stone-900 uppercase tracking-widest">Arxiv İdarəetməsi</h3>
+                          <p className="text-[10px] font-bold text-stone-400 uppercase mt-1">"{activeFolder}" kateqoriyasındakı arxivlər</p>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => setShowMoveToArchiveModal(true)}
+                        className="px-8 py-4 bg-amber-500 text-stone-950 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-amber-400 transition-all shadow-xl flex items-center space-x-3"
+                      >
+                        <ArrowDownToLine size={20} />
+                        <span>Buraya Daşı</span>
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-center space-x-4">
+                        <div className="w-12 h-12 bg-amber-500 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-amber-200">
+                          <Printer size={24} />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-black text-stone-900 uppercase tracking-widest">Toplu Qiymət & Çap</h3>
+                          <p className="text-[10px] font-bold text-stone-400 uppercase mt-1">Bütün "{activeFolder}" kateqoriyası üçün</p>
+                        </div>
+                      </div>
+                      
+                      <div className="flex flex-1 max-w-md items-center space-x-3">
+                        <div className="relative flex-1">
+                          <Scale className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 w-4 h-4" />
+                          <input 
+                            type="number" 
+                            placeholder="1 qr Qiyməti (₼)" 
+                            value={bulkPricePerGram}
+                            onChange={(e) => setBulkPricePerGram(e.target.value === '' ? '' : Number(e.target.value))}
+                            className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-3 pl-10 pr-4 font-black text-sm outline-none focus:border-amber-400 transition-all"
+                          />
+                        </div>
+                        <button 
+                          onClick={handleBulkPrint}
+                          disabled={!bulkPricePerGram}
+                          className={`px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg flex items-center space-x-2 ${bulkPricePerGram ? 'bg-stone-900 text-amber-500 hover:bg-black' : 'bg-stone-100 text-stone-300 cursor-not-allowed'}`}
+                        >
+                          <Zap size={16} />
+                          <span>Toplu Çap Et</span>
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -947,6 +1015,16 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                        <div className="space-y-1.5"><label className="text-[10px] font-black text-stone-400 uppercase ml-2">Çəki (gr)</label><input type="number" step="0.001" value={editForm.weight || ''} onChange={(e) => setEditForm({...editForm, weight: Number(e.target.value)})} className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-4 px-5 font-black text-stone-800 outline-none" /></div>
                        <div className="space-y-1.5"><label className="text-[10px] font-black text-stone-400 uppercase ml-2">Tədarükçü</label><select value={editForm.supplier || ''} onChange={(e) => setEditForm({...editForm, supplier: e.target.value})} className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-4 px-5 font-black text-stone-800 outline-none cursor-pointer">{settings.suppliers.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
                        <div className="space-y-1.5 md:col-span-2"><label className="text-[10px] font-black text-amber-600 uppercase ml-2">Qiymət (₼)</label><input type="number" value={editForm.price || ''} onChange={(e) => setEditForm({...editForm, price: Number(e.target.value)})} className="w-full bg-amber-50 border-2 border-amber-200 rounded-xl py-6 px-6 font-black text-4xl text-amber-900 text-center outline-none" /></div>
+                       <div className="md:col-span-2 flex items-center space-x-3 bg-stone-50 p-4 rounded-2xl border border-stone-100">
+                          <input 
+                            type="checkbox" 
+                            id="isArchived" 
+                            checked={!!editForm.isArchived} 
+                            onChange={(e) => setEditForm({...editForm, isArchived: e.target.checked})} 
+                            className="w-5 h-5 accent-amber-500 rounded cursor-pointer"
+                          />
+                          <label htmlFor="isArchived" className="text-xs font-black text-stone-600 uppercase cursor-pointer select-none">Bu məhsulu arxivə daşı (Toplu çapda görünməyəcək)</label>
+                       </div>
                   </div>
                </form>
             </main>
@@ -966,6 +1044,68 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
               </button>
               <button type="button" onClick={() => setShowDetailModal(false)} className="flex-1 px-8 py-4 rounded-xl font-black text-stone-400 uppercase tracking-widest text-[11px] border border-stone-200 hover:bg-white transition-all">Ləğv Et</button>
               <button form="fullEditForm" type="submit" className="flex-[2] px-8 py-4 bg-amber-500 text-stone-950 rounded-xl font-black uppercase tracking-widest text-xs shadow-xl">Yadda Saxla</button>
+            </footer>
+          </div>
+        </div>
+      )}
+
+      {showMoveToArchiveModal && (
+        <div className="fixed inset-0 bg-stone-950/80 backdrop-blur-md z-[120] flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95">
+            <header className="px-8 py-6 border-b border-stone-100 flex justify-between items-center bg-stone-50/50">
+              <div>
+                <h3 className="text-xl font-black text-stone-900 uppercase tracking-tighter">Arxivə Daşı</h3>
+                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mt-1">"{activeFolder}" kateqoriyasındakı aktiv məhsullar</p>
+              </div>
+              <button onClick={() => { setShowMoveToArchiveModal(false); setSelectedForArchive([]); }} className="p-2 text-stone-300 hover:text-stone-900 transition-colors"><X size={24} /></button>
+            </header>
+            
+            <main className="flex-1 overflow-y-auto p-6 scrollbar-hide">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {activeProducts
+                  .filter(p => p.type === activeFolder && !p.isArchived)
+                  .map(p => (
+                    <div 
+                      key={p.id} 
+                      onClick={() => {
+                        setSelectedForArchive(prev => 
+                          prev.includes(p.id) ? prev.filter(id => id !== p.id) : [...prev, p.id]
+                        );
+                      }}
+                      className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-center space-x-4 ${selectedForArchive.includes(p.id) ? 'border-amber-500 bg-amber-50/50 shadow-md' : 'border-stone-100 bg-white hover:border-stone-200'}`}
+                    >
+                      <div className="w-12 h-12 rounded-xl border border-stone-100 overflow-hidden bg-stone-50 flex-shrink-0">
+                        {p.imageUrl ? <img src={p.imageUrl} className="w-full h-full object-cover" /> : <ImageIcon className="w-full h-full p-3 text-stone-200" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-black text-stone-900 uppercase truncate">{p.name}</p>
+                        <p className="text-[10px] font-bold text-stone-400 uppercase">{p.code} | {p.weight} gr</p>
+                      </div>
+                      <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${selectedForArchive.includes(p.id) ? 'bg-amber-500 border-amber-500' : 'border-stone-200'}`}>
+                        {selectedForArchive.includes(p.id) && <Zap size={12} className="text-stone-950" />}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+              {activeProducts.filter(p => p.type === activeFolder && !p.isArchived).length === 0 && (
+                <div className="py-20 text-center">
+                  <p className="text-stone-300 font-black uppercase text-xs tracking-widest">Aktiv məhsul tapılmadı</p>
+                </div>
+              )}
+            </main>
+            
+            <footer className="px-8 py-6 border-t border-stone-100 bg-stone-50/50 flex items-center justify-between">
+              <p className="text-xs font-black text-stone-500 uppercase tracking-widest">Seçilib: <span className="text-amber-600">{selectedForArchive.length}</span> məhsul</p>
+              <div className="flex space-x-4">
+                <button onClick={() => { setShowMoveToArchiveModal(false); setSelectedForArchive([]); }} className="px-8 py-4 rounded-xl font-black text-stone-400 uppercase tracking-widest text-[11px] border border-stone-200 hover:bg-white transition-all">Ləğv Et</button>
+                <button 
+                  onClick={handleMoveToArchive}
+                  disabled={selectedForArchive.length === 0}
+                  className={`px-10 py-4 rounded-xl font-black uppercase tracking-widest text-xs shadow-xl transition-all ${selectedForArchive.length > 0 ? 'bg-stone-900 text-amber-500 hover:bg-black' : 'bg-stone-100 text-stone-300 cursor-not-allowed'}`}
+                >
+                  Arxivə Daşı
+                </button>
+              </div>
             </footer>
           </div>
         </div>

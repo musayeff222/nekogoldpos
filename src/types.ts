@@ -23,6 +23,7 @@ export interface Product {
   supplierPrice: number;
   price: number | '';
   stockCount: number;
+  isArchived?: boolean;
   imageUrl?: string;
   purchaseDate: string; // Alış tarixi
   logs: ProductLog[]; // Dəyişiklik tarixçəsi
