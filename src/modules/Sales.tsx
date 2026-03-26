@@ -30,7 +30,7 @@ import {
   Clock,
   Image as ImageIcon
 } from 'lucide-react';
-import { Product, ProductType, Sale, Customer, AppSettings } from '@/types';
+import { Product, ProductType, Sale, Customer, AppSettings, SystemLog } from '@/types';
 
 interface SalesProps {
   products: Product[];
@@ -42,9 +42,10 @@ interface SalesProps {
   settings: AppSettings;
   cart: Product[];
   setCart: React.Dispatch<React.SetStateAction<Product[]>>;
+  addLog: (action: string, category: SystemLog['category'], details?: string) => void;
 }
 
-const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSales, customers, setCustomers, settings, cart, setCart }) => {
+const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSales, customers, setCustomers, settings, cart, setCart, addLog }) => {
   const [step, setStep] = useState(1);
   const [currentProduct, setCurrentProduct] = useState<Product | null>(null);
   const [previouslySoldItem, setPreviouslySoldItem] = useState<Sale | null>(null);
@@ -414,7 +415,7 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
                        </div>
                        <div className="text-right">
                           <p className="text-[9px] font-black text-stone-400 uppercase">ÇƏKİ / ƏYAR</p>
-                          <p className="text-sm font-black text-stone-800 uppercase">{previouslySoldItem.weight} gr | {previouslySoldItem.carat}K</p>
+                          <p className="text-sm font-black text-stone-800 uppercase">{previouslySoldItem.weight} gr | {previouslySoldItem.carat}</p>
                        </div>
                     </div>
 
@@ -447,7 +448,7 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
                  </div>
                  <div className="flex-1 text-center md:text-left space-y-2 md:space-y-4">
                     <h4 className="text-xl md:text-3xl font-black text-stone-900 uppercase tracking-tighter leading-none">{currentProduct.name}</h4>
-                    <p className="text-[10px] md:text-[11px] font-bold text-stone-400 uppercase tracking-widest">{currentProduct.code} | {currentProduct.weight} gr | {currentProduct.carat}K</p>
+                    <p className="text-[10px] md:text-[11px] font-bold text-stone-400 uppercase tracking-widest">{currentProduct.code} | {currentProduct.weight} gr | {currentProduct.carat}</p>
                     <p className="text-3xl md:text-5xl font-black text-amber-600 tracking-tighter">{(Number(currentProduct.price) || 0).toLocaleString()} <span className="text-xl md:text-2xl text-amber-400">₼</span></p>
                     
                     <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4 pt-4">

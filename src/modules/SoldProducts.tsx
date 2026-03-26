@@ -22,7 +22,10 @@ import {
   Filter,
   ClipboardList,
   ArrowRightLeft,
-  History
+  History,
+  ChevronLeft,
+  ChevronRight,
+  Maximize2
 } from 'lucide-react';
 import { Sale } from '@/types';
 
@@ -35,6 +38,7 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
+  const [zoomedProductIndex, setZoomedProductIndex] = useState<number | null>(null);
 
   // Print List States
   const [printDate, setPrintDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -91,6 +95,53 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales }) => {
   };
 
   const filteredSales = getFilteredSales();
+
+  const openGallery = (e: React.MouseEvent, index: number) => {
+    e.stopPropagation();
+    setZoomedProductIndex(index);
+  };
+
+  const nextImage = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (zoomedProductIndex !== null) {
+      setZoomedProductIndex((zoomedProductIndex + 1) % filteredSales.length);
+    }
+  };
+
+  const prevImage = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (zoomedProductIndex !== null) {
+      setZoomedProductIndex((zoomedProductIndex - 1 + filteredSales.length) % filteredSales.length);
+    }
+  };
+
+  useEffect(() => {
+    if (zoomedProductIndex !== null) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [zoomedProductIndex]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (zoomedProductIndex !== null) {
+        if (e.key === 'ArrowRight') {
+          setZoomedProductIndex((zoomedProductIndex + 1) % filteredSales.length);
+        } else if (e.key === 'ArrowLeft') {
+          setZoomedProductIndex((zoomedProductIndex - 1 + filteredSales.length) % filteredSales.length);
+        } else if (e.key === 'Escape') {
+          setZoomedProductIndex(null);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [zoomedProductIndex, filteredSales.length]);
+
   const totalRevenue = filteredSales.filter(s => s.status === 'completed').reduce((acc, s) => acc + s.total, 0);
   const totalWeight = filteredSales.reduce((acc, s) => acc + (s.weight || 0), 0);
 
@@ -218,7 +269,7 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales }) => {
                               <td style={{ textAlign: 'left', fontWeight: 'bold' }}>{item.productName}</td>
                               <td>{item.carat}</td>
                               <td style={{ fontWeight: 'bold' }}>{item.weight}g</td>
-                              <td>{item.brilliant ? '*' : ''}</td>
+                              <td>{item.brilliant || ''}</td>
                               <td>
                                   {/* Kalem ilə quş işarəsi qoymaq üçün boşluq */}
                                   <div style={{ width: '15px', height: '15px', border: '1px solid #ccc', margin: 'auto' }}></div>
@@ -335,16 +386,24 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales }) => {
                     <tr key={s.id} onClick={() => setSelectedSale(s)} className="hover:bg-amber-50/40 transition-all group cursor-pointer">
                       <td className="px-8 py-5">
                         <div className="flex items-center space-x-4">
-                          <div className="w-12 h-12 rounded-xl bg-white border-2 border-stone-100 flex items-center justify-center text-amber-500 shadow-sm overflow-hidden p-1 group-hover:scale-110 transition-transform">
+                          <div 
+                            onClick={(e) => s.imageUrl ? openGallery(e, filteredSales.indexOf(s)) : null}
+                            className={`w-12 h-12 rounded-xl bg-white border-2 border-stone-100 flex items-center justify-center text-amber-500 shadow-sm overflow-hidden p-1 relative group/img ${s.imageUrl ? 'cursor-zoom-in hover:border-amber-400 transition-all' : ''}`}
+                          >
                             {s.imageUrl ? (
-                              <img 
-                                src={s.imageUrl} 
-                                className="w-full h-full object-cover rounded-md" 
-                                onError={(e) => {
-                                  (e.target as HTMLImageElement).style.display = 'none';
-                                  (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="text-stone-200"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-gem"><path d="M6 3h12l4 6-10 13L2 9Z"/><path d="M11 3 8 9l4 13 4-13-3-6"/><path d="M2 9h20"/></svg></div>';
-                                }}
-                              />
+                              <>
+                                <img 
+                                  src={s.imageUrl} 
+                                  className="w-full h-full object-cover rounded-md" 
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).style.display = 'none';
+                                    (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="text-stone-200"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-gem"><path d="M6 3h12l4 6-10 13L2 9Z"/><path d="M11 3 8 9l4 13 4-13-3-6"/><path d="M2 9h20"/></svg></div>';
+                                  }}
+                                />
+                                <div className="absolute inset-0 bg-amber-500/0 group-hover/img:bg-amber-500/20 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-all">
+                                  <Maximize2 size={14} className="text-amber-600" />
+                                </div>
+                              </>
                             ) : (
                               <Gem size={20} />
                             )}
@@ -434,7 +493,7 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales }) => {
                                  <div className="flex items-center space-x-2 mt-1.5">
                                     <span className="text-[10px] font-black text-stone-500">{item.productCode}</span>
                                     <span className="w-1 h-1 bg-stone-200 rounded-full"></span>
-                                    <span className="text-[10px] font-black text-amber-600">{item.weight} gr | {item.carat}K</span>
+                                    <span className="text-[10px] font-black text-amber-600">{item.weight} gr | {item.carat}</span>
                                     {item.brilliant && (
                                        <>
                                          <span className="w-1 h-1 bg-stone-200 rounded-full"></span>
@@ -459,6 +518,68 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales }) => {
                    </div>
                 </div>
             </div>
+        </div>
+      )}
+      {zoomedProductIndex !== null && (
+        <div className="fixed inset-0 bg-stone-950/95 z-[110] flex items-center justify-center p-4" onClick={() => setZoomedProductIndex(null)}>
+          <button 
+            onClick={(e) => { e.stopPropagation(); setZoomedProductIndex(null); }} 
+            className="absolute top-8 right-8 p-4 text-white/50 hover:text-white transition-all z-50 bg-white/10 rounded-full backdrop-blur-md"
+          >
+            <X size={32} />
+          </button>
+
+          <button 
+            onClick={prevImage}
+            className="absolute left-4 md:left-8 top-1/2 -translate-y-1/2 p-4 text-white/50 hover:text-white transition-all z-50 bg-white/10 rounded-full backdrop-blur-md hover:scale-110 active:scale-95"
+          >
+            <ChevronLeft size={48} />
+          </button>
+
+          <div className="relative max-w-full max-h-full flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
+            <img 
+              src={filteredSales[zoomedProductIndex].imageUrl} 
+              referrerPolicy="no-referrer" 
+              className="max-w-[90vw] max-h-[80vh] object-contain drop-shadow-2xl animate-in zoom-in-95 duration-300" 
+              alt={filteredSales[zoomedProductIndex].productName} 
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = 'none';
+                (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="text-white flex flex-col items-center"><svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg><p class="text-xl font-black uppercase mt-6 opacity-50 tracking-widest">Şəkil tapılmadı</p></div>';
+              }}
+            />
+            <div className="mt-8 text-center bg-white/10 backdrop-blur-md px-8 py-4 rounded-3xl border border-white/10">
+              <p className="text-white font-black text-xl uppercase tracking-tighter">{filteredSales[zoomedProductIndex].productName}</p>
+              <div className="flex items-center justify-center space-x-4 mt-2">
+                <span className="text-amber-500 font-black text-sm uppercase tracking-widest">{filteredSales[zoomedProductIndex].productCode}</span>
+                <span className="w-1 h-1 bg-white/20 rounded-full"></span>
+                <span className="text-white/70 font-bold text-sm">{filteredSales[zoomedProductIndex].weight} gr</span>
+                <span className="w-1 h-1 bg-white/20 rounded-full"></span>
+                <span className="text-white/70 font-bold text-sm">{filteredSales[zoomedProductIndex].carat} Əyar</span>
+              </div>
+              <p className="text-amber-400 font-black text-2xl mt-3 tracking-tighter">{(Number(filteredSales[zoomedProductIndex].total) || 0).toLocaleString()} ₼</p>
+            </div>
+          </div>
+
+          <button 
+            onClick={nextImage}
+            className="absolute right-4 md:right-8 top-1/2 -translate-y-1/2 p-4 text-white/50 hover:text-white transition-all z-50 bg-white/10 rounded-full backdrop-blur-md hover:scale-110 active:scale-95"
+          >
+            <ChevronRight size={48} />
+          </button>
+
+          <div className="absolute bottom-8 left-0 right-0 flex justify-center space-x-2 px-4 overflow-x-auto py-4 scrollbar-hide">
+            {filteredSales.map((s, idx) => (
+              s.imageUrl && (
+                <button 
+                  key={s.id}
+                  onClick={(e) => { e.stopPropagation(); setZoomedProductIndex(idx); }}
+                  className={`w-16 h-16 rounded-xl overflow-hidden border-2 transition-all flex-shrink-0 ${zoomedProductIndex === idx ? 'border-amber-500 scale-110 shadow-lg shadow-amber-500/20' : 'border-white/10 opacity-50 hover:opacity-100'}`}
+                >
+                  <img src={s.imageUrl} className="w-full h-full object-cover" />
+                </button>
+              )
+            ))}
+          </div>
         </div>
       )}
     </div>

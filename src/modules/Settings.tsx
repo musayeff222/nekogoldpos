@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Shield, Key, Save, List, Star, Calculator, Plus, X, User, Tag, Move, Type as TypeIcon, Eye, EyeOff, Bold, ChevronUp, ChevronDown, Printer, Download, Upload, Settings2, Layers, Database, RefreshCw } from 'lucide-react';
-import { AppSettings, LabelElement, Product } from '@/types';
+import { AppSettings, LabelElement, Product, SystemLog } from '@/types';
 import { LabelPrint } from '@/components/LabelPrint';
 
 interface SettingsProps {
@@ -15,6 +15,7 @@ interface SettingsProps {
   setCustomers: React.Dispatch<React.SetStateAction<any[]>>;
   scraps: any[];
   setScraps: React.Dispatch<React.SetStateAction<any[]>>;
+  addLog: (action: string, category: SystemLog['category'], details?: string) => void;
 }
 
 const SettingsModule: React.FC<SettingsProps> = ({ 
@@ -27,7 +28,8 @@ const SettingsModule: React.FC<SettingsProps> = ({
   customers,
   setCustomers,
   scraps,
-  setScraps
+  setScraps,
+  addLog
 }) => {
   const [localSettings, setLocalSettings] = useState(settings);
   const [newType, setNewType] = useState('');
@@ -35,6 +37,10 @@ const SettingsModule: React.FC<SettingsProps> = ({
   const [newGroupPrefix, setNewGroupPrefix] = useState('');
   const [newSupplier, setNewSupplier] = useState('');
   const [newCarat, setNewCarat] = useState('');
+  const [editingGroup, setEditingGroup] = useState<{ index: number, name: string, prefix: string } | null>(null);
+  const [editingType, setEditingType] = useState<{ index: number, value: string } | null>(null);
+  const [editingSupplier, setEditingSupplier] = useState<{ index: number, value: string } | null>(null);
+  const [editingCarat, setEditingCarat] = useState<{ index: number, value: string } | null>(null);
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
   const [testProduct, setTestProduct] = useState<Product | null>(null);
   const designerRef = useRef<HTMLDivElement>(null);
@@ -57,6 +63,7 @@ const SettingsModule: React.FC<SettingsProps> = ({
 
   const handleSave = () => {
     setSettings(localSettings);
+    addLog('Sistem ayarları yeniləndi', 'SETTINGS');
     alert("Ayarlar uğurla yadda saxlanıldı.");
   };
 
@@ -128,6 +135,7 @@ const SettingsModule: React.FC<SettingsProps> = ({
     document.body.appendChild(downloadAnchorNode);
     downloadAnchorNode.click();
     downloadAnchorNode.remove();
+    addLog('Sistem nüsxəsi (Backup) alındı', 'SYSTEM');
   };
 
   const handleFullRestore = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -152,6 +160,7 @@ const SettingsModule: React.FC<SettingsProps> = ({
           if (data.scraps) setScraps(data.scraps);
           setSettings(data.settings);
           setLocalSettings(data.settings);
+          addLog('Sistem bərpası (Restore) edildi', 'SYSTEM', `Fayl: ${file.name}`);
           
           // 2. Direct sync to server to be safe before reload
           const syncTypes = ['products', 'sales', 'customers', 'scraps', 'settings'];
@@ -216,7 +225,7 @@ const SettingsModule: React.FC<SettingsProps> = ({
       id: 'test',
       code: 'U001',
       name: 'Test Məhsul',
-      carat: 750,
+      carat: '750',
       type: 'Üzük',
       supplier: 'ITALIYA',
       weight: 10.15,
@@ -252,6 +261,42 @@ const SettingsModule: React.FC<SettingsProps> = ({
     setNewGroupPrefix('');
   };
 
+  const updateGroup = () => {
+    if (!editingGroup || !editingGroup.name.trim() || !editingGroup.prefix.trim()) return;
+    const updatedGroups = [...(localSettings.productGroups || [])];
+    updatedGroups[editingGroup.index] = { 
+      name: editingGroup.name.trim(), 
+      prefix: editingGroup.prefix.trim().toUpperCase() 
+    };
+    setLocalSettings({ ...localSettings, productGroups: updatedGroups });
+    setEditingGroup(null);
+  };
+
+  const updateType = () => {
+    if (!editingType || !editingType.value.trim()) return;
+    const updatedTypes = [...localSettings.productTypes];
+    updatedTypes[editingType.index] = editingType.value.trim();
+    setLocalSettings({ ...localSettings, productTypes: updatedTypes });
+    setEditingType(null);
+  };
+
+  const updateSupplier = () => {
+    if (!editingSupplier || !editingSupplier.value.trim()) return;
+    const updatedSuppliers = [...localSettings.suppliers];
+    updatedSuppliers[editingSupplier.index] = editingSupplier.value.trim();
+    setLocalSettings({ ...localSettings, suppliers: updatedSuppliers });
+    setEditingSupplier(null);
+  };
+
+  const updateCarat = () => {
+    if (!editingCarat || !editingCarat.value.trim()) return;
+    const val = editingCarat.value.trim();
+    const updatedCarats = [...localSettings.carats];
+    updatedCarats[editingCarat.index] = val;
+    setLocalSettings({ ...localSettings, carats: updatedCarats });
+    setEditingCarat(null);
+  };
+
   const addSupplier = () => {
     if (!newSupplier.trim()) return;
     if (localSettings.suppliers.includes(newSupplier.trim())) return;
@@ -260,10 +305,10 @@ const SettingsModule: React.FC<SettingsProps> = ({
   };
 
   const addCarat = () => {
-    const val = Number(newCarat);
-    if (!newCarat.trim() || isNaN(val)) return;
+    const val = newCarat.trim();
+    if (!val) return;
     if (localSettings.carats.includes(val)) return;
-    setLocalSettings({ ...localSettings, carats: [...localSettings.carats, val].sort((a, b) => a - b) });
+    setLocalSettings({ ...localSettings, carats: [...localSettings.carats, val] });
     setNewCarat('');
   };
 
@@ -436,13 +481,41 @@ const SettingsModule: React.FC<SettingsProps> = ({
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
-              {(localSettings.productGroups || []).map(g => (
-                <div key={g.prefix} className="bg-amber-50/50 text-stone-700 px-3 py-1.5 rounded-lg text-[10px] font-black border border-amber-100 flex items-center justify-between w-full group">
-                  <div className="flex items-center space-x-2">
-                    <span className="bg-amber-500 text-white px-1.5 py-0.5 rounded text-[8px]">{g.prefix}</span>
-                    <span>{g.name}</span>
-                  </div>
-                  <button onClick={() => removeItem('productGroups', g)} className="text-stone-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><X size={12} /></button>
+              {(localSettings.productGroups || []).map((g, idx) => (
+                <div key={g.prefix + idx} className="bg-amber-50/50 text-stone-700 px-3 py-1.5 rounded-lg text-[10px] font-black border border-amber-100 flex flex-col w-full group">
+                  {editingGroup?.index === idx ? (
+                    <div className="space-y-2 w-full">
+                      <input 
+                        type="text" 
+                        value={editingGroup.name} 
+                        onChange={(e) => setEditingGroup({...editingGroup, name: e.target.value})}
+                        className="w-full bg-white border border-amber-200 rounded px-2 py-1 text-[10px]"
+                        placeholder="Ad"
+                      />
+                      <div className="flex space-x-2">
+                        <input 
+                          type="text" 
+                          value={editingGroup.prefix} 
+                          onChange={(e) => setEditingGroup({...editingGroup, prefix: e.target.value})}
+                          className="flex-1 bg-white border border-amber-200 rounded px-2 py-1 text-[10px] uppercase"
+                          placeholder="Kod"
+                        />
+                        <button onClick={updateGroup} className="bg-emerald-500 text-white p-1 rounded"><Save size={12} /></button>
+                        <button onClick={() => setEditingGroup(null)} className="bg-stone-400 text-white p-1 rounded"><X size={12} /></button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between w-full">
+                      <div className="flex items-center space-x-2">
+                        <span className="bg-amber-500 text-white px-1.5 py-0.5 rounded text-[8px]">{g.prefix}</span>
+                        <span>{g.name}</span>
+                      </div>
+                      <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => setEditingGroup({ index: idx, name: g.name, prefix: g.prefix })} className="text-stone-400 hover:text-amber-500"><Settings2 size={12} /></button>
+                        <button onClick={() => removeItem('productGroups', g)} className="text-stone-300 hover:text-red-500"><X size={12} /></button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -461,10 +534,28 @@ const SettingsModule: React.FC<SettingsProps> = ({
               <button onClick={addType} className="bg-stone-900 text-amber-500 p-2.5 rounded-xl"><Plus size={20} /></button>
             </div>
             <div className="flex flex-wrap gap-2">
-              {localSettings.productTypes.map(t => (
-                <div key={t} className="bg-amber-50/50 text-stone-700 px-3 py-1.5 rounded-lg text-[10px] font-black border border-amber-100 flex items-center">
-                  {t}
-                  <button onClick={() => removeItem('productTypes', t)} className="ml-2 text-stone-300 hover:text-red-500"><X size={12} /></button>
+              {localSettings.productTypes.map((t, idx) => (
+                <div key={t + idx} className="bg-amber-50/50 text-stone-700 px-3 py-1.5 rounded-lg text-[10px] font-black border border-amber-100 flex items-center group">
+                  {editingType?.index === idx ? (
+                    <div className="flex items-center space-x-1">
+                      <input 
+                        type="text" 
+                        value={editingType.value} 
+                        onChange={(e) => setEditingType({...editingType, value: e.target.value})}
+                        className="bg-white border border-amber-200 rounded px-2 py-0.5 text-[10px] w-20"
+                      />
+                      <button onClick={updateType} className="text-emerald-500"><Save size={12} /></button>
+                      <button onClick={() => setEditingType(null)} className="text-stone-400"><X size={12} /></button>
+                    </div>
+                  ) : (
+                    <>
+                      {t}
+                      <div className="flex items-center ml-2 space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => setEditingType({ index: idx, value: t })} className="text-stone-400 hover:text-amber-500"><Settings2 size={10} /></button>
+                        <button onClick={() => removeItem('productTypes', t)} className="text-stone-300 hover:text-red-500"><X size={10} /></button>
+                      </div>
+                    </>
+                  )}
                 </div>
               ))}
             </div>
@@ -482,10 +573,28 @@ const SettingsModule: React.FC<SettingsProps> = ({
               <button onClick={addSupplier} className="bg-stone-900 text-amber-500 p-2.5 rounded-xl"><Plus size={20} /></button>
             </div>
             <div className="flex flex-wrap gap-2">
-              {localSettings.suppliers.map(s => (
-                <div key={s} className="bg-stone-50 text-stone-700 px-3 py-1.5 rounded-lg text-[10px] font-black border border-stone-100 flex items-center">
-                  {s}
-                  <button onClick={() => removeItem('suppliers', s)} className="ml-2 text-stone-300 hover:text-red-500"><X size={12} /></button>
+              {localSettings.suppliers.map((s, idx) => (
+                <div key={s + idx} className="bg-stone-50 text-stone-700 px-3 py-1.5 rounded-lg text-[10px] font-black border border-stone-100 flex items-center group">
+                  {editingSupplier?.index === idx ? (
+                    <div className="flex items-center space-x-1">
+                      <input 
+                        type="text" 
+                        value={editingSupplier.value} 
+                        onChange={(e) => setEditingSupplier({...editingSupplier, value: e.target.value})}
+                        className="bg-white border border-stone-200 rounded px-2 py-0.5 text-[10px] w-24"
+                      />
+                      <button onClick={updateSupplier} className="text-emerald-500"><Save size={12} /></button>
+                      <button onClick={() => setEditingSupplier(null)} className="text-stone-400"><X size={12} /></button>
+                    </div>
+                  ) : (
+                    <>
+                      {s}
+                      <div className="flex items-center ml-2 space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => setEditingSupplier({ index: idx, value: s })} className="text-stone-400 hover:text-amber-500"><Settings2 size={10} /></button>
+                        <button onClick={() => removeItem('suppliers', s)} className="text-stone-300 hover:text-red-500"><X size={10} /></button>
+                      </div>
+                    </>
+                  )}
                 </div>
               ))}
             </div>
@@ -499,14 +608,32 @@ const SettingsModule: React.FC<SettingsProps> = ({
           </div>
           <div className="p-6 space-y-4">
             <div className="flex space-x-2">
-              <input type="number" placeholder="Məs: 21" value={newCarat} onChange={(e) => setNewCarat(e.target.value)} className="flex-1 bg-stone-50 border-2 border-stone-100 rounded-xl px-4 py-2.5 text-xs font-bold" />
+              <input type="text" placeholder="Məs: 583" value={newCarat} onChange={(e) => setNewCarat(e.target.value)} className="flex-1 bg-stone-50 border-2 border-stone-100 rounded-xl px-4 py-2.5 text-xs font-bold" />
               <button onClick={addCarat} className="bg-stone-900 text-amber-500 p-2.5 rounded-xl"><Plus size={20} /></button>
             </div>
             <div className="flex flex-wrap gap-2">
-              {localSettings.carats.map(c => (
-                <div key={c} className="bg-amber-50 text-amber-700 px-3 py-1.5 rounded-lg text-[10px] font-black border border-amber-200 flex items-center">
-                  {c}K
-                  <button onClick={() => removeItem('carats', c)} className="ml-2 text-amber-300 hover:text-red-500"><X size={12} /></button>
+              {localSettings.carats.map((c, idx) => (
+                <div key={c + idx} className="bg-amber-50 text-amber-700 px-3 py-1.5 rounded-lg text-[10px] font-black border border-amber-200 flex items-center group">
+                  {editingCarat?.index === idx ? (
+                    <div className="flex items-center space-x-1">
+                      <input 
+                        type="text" 
+                        value={editingCarat.value} 
+                        onChange={(e) => setEditingCarat({...editingCarat, value: e.target.value})}
+                        className="bg-white border border-amber-200 rounded px-2 py-0.5 text-[10px] w-16"
+                      />
+                      <button onClick={updateCarat} className="text-emerald-500"><Save size={12} /></button>
+                      <button onClick={() => setEditingCarat(null)} className="text-stone-400"><X size={12} /></button>
+                    </div>
+                  ) : (
+                    <>
+                      {c}
+                      <div className="flex items-center ml-2 space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => setEditingCarat({ index: idx, value: String(c) })} className="text-amber-400 hover:text-amber-600"><Settings2 size={10} /></button>
+                        <button onClick={() => removeItem('carats', c)} className="text-amber-300 hover:text-red-500"><X size={10} /></button>
+                      </div>
+                    </>
+                  )}
                 </div>
               ))}
             </div>

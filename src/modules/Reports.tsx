@@ -12,29 +12,37 @@ import {
   Wallet,
   Coins
 } from 'lucide-react';
-import { Sale, Product, ScrapGold, Customer } from '@/types';
+import { Sale, Product, ScrapGold, Customer, Expense } from '@/types';
 
 interface ReportsProps {
   sales: Sale[];
   products: Product[];
   scraps: ScrapGold[];
   customers: Customer[];
+  expenses: Expense[];
 }
 
-const ReportsModule: React.FC<ReportsProps> = ({ sales, products, scraps, customers }) => {
+const ReportsModule: React.FC<ReportsProps> = ({ sales, products, scraps, customers, expenses }) => {
   const safeSales = Array.isArray(sales) ? sales : [];
+  const safeExpenses = Array.isArray(expenses) ? expenses : [];
+  
   const totalRevenue = safeSales.filter(s => s.status !== 'returned').reduce((acc, s) => acc + s.total, 0);
+  const totalExpenses = safeExpenses.reduce((acc, e) => acc + e.amount, 0);
+  
   const dailySales = safeSales.filter(s => new Date(s.date).toDateString() === new Date().toDateString() && s.status !== 'returned');
   const dailyRevenue = dailySales.reduce((acc, s) => acc + s.total, 0);
+  
+  const dailyExpenses = safeExpenses.filter(e => new Date(e.date).toDateString() === new Date().toDateString());
+  const dailyExpensesTotal = dailyExpenses.reduce((acc, e) => acc + e.amount, 0);
   
   const totalScrapPay = scraps.reduce((acc, s) => acc + s.totalPrice, 0);
   const totalReceivables = customers.reduce((acc, c) => acc + c.cashDebt, 0);
 
   const stats = [
     { label: 'Bugünkü Satış', value: `${dailyRevenue.toLocaleString()} ₼`, icon: TrendingUp, color: 'text-green-500', bg: 'bg-green-50', sub: `${dailySales.length} Satış` },
-    { label: 'Aylıq Dövriyyə', value: `${totalRevenue.toLocaleString()} ₼`, icon: DollarSign, color: 'text-amber-500', bg: 'bg-amber-50', sub: 'Ümumi Brüt' },
-    { label: 'Cəmi Alacaqlar', value: `${totalReceivables.toLocaleString()} ₼`, icon: Wallet, color: 'text-blue-500', bg: 'bg-blue-50', sub: 'Borclar Cəmi' },
-    { label: 'Lom Ödənişləri', value: `${totalScrapPay.toLocaleString()} ₼`, icon: TrendingDown, color: 'text-red-500', bg: 'bg-red-50', sub: 'Alınan Hurda' },
+    { label: 'Bugünkü Xərc', value: `${dailyExpensesTotal.toLocaleString()} ₼`, icon: TrendingDown, color: 'text-red-500', bg: 'bg-red-50', sub: `${dailyExpenses.length} Xərc` },
+    { label: 'Ümumi Gəlir', value: `${totalRevenue.toLocaleString()} ₼`, icon: DollarSign, color: 'text-amber-500', bg: 'bg-amber-50', sub: 'Ümumi Brüt' },
+    { label: 'Kassa Balansı', value: `${(totalRevenue - totalExpenses).toLocaleString()} ₼`, icon: Wallet, color: 'text-blue-500', bg: 'bg-blue-50', sub: 'Nəqd Qalıq' },
   ];
 
   return (
@@ -72,16 +80,16 @@ const ReportsModule: React.FC<ReportsProps> = ({ sales, products, scraps, custom
 
               <div className="space-y-4 md:space-y-6">
                  <div className="flex justify-between items-center border-b border-white/5 pb-4 md:pb-6">
-                    <span className="text-[10px] md:text-sm font-black text-stone-500 uppercase tracking-widest">Nəqd Satışlar</span>
-                    <span className="text-lg md:text-2xl font-black tracking-tighter">{(dailyRevenue * 0.7).toLocaleString()} <span className="text-xs text-stone-600">₼</span></span>
+                    <span className="text-[10px] md:text-sm font-black text-stone-500 uppercase tracking-widest">Bugünkü Satış</span>
+                    <span className="text-lg md:text-2xl font-black tracking-tighter">{dailyRevenue.toLocaleString()} <span className="text-xs text-stone-600">₼</span></span>
                  </div>
-                 <div className="flex justify-between items-center border-b border-white/5 pb-4 md:pb-6">
-                    <span className="text-[10px] md:text-sm font-black text-stone-500 uppercase tracking-widest">Bank / Kart</span>
-                    <span className="text-lg md:text-2xl font-black tracking-tighter">{(dailyRevenue * 0.3).toLocaleString()} <span className="text-xs text-stone-600">₼</span></span>
+                 <div className="flex justify-between items-center border-b border-white/5 pb-4 md:pb-6 text-red-400">
+                    <span className="text-[10px] md:text-sm font-black text-stone-500 uppercase tracking-widest">Bugünkü Xərc</span>
+                    <span className="text-lg md:text-2xl font-black tracking-tighter">-{dailyExpensesTotal.toLocaleString()} <span className="text-xs text-stone-600">₼</span></span>
                  </div>
                  <div className="flex justify-between items-center pt-4 md:pt-6">
-                    <span className="text-xs md:text-sm font-black text-amber-500 uppercase tracking-[0.2em]">YEKUN CƏM</span>
-                    <span className="text-3xl md:text-5xl font-black text-amber-500 tracking-tighter">{dailyRevenue.toLocaleString()} <span className="text-base md:text-xl text-amber-800">₼</span></span>
+                    <span className="text-xs md:text-sm font-black text-amber-500 uppercase tracking-[0.2em]">KASSA QALIĞI</span>
+                    <span className="text-3xl md:text-5xl font-black text-amber-500 tracking-tighter">{(dailyRevenue - dailyExpensesTotal).toLocaleString()} <span className="text-base md:text-xl text-amber-800">₼</span></span>
                  </div>
               </div>
 

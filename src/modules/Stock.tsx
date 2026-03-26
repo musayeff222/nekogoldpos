@@ -21,6 +21,7 @@ import {
   Tag,
   Clock,
   ArrowLeft,
+  ChevronLeft,
   ChevronRight,
   Info,
   Layers,
@@ -35,7 +36,7 @@ import {
   Archive,
   ArrowDownToLine
 } from 'lucide-react';
-import { Product, ProductType, AppSettings, ProductLog, Sale } from '@/types';
+import { Product, ProductType, AppSettings, ProductLog, Sale, SystemLog } from '@/types';
 import { LabelPrint } from '@/components/LabelPrint';
 
 interface StockProps {
@@ -43,19 +44,25 @@ interface StockProps {
   setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
   settings: AppSettings;
   sales: Sale[];
+  cart: Product[];
+  setCart: React.Dispatch<React.SetStateAction<Product[]>>;
+  setCurrentPage: (page: any) => void;
+  addLog: (action: string, category: SystemLog['category'], details?: string) => void;
 }
 
-const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sales }) => {
+const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sales, cart, setCart, setCurrentPage, addLog }) => {
   const [activeFolder, setActiveFolder] = useState<ProductType | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [isAddingNew, setIsAddingNew] = useState(false);
+  const [zoomedProductIndex, setZoomedProductIndex] = useState<number | null>(null);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [lastAddedProduct, setLastAddedProduct] = useState<Product | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [showMoveToArchiveModal, setShowMoveToArchiveModal] = useState(false);
   const [selectedForArchive, setSelectedForArchive] = useState<string[]>([]);
+  const [selectedForRestore, setSelectedForRestore] = useState<string[]>([]);
   
   // Təkrarlanan kod üçün xəta halları
   const [duplicateInStock, setDuplicateInStock] = useState<Product | null>(null);
@@ -68,11 +75,12 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
   
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
+  const [zoomLevel, setZoomLevel] = useState(1);
 
   const [newProduct, setNewProduct] = useState({
     code: '',
     name: '',
-    carat: 583,
+    carat: settings.carats[0] || '',
     type: settings.productGroups[0]?.name || '',
     supplier: settings.suppliers[0] || '',
     brilliant: '',
@@ -84,6 +92,9 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
 
   const [autoPrint, setAutoPrint] = useState(true);
   const [bulkPricePerGram, setBulkPricePerGram] = useState<number | ''>('');
+  const [bulkPricePerGram750, setBulkPricePerGram750] = useState<number | ''>('');
+  const [bulkBrilliantPrice, setBulkBrilliantPrice] = useState<number | ''>('');
+  const [bulkKaratFilter, setBulkKaratFilter] = useState<string | 'all'>('all');
   const [bulkPrintList, setBulkPrintList] = useState<Product[]>([]);
 
   const [viewMode, setViewMode] = useState<'folders' | 'printList'>('folders');
@@ -92,6 +103,11 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
   const [printCategory, setPrintCategory] = useState<string>('all');
 
   const [editForm, setEditForm] = useState<Partial<Product>>({});
+
+  // Clear selection when switching views
+  useEffect(() => {
+    setSelectedForRestore([]);
+  }, [showArchived, activeFolder]);
 
   // Update print list when filters change
   useEffect(() => {
@@ -128,12 +144,22 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     if (!bulkPricePerGram || !activeFolder) return;
     
     const pricePerGram = Number(bulkPricePerGram);
-    const productsInFolder = activeProducts.filter(p => p.type === activeFolder && !p.isArchived);
+    const pricePerGram750 = Number(bulkPricePerGram750 || bulkPricePerGram); // Fallback to general if 750 not set
+    const brilliantPrice = Number(bulkBrilliantPrice || 0);
+    
+    const productsInFolder = activeProducts.filter(p => {
+      const matchesFolder = p.type === activeFolder && !p.isArchived;
+      const matchesKarat = bulkKaratFilter === 'all' || p.carat === bulkKaratFilter;
+      return matchesFolder && matchesKarat;
+    });
     
     // Update products in state
     const updatedProducts = products.map(p => {
-      if (p.type === activeFolder && !p.isArchived) {
-        const newPrice = Math.round((Number(p.weight) * pricePerGram) / 10) * 10;
+      const matchesFolder = p.type === activeFolder && !p.isArchived;
+      const matchesKarat = bulkKaratFilter === 'all' || p.carat === bulkKaratFilter;
+      if (matchesFolder && matchesKarat) {
+        const rate = p.carat === '750' ? pricePerGram750 : pricePerGram;
+        const newPrice = Math.round(((Number(p.weight) * rate) + brilliantPrice) / 10) * 10;
         return { ...p, price: newPrice };
       }
       return p;
@@ -144,7 +170,11 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     // Save to server immediately (bulk)
     const saveBulkUpdate = async () => {
       try {
-        const productsToUpdate = updatedProducts.filter(p => p.type === activeFolder && !p.isArchived);
+        const productsToUpdate = updatedProducts.filter(p => {
+          const matchesFolder = p.type === activeFolder && !p.isArchived;
+          const matchesKarat = bulkKaratFilter === 'all' || p.carat === bulkKaratFilter;
+          return matchesFolder && matchesKarat;
+        });
         const res = await fetch('/api/products/bulk-update', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -161,7 +191,8 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     
     // Prepare for printing
     const printList = productsInFolder.map(p => {
-      const newPrice = Math.round((Number(p.weight) * pricePerGram) / 10) * 10;
+      const rate = p.carat === '750' ? pricePerGram750 : pricePerGram;
+      const newPrice = Math.round(((Number(p.weight) * rate) + brilliantPrice) / 10) * 10;
       return { ...p, price: newPrice };
     });
     
@@ -174,6 +205,9 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
       setTimeout(() => {
         setBulkPrintList([]);
         setBulkPricePerGram('');
+        setBulkPricePerGram750('');
+        setBulkBrilliantPrice('');
+        setBulkKaratFilter('all');
       }, 2000);
     }, 1000);
   };
@@ -195,7 +229,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
   }, [newProduct.type, isAddingNew]);
 
   // Stokda olan məhsulları süzgəcdən keçiririk
-  const activeProducts = products.filter(p => (Number(p.stockCount) || 0) > 0);
+  const activeProducts = products.filter(p => (Number(p.stockCount) || 0) > 0 && !p.isReturned);
 
   // Unique suppliers and categories for filters
   const suppliers = Array.from(new Set(activeProducts.map(p => p.supplier).filter(Boolean)));
@@ -248,7 +282,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
       id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
       code: finalCode,
       name: newProduct.name.trim(),
-      carat: Number(newProduct.carat),
+      carat: newProduct.carat,
       type: newProduct.type,
       supplier: newProduct.supplier,
       brilliant: newProduct.brilliant || undefined,
@@ -279,6 +313,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     saveProduct();
 
     setProducts((prev: Product[]) => [productToAdd, ...prev]);
+    addLog(`Yeni məhsul əlavə edildi: ${productToAdd.code}`, 'PRODUCT', `${productToAdd.name}, ${productToAdd.weight}gr, ${productToAdd.carat} əyar`);
     setLastAddedProduct(productToAdd);
     
     // Trigger print if autoPrint is enabled
@@ -325,6 +360,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
       const mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
       setStream(mediaStream);
       setIsCameraOpen(true);
+      setZoomLevel(1); // Reset zoom when opening camera
     } catch (err) {
       alert("Kameraya giriş icazəsi verilmədi.");
     }
@@ -377,10 +413,19 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
       const canvas = canvasRef.current;
       const video = videoRef.current;
       
+      const videoWidth = video.videoWidth;
+      const videoHeight = video.videoHeight;
+      
+      // Calculate source rectangle for digital zoom
+      const sw = videoWidth / zoomLevel;
+      const sh = videoHeight / zoomLevel;
+      const sx = (videoWidth - sw) / 2;
+      const sy = (videoHeight - sh) / 2;
+      
       // Resize to max 800px for persistent storage
       const maxDim = 800;
-      let width = video.videoWidth;
-      let height = video.videoHeight;
+      let width = sw;
+      let height = sh;
       
       if (width > height) {
         if (width > maxDim) {
@@ -398,7 +443,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
       canvas.height = height;
       const ctx = canvas.getContext('2d');
       if (ctx) {
-        ctx.drawImage(video, 0, 0, width, height);
+        ctx.drawImage(video, sx, sy, sw, sh, 0, 0, width, height);
         
         // Convert canvas to base64 for persistent storage
         const base64Image = canvas.toDataURL('image/jpeg', 0.7);
@@ -440,7 +485,11 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
 
       if (!res.ok) throw new Error('Failed to delete product from database');
 
+      const productToDelete = products.find(p => p.id === id);
       setProducts(prev => prev.filter(p => p.id !== id));
+      if (productToDelete) {
+        addLog(`Məhsul silindi: ${productToDelete.code}`, 'PRODUCT', `${productToDelete.name}`);
+      }
       alert('Məhsul uğurla silindi.');
     } catch (err) {
       console.error('Delete product error:', err);
@@ -472,6 +521,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     saveUpdate();
 
     setProducts((prev: Product[]) => prev.map((p: Product) => p.id === selectedProduct.id ? updatedProduct : p));
+    addLog(`Məhsul redaktə edildi: ${updatedProduct.code}`, 'PRODUCT', `Yeni məlumatlar: ${updatedProduct.name}, ${updatedProduct.weight}gr, ${updatedProduct.carat} əyar`);
     setSelectedProduct(updatedProduct);
     alert("Məhsul məlumatları uğurla yeniləndi.");
   };
@@ -482,6 +532,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     setProducts(prev => prev.map(p => {
       if (selectedForArchive.includes(p.id)) {
         const updatedProduct = { ...p, isArchived: true };
+        addLog(`Məhsul arxivə göndərildi: ${updatedProduct.code}`, 'PRODUCT', `${updatedProduct.name}`);
         
         // Save to server immediately
         fetch(`/api/products/${updatedProduct.id}`, {
@@ -498,6 +549,38 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     setSelectedForArchive([]);
     setShowMoveToArchiveModal(false);
     alert(`${selectedForArchive.length} məhsul arxivə daşındı.`);
+  };
+
+  const handleRestoreFromArchive = async () => {
+    if (selectedForRestore.length === 0) return;
+
+    const productsToRestore = products.filter(p => selectedForRestore.includes(p.id)).map(p => ({
+      ...p,
+      isArchived: false
+    }));
+
+    try {
+      const res = await fetch('/api/products/bulk-update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ products: productsToRestore })
+      });
+
+      if (!res.ok) throw new Error('Failed to bulk update in database');
+
+      setProducts(prev => prev.map(p => {
+        if (selectedForRestore.includes(p.id)) {
+          return { ...p, isArchived: false };
+        }
+        return p;
+      }));
+
+      setSelectedForRestore([]);
+      alert(`${productsToRestore.length} məhsul əsas səhifəyə qaytarıldı.`);
+    } catch (err) {
+      console.error('Restore from archive error:', err);
+      alert('Məhsullar qaytarılarkən xəta baş verdi.');
+    }
   };
 
   const getFilteredProducts = () => {
@@ -519,6 +602,52 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
 
   const filteredProducts = getFilteredProducts();
 
+  const openGallery = (e: React.MouseEvent, index: number) => {
+    e.stopPropagation();
+    setZoomedProductIndex(index);
+  };
+
+  const nextImage = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (zoomedProductIndex !== null) {
+      setZoomedProductIndex((zoomedProductIndex + 1) % filteredProducts.length);
+    }
+  };
+
+  const prevImage = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (zoomedProductIndex !== null) {
+      setZoomedProductIndex((zoomedProductIndex - 1 + filteredProducts.length) % filteredProducts.length);
+    }
+  };
+
+  useEffect(() => {
+    if (zoomedProductIndex !== null) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [zoomedProductIndex]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (zoomedProductIndex !== null) {
+        if (e.key === 'ArrowRight') {
+          setZoomedProductIndex((zoomedProductIndex + 1) % filteredProducts.length);
+        } else if (e.key === 'ArrowLeft') {
+          setZoomedProductIndex((zoomedProductIndex - 1 + filteredProducts.length) % filteredProducts.length);
+        } else if (e.key === 'Escape') {
+          setZoomedProductIndex(null);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [zoomedProductIndex, filteredProducts.length]);
+
   if (isAddingNew) {
     return (
       <div className="flex flex-col animate-in slide-in-from-right duration-300 min-h-full">
@@ -535,7 +664,37 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                 <div className="relative aspect-square md:aspect-auto md:h-72 border-2 border-dashed border-stone-100 rounded-2xl bg-stone-50/50 flex items-center justify-center overflow-hidden shadow-inner">
                   {isCameraOpen ? (
                     <div className="absolute inset-0 bg-black flex flex-col">
-                       <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+                       <div className="flex-1 relative overflow-hidden">
+                          <video 
+                            ref={videoRef} 
+                            autoPlay 
+                            playsInline 
+                            muted 
+                            className="w-full h-full object-cover transition-transform duration-300" 
+                            style={{ transform: `scale(${zoomLevel})` }}
+                          />
+                          
+                          {/* Zoom Controls */}
+                          <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col space-y-4">
+                             <button 
+                               type="button" 
+                               onClick={() => setZoomLevel(prev => Math.min(prev + 0.5, 3))}
+                               className="w-12 h-12 bg-white/20 backdrop-blur-md text-white rounded-full flex items-center justify-center border border-white/30 active:scale-90 transition-all"
+                             >
+                               <Plus size={24} />
+                             </button>
+                             <div className="bg-white/20 backdrop-blur-md text-white py-1 px-2 rounded-lg text-[10px] font-black text-center border border-white/30">
+                                {zoomLevel.toFixed(1)}x
+                             </div>
+                             <button 
+                               type="button" 
+                               onClick={() => setZoomLevel(prev => Math.max(prev - 0.5, 1))}
+                               className="w-12 h-12 bg-white/20 backdrop-blur-md text-white rounded-full flex items-center justify-center border border-white/30 active:scale-90 transition-all"
+                             >
+                               <X size={24} className="rotate-45" />
+                             </button>
+                          </div>
+                       </div>
                        <div className="absolute bottom-4 left-0 right-0 flex justify-center space-x-3 px-4">
                           <button type="button" onClick={() => capturePhoto(false)} className="bg-amber-500 text-stone-950 px-5 py-3 rounded-xl shadow-xl font-black text-[10px] uppercase flex items-center space-x-2"><Camera size={14} /> <span>FOTO ÇƏK</span></button>
                           <button type="button" onClick={stopCamera} className="bg-white/20 backdrop-blur-md text-white p-3 rounded-xl"><X size={14} /></button>
@@ -628,8 +787,8 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                   <div className="space-y-1 md:col-span-2">
                     <label className="text-[9px] font-black text-stone-400 uppercase ml-2">Əyar</label>
                     <div className="flex gap-2">
-                       {[583, '14K', 750, 22].map(c => (
-                          <button key={c} type="button" onClick={() => setNewProduct({...newProduct, carat: typeof c === 'string' ? 14 : c})} className={`flex-1 py-3 rounded-xl font-black text-[11px] border transition-all ${ (typeof c === 'string' && newProduct.carat === 14) || newProduct.carat === c ? 'bg-amber-500 border-amber-500 text-stone-950 shadow-md' : 'bg-stone-50 border-stone-100 text-stone-400'}`}>{c}{typeof c === 'number' && c < 100 ? 'K' : ''}</button>
+                       {settings.carats.map(c => (
+                          <button key={c} type="button" onClick={() => setNewProduct({...newProduct, carat: c})} className={`flex-1 py-3 rounded-xl font-black text-[11px] border transition-all ${ newProduct.carat === c ? 'bg-amber-500 border-amber-500 text-stone-950 shadow-md' : 'bg-stone-50 border-stone-100 text-stone-400'}`}>{c}</button>
                        ))}
                     </div>
                   </div>
@@ -666,7 +825,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                         id: 'temp',
                         code: newProduct.code,
                         name: newProduct.name,
-                        carat: Number(newProduct.carat),
+                        carat: newProduct.carat,
                         type: newProduct.type,
                         supplier: newProduct.supplier,
                         brilliant: newProduct.brilliant || undefined,
@@ -739,7 +898,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                                 <td>{item.carat}</td>
                                 <td style={{ fontWeight: 'bold' }}>{item.weight}g</td>
                                 <td style={{ fontWeight: 'bold' }}>{item.stockCount}</td>
-                                <td>{item.brilliant ? '*' : ''}</td>
+                                <td>{item.brilliant || ''}</td>
                                 <td>
                                     <div style={{ width: '15px', height: '15px', border: '1px solid #ccc', margin: 'auto' }}></div>
                                 </td>
@@ -867,13 +1026,24 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                           <p className="text-[10px] font-bold text-stone-400 uppercase mt-1">"{activeFolder}" kateqoriyasındakı arxivlər</p>
                         </div>
                       </div>
-                      <button 
-                        onClick={() => setShowMoveToArchiveModal(true)}
-                        className="px-8 py-4 bg-amber-500 text-stone-950 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-amber-400 transition-all shadow-xl flex items-center space-x-3"
-                      >
-                        <ArrowDownToLine size={20} />
-                        <span>Buraya Daşı</span>
-                      </button>
+                      <div className="flex items-center space-x-3">
+                        {selectedForRestore.length > 0 && (
+                          <button 
+                            onClick={handleRestoreFromArchive}
+                            className="px-8 py-4 bg-emerald-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-emerald-400 transition-all shadow-xl flex items-center space-x-3 animate-in zoom-in"
+                          >
+                            <ArrowLeft size={20} />
+                            <span>Seçilənləri Qaytar ({selectedForRestore.length})</span>
+                          </button>
+                        )}
+                        <button 
+                          onClick={() => setShowMoveToArchiveModal(true)}
+                          className="px-8 py-4 bg-amber-500 text-stone-950 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-amber-400 transition-all shadow-xl flex items-center space-x-3"
+                        >
+                          <ArrowDownToLine size={20} />
+                          <span>Buraya Daşı</span>
+                        </button>
+                      </div>
                     </>
                   ) : (
                     <>
@@ -887,21 +1057,67 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                         </div>
                       </div>
                       
-                      <div className="flex flex-1 max-w-md items-center space-x-3">
-                        <div className="relative flex-1">
-                          <Scale className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 w-4 h-4" />
-                          <input 
-                            type="number" 
-                            placeholder="1 qr Qiyməti (₼)" 
-                            value={bulkPricePerGram}
-                            onChange={(e) => setBulkPricePerGram(e.target.value === '' ? '' : Number(e.target.value))}
-                            className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-3 pl-10 pr-4 font-black text-sm outline-none focus:border-amber-400 transition-all"
-                          />
+                      <div className="flex flex-1 max-w-3xl items-end space-x-3">
+                        <div className="flex-1 space-y-1">
+                          <label className="text-[9px] font-black text-stone-400 uppercase ml-2">Ümumi (1qr)</label>
+                          <div className="relative">
+                            <Scale className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 w-4 h-4" />
+                            <input 
+                              type="number" 
+                              placeholder="₼" 
+                              value={bulkPricePerGram}
+                              onChange={(e) => setBulkPricePerGram(e.target.value === '' ? '' : Number(e.target.value))}
+                              className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-3 pl-10 pr-4 font-black text-sm outline-none focus:border-amber-400 transition-all"
+                            />
+                          </div>
                         </div>
+
+                        <div className="flex-1 space-y-1">
+                          <label className="text-[9px] font-black text-stone-400 uppercase ml-2">750 Əyar (1qr)</label>
+                          <div className="relative">
+                            <Scale className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 w-4 h-4" />
+                            <input 
+                              type="number" 
+                              placeholder="₼" 
+                              value={bulkPricePerGram750}
+                              onChange={(e) => setBulkPricePerGram750(e.target.value === '' ? '' : Number(e.target.value))}
+                              className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-3 pl-10 pr-4 font-black text-sm outline-none focus:border-amber-400 transition-all"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex-1 space-y-1">
+                          <label className="text-[9px] font-black text-stone-400 uppercase ml-2">Brilliant</label>
+                          <div className="relative">
+                            <Gem className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 w-4 h-4" />
+                            <input 
+                              type="number" 
+                              placeholder="₼" 
+                              value={bulkBrilliantPrice}
+                              onChange={(e) => setBulkBrilliantPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                              className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-3 pl-10 pr-4 font-black text-sm outline-none focus:border-amber-400 transition-all"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex-1 space-y-1">
+                          <label className="text-[9px] font-black text-stone-400 uppercase ml-2">Əyar</label>
+                          <select 
+                            value={bulkKaratFilter}
+                            onChange={(e) => setBulkKaratFilter(e.target.value)}
+                            className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-3 px-4 font-black text-sm outline-none focus:border-amber-400 transition-all cursor-pointer"
+                          >
+                            <option value="all">Hamısı</option>
+                            {settings.carats.map(c => (
+                              <option key={c} value={c}>{c}</option>
+                            ))}
+                          </select>
+                        </div>
+
                         <button 
                           onClick={handleBulkPrint}
                           disabled={!bulkPricePerGram}
-                          className={`px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg flex items-center space-x-2 ${bulkPricePerGram ? 'bg-stone-900 text-amber-500 hover:bg-black' : 'bg-stone-100 text-stone-300 cursor-not-allowed'}`}
+                          className={`px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg flex items-center space-x-2 h-[48px] ${bulkPricePerGram ? 'bg-stone-900 text-amber-500 hover:bg-black' : 'bg-stone-100 text-stone-300 cursor-not-allowed'}`}
                         >
                           <Zap size={16} />
                           <span>Toplu Çap Et</span>
@@ -917,6 +1133,22 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                 <table className="w-full text-left border-collapse min-w-[800px]">
                   <thead>
                     <tr className="bg-stone-50 border-b border-stone-100">
+                      {showArchived && (
+                        <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest text-center">
+                          <input 
+                            type="checkbox" 
+                            className="w-5 h-5 accent-amber-500 rounded cursor-pointer"
+                            checked={filteredProducts.length > 0 && selectedForRestore.length === filteredProducts.length}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedForRestore(filteredProducts.map(p => p.id));
+                              } else {
+                                setSelectedForRestore([]);
+                              }
+                            }}
+                          />
+                        </th>
+                      )}
                       <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest">Şəkil</th>
                       <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest">Kod</th>
                       <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest">Məhsul Adı</th>
@@ -929,18 +1161,40 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                   <tbody className="divide-y divide-stone-50">
                     {filteredProducts.map((p) => (
                       <tr key={p.id} onClick={() => openDetailModal(p)} className="hover:bg-amber-50/20 transition-all group cursor-pointer">
+                        {showArchived && (
+                          <td className="px-8 py-5 text-center" onClick={(e) => e.stopPropagation()}>
+                            <input 
+                              type="checkbox" 
+                              className="w-5 h-5 accent-amber-500 rounded cursor-pointer"
+                              checked={selectedForRestore.includes(p.id)}
+                              onChange={() => {
+                                setSelectedForRestore(prev => 
+                                  prev.includes(p.id) ? prev.filter(id => id !== p.id) : [...prev, p.id]
+                                );
+                              }}
+                            />
+                          </td>
+                        )}
                         <td className="px-8 py-5">
-                          <div className="w-14 h-14 rounded-xl overflow-hidden border-2 border-stone-100 shadow-sm bg-stone-50 flex items-center justify-center">
+                          <div 
+                            onClick={(e) => p.imageUrl ? openGallery(e, filteredProducts.indexOf(p)) : null}
+                            className={`w-14 h-14 rounded-xl overflow-hidden border-2 border-stone-100 shadow-sm bg-stone-50 flex items-center justify-center relative group/img ${p.imageUrl ? 'cursor-zoom-in hover:border-amber-400 transition-all' : ''}`}
+                          >
                             {p.imageUrl ? (
-                              <img 
-                                src={p.imageUrl} 
-                                referrerPolicy="no-referrer" 
-                                className="w-full h-full object-cover" 
-                                onError={(e) => {
-                                  (e.target as HTMLImageElement).style.display = 'none';
-                                  (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="text-stone-200"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></div>';
-                                }}
-                              />
+                              <>
+                                <img 
+                                  src={p.imageUrl} 
+                                  referrerPolicy="no-referrer" 
+                                  className="w-full h-full object-cover" 
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).style.display = 'none';
+                                    (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="text-stone-200"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></div>';
+                                  }}
+                                />
+                                <div className="absolute inset-0 bg-amber-500/0 group-hover/img:bg-amber-500/20 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-all">
+                                  <Maximize2 size={16} className="text-amber-600" />
+                                </div>
+                              </>
                             ) : (
                               <div className="text-stone-200"><ImageIcon size={24} /></div>
                             )}
@@ -979,7 +1233,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                         </td>
                       </tr>
                     ))}
-                    {filteredProducts.length === 0 && <tr><td colSpan={7} className="px-10 py-20 text-center"><p className="text-stone-300 font-black uppercase text-xs tracking-widest">Məlumat tapılmadı</p></td></tr>}
+                    {filteredProducts.length === 0 && <tr><td colSpan={showArchived ? 8 : 7} className="px-10 py-20 text-center"><p className="text-stone-300 font-black uppercase text-xs tracking-widest">Məlumat tapılmadı</p></td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -1044,7 +1298,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                                  <div className="flex items-center space-x-2 mt-1.5">
                                     <span className="text-[10px] font-black text-stone-500">{item.code}</span>
                                     <span className="w-1 h-1 bg-stone-200 rounded-full"></span>
-                                    <span className="text-[10px] font-black text-amber-600">{item.weight} gr | {item.carat}K</span>
+                                    <span className="text-[10px] font-black text-amber-600">{item.weight} gr | {item.carat}</span>
                                     {item.brilliant && (
                                        <>
                                          <span className="w-1 h-1 bg-stone-200 rounded-full"></span>
@@ -1082,7 +1336,16 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                <form id="fullEditForm" onSubmit={handleUpdateProduct} className="space-y-8">
                   <div className="flex flex-col items-center space-y-4">
                     <div 
-                      onClick={() => (editForm.imageUrl || selectedProduct.imageUrl) && !isCameraOpen && setZoomedImage(editForm.imageUrl || selectedProduct.imageUrl || null)} 
+                      onClick={() => {
+                        if ((editForm.imageUrl || selectedProduct.imageUrl) && !isCameraOpen) {
+                          const index = filteredProducts.findIndex(p => p.id === selectedProduct.id);
+                          if (index !== -1) {
+                            setZoomedProductIndex(index);
+                          } else {
+                            setZoomedImage(editForm.imageUrl || selectedProduct.imageUrl || null);
+                          }
+                        }
+                      }} 
                       className="relative w-48 h-48 border-4 border-dashed border-stone-100 rounded-[2rem] bg-stone-50 flex items-center justify-center overflow-hidden cursor-zoom-in group shadow-inner"
                     >
                       {isCameraOpen ? (
@@ -1121,7 +1384,23 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                        <div className="space-y-1.5"><label className="text-[10px] font-black text-stone-400 uppercase ml-2">Məhsul Kodu</label><input type="text" value={editForm.code || ''} onChange={(e) => setEditForm({...editForm, code: e.target.value})} className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-4 px-5 font-black text-stone-800 outline-none" /></div>
                        <div className="space-y-1.5"><label className="text-[10px] font-black text-stone-400 uppercase ml-2">Ad</label><input type="text" value={editForm.name || ''} onChange={(e) => setEditForm({...editForm, name: e.target.value})} className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-4 px-5 font-black text-stone-800 outline-none" /></div>
                        <div className="space-y-1.5"><label className="text-[10px] font-black text-stone-400 uppercase ml-2">Çəki (gr)</label><input type="number" step="0.001" value={editForm.weight || ''} onChange={(e) => setEditForm({...editForm, weight: Number(e.target.value)})} className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-4 px-5 font-black text-stone-800 outline-none" /></div>
+                       <div className="space-y-1.5"><label className="text-[10px] font-black text-stone-400 uppercase ml-2">Daş (Brilliant)</label><input type="text" value={editForm.brilliant || ''} onChange={(e) => setEditForm({...editForm, brilliant: e.target.value})} className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-4 px-5 font-black text-stone-800 outline-none" /></div>
                        <div className="space-y-1.5"><label className="text-[10px] font-black text-stone-400 uppercase ml-2">Tədarükçü</label><select value={editForm.supplier || ''} onChange={(e) => setEditForm({...editForm, supplier: e.target.value})} className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-4 px-5 font-black text-stone-800 outline-none cursor-pointer">{settings.suppliers.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+                       <div className="space-y-1.5">
+                         <label className="text-[10px] font-black text-stone-400 uppercase ml-2">Əyar</label>
+                         <div className="flex gap-2 h-[58px]">
+                           {settings.carats.map(c => (
+                             <button 
+                               key={c} 
+                               type="button" 
+                               onClick={() => setEditForm({...editForm, carat: c})} 
+                               className={`flex-1 rounded-xl font-black text-[11px] border transition-all ${editForm.carat === c ? 'bg-amber-500 border-amber-500 text-stone-950 shadow-md' : 'bg-stone-50 border-stone-100 text-stone-400'}`}
+                             >
+                               {c}
+                             </button>
+                           ))}
+                         </div>
+                       </div>
                        <div className="space-y-1.5 md:col-span-2"><label className="text-[10px] font-black text-amber-600 uppercase ml-2">Qiymət (₼)</label><input type="number" value={editForm.price || ''} onChange={(e) => setEditForm({...editForm, price: Number(e.target.value)})} className="w-full bg-amber-50 border-2 border-amber-200 rounded-xl py-6 px-6 font-black text-4xl text-amber-900 text-center outline-none" /></div>
                        <div className="md:col-span-2 flex items-center space-x-3 bg-stone-50 p-4 rounded-2xl border border-stone-100">
                           <input 
@@ -1238,6 +1517,69 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                 </button>
               </div>
             </footer>
+          </div>
+        </div>
+      )}
+
+      {zoomedProductIndex !== null && (
+        <div className="fixed inset-0 bg-stone-950/95 z-[110] flex items-center justify-center p-4" onClick={() => setZoomedProductIndex(null)}>
+          <button 
+            onClick={(e) => { e.stopPropagation(); setZoomedProductIndex(null); }} 
+            className="absolute top-8 right-8 p-4 text-white/50 hover:text-white transition-all z-50 bg-white/10 rounded-full backdrop-blur-md"
+          >
+            <X size={32} />
+          </button>
+
+          <button 
+            onClick={prevImage}
+            className="absolute left-4 md:left-8 top-1/2 -translate-y-1/2 p-4 text-white/50 hover:text-white transition-all z-50 bg-white/10 rounded-full backdrop-blur-md hover:scale-110 active:scale-95"
+          >
+            <ChevronLeft size={48} />
+          </button>
+
+          <div className="relative max-w-full max-h-full flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
+            <img 
+              src={filteredProducts[zoomedProductIndex].imageUrl} 
+              referrerPolicy="no-referrer" 
+              className="max-w-[90vw] max-h-[80vh] object-contain drop-shadow-2xl animate-in zoom-in-95 duration-300" 
+              alt={filteredProducts[zoomedProductIndex].name} 
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = 'none';
+                (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="text-white flex flex-col items-center"><svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg><p class="text-xl font-black uppercase mt-6 opacity-50 tracking-widest">Şəkil tapılmadı</p></div>';
+              }}
+            />
+            <div className="mt-8 text-center bg-white/10 backdrop-blur-md px-8 py-4 rounded-3xl border border-white/10">
+              <p className="text-white font-black text-xl uppercase tracking-tighter">{filteredProducts[zoomedProductIndex].name}</p>
+              <div className="flex items-center justify-center space-x-4 mt-2">
+                <span className="text-amber-500 font-black text-sm uppercase tracking-widest">{filteredProducts[zoomedProductIndex].code}</span>
+                <span className="w-1 h-1 bg-white/20 rounded-full"></span>
+                <span className="text-white/70 font-bold text-sm">{filteredProducts[zoomedProductIndex].weight} gr</span>
+                <span className="w-1 h-1 bg-white/20 rounded-full"></span>
+                <span className="text-white/70 font-bold text-sm">{filteredProducts[zoomedProductIndex].carat} Əyar</span>
+              </div>
+              <p className="text-amber-400 font-black text-2xl mt-3 tracking-tighter">{(Number(filteredProducts[zoomedProductIndex].price) || 0).toLocaleString()} ₼</p>
+            </div>
+          </div>
+
+          <button 
+            onClick={nextImage}
+            className="absolute right-4 md:right-8 top-1/2 -translate-y-1/2 p-4 text-white/50 hover:text-white transition-all z-50 bg-white/10 rounded-full backdrop-blur-md hover:scale-110 active:scale-95"
+          >
+            <ChevronRight size={48} />
+          </button>
+
+          <div className="absolute bottom-8 left-0 right-0 flex justify-center space-x-2 px-4 overflow-x-auto py-4 scrollbar-hide">
+            {filteredProducts.map((p, idx) => (
+              p.imageUrl && (
+                <button 
+                  key={p.id}
+                  onClick={(e) => { e.stopPropagation(); setZoomedProductIndex(idx); }}
+                  className={`w-16 h-16 rounded-xl overflow-hidden border-2 transition-all flex-shrink-0 ${zoomedProductIndex === idx ? 'border-amber-500 scale-110 shadow-lg shadow-amber-500/20' : 'border-white/10 opacity-50 hover:opacity-100'}`}
+                >
+                  <img src={p.imageUrl} className="w-full h-full object-cover" />
+                </button>
+              )
+            ))}
           </div>
         </div>
       )}

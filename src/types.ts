@@ -15,7 +15,7 @@ export interface Product {
   id: string;
   code: string;
   name: string;
-  carat: number; // Əyar
+  carat: string; // Əyar
   type: ProductType;
   supplier: string; // Tədərükçü
   brilliant?: string; // Brilliant məlumatı
@@ -56,16 +56,24 @@ export interface Sale {
   returnNote?: string; // Geri qaytarılma və ya dəyişdirilmə detalları
   // Snapshot fields for history
   weight?: number;
-  carat?: number;
+  carat?: string;
   supplier?: string;
   brilliant?: string; // Brilliant məlumatı (tarixçə üçün)
   imageUrl?: string;
 }
 
+export interface Expense {
+  id: string;
+  amount: number;
+  description: string;
+  date: string;
+  category: string;
+}
+
 export interface ScrapItem {
   name: string;
   weight: number;
-  carat: number;
+  carat: string;
   image: string;
 }
 
@@ -112,7 +120,7 @@ export interface AppSettings {
   productGroups: ProductGroup[];
   productTypes: string[]; // Keep for compatibility or simple lists
   suppliers: string[];
-  carats: number[];
+  carats: string[];
   pricePerGram: number; // 1 Qramın qiyməti
   labelConfig: LabelConfig;
   silentPrinting: boolean;
@@ -120,6 +128,15 @@ export interface AppSettings {
   labelPrinterPath: string;
   receiptFontWeight: string;
   labelFontWeight: string;
+}
+
+export interface SystemLog {
+  id: string;
+  date: string;
+  user: string;
+  action: string;
+  details?: string;
+  category: 'PRODUCT' | 'SALE' | 'SCRAP' | 'SETTINGS' | 'EXPENSE' | 'CUSTOMER' | 'SYSTEM';
 }
 
 export enum Page {
@@ -131,5 +148,7 @@ export enum Page {
   Scrap = 'SCRAP',
   Settings = 'SETTINGS',
   Reports = 'REPORTS',
-  Debt = 'DEBT'
+  Debt = 'DEBT',
+  Expenses = 'EXPENSES',
+  Logs = 'LOGS'
 }

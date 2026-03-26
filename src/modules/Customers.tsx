@@ -25,15 +25,16 @@ import {
   Sparkles,
   ChevronRight
 } from 'lucide-react';
-import { Customer, Sale } from '@/types';
+import { Customer, Sale, SystemLog } from '@/types';
 
 interface CustomersProps {
   customers: Customer[];
   setCustomers: React.Dispatch<React.SetStateAction<Customer[]>>;
   sales: Sale[];
+  addLog: (action: string, category: SystemLog['category'], details?: string) => void;
 }
 
-const CustomersModule: React.FC<CustomersProps> = ({ customers, setCustomers, sales }) => {
+const CustomersModule: React.FC<CustomersProps> = ({ customers, setCustomers, sales, addLog }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [historySearchTerm, setHistorySearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -87,6 +88,7 @@ const CustomersModule: React.FC<CustomersProps> = ({ customers, setCustomers, sa
     };
 
     setCustomers((prev: Customer[]) => [customerToAdd, ...prev]);
+    addLog(`Yeni müştəri əlavə edildi: ${customerToAdd.fullName}`, 'CUSTOMER', `Telefon: ${customerToAdd.phone}`);
     setShowAddModal(false);
     setNewCustomer({ fullName: '', phone: '', address: '', title: '' });
   };
@@ -94,7 +96,11 @@ const CustomersModule: React.FC<CustomersProps> = ({ customers, setCustomers, sa
   const deleteCustomer = (e: React.MouseEvent, id: string) => {
     e.stopPropagation(); 
     if (confirm('Bu müştərini silmək istədiyinizə əminsiniz?')) {
+      const customerToDelete = customers.find(c => c.id === id);
       setCustomers((prev: Customer[]) => prev.filter((c: Customer) => c.id !== id));
+      if (customerToDelete) {
+        addLog(`Müştəri silindi: ${customerToDelete.fullName}`, 'CUSTOMER');
+      }
     }
   };
 
@@ -260,7 +266,7 @@ const CustomersModule: React.FC<CustomersProps> = ({ customers, setCustomers, sa
                     <ImageIcon size={80} strokeWidth={0.5} className="text-stone-200" />
                   )}
                   <div className="mt-4 md:mt-6 bg-amber-500 text-white px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest">
-                    {selectedSaleInfo.carat}K Ayar
+                    {selectedSaleInfo.carat} Ayar
                   </div>
                </div>
 

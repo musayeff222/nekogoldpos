@@ -11,6 +11,7 @@ import {
   CheckCircle2, 
   Camera, 
   X, 
+  Plus,
   Image as ImageIcon,
   Phone,
   CreditCard,
@@ -22,26 +23,29 @@ import {
   LayoutGrid,
   ClipboardList
 } from 'lucide-react';
-import { ScrapGold, ScrapPhone, ScrapItem } from '@/types';
+import { ScrapGold, ScrapPhone, ScrapItem, AppSettings, SystemLog } from '@/types';
 
 interface ScrapProps {
   scraps: ScrapGold[];
   setScraps: React.Dispatch<React.SetStateAction<any>>;
+  settings: AppSettings;
+  addLog: (action: string, category: SystemLog['category'], details?: string) => void;
 }
 
-const ScrapModule: React.FC<ScrapProps> = ({ scraps, setScraps }) => {
+const ScrapModule: React.FC<ScrapProps> = ({ scraps, setScraps, settings, addLog }) => {
   const [activeTab, setActiveTab] = useState<'purchase' | 'history'>('purchase');
   const [form, setForm] = useState({
     customer: '',
     idCardFin: '',
     phones: [{ number: '', owner: '' }] as ScrapPhone[],
-    items: [{ name: '', weight: 0, carat: 583, image: '' }] as ScrapItem[],
+    items: [{ name: '', weight: 0, carat: settings.carats[0] || '', image: '' }] as ScrapItem[],
     personImage: '',
     idCardImage: '',
     pricePerGram: 0
   });
 
   const [activeCamera, setActiveCamera] = useState<{ type: string; index?: number } | null>(null);
+  const [zoomLevel, setZoomLevel] = useState(1);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
@@ -52,6 +56,7 @@ const ScrapModule: React.FC<ScrapProps> = ({ scraps, setScraps }) => {
       setStream(mediaStream);
       if (videoRef.current) videoRef.current.srcObject = mediaStream;
       setActiveCamera({ type, index });
+      setZoomLevel(1); // Reset zoom when opening camera
     } catch (err) {
       alert("Kameraya giriş icazəsi verilmlədi.");
     }
@@ -68,10 +73,19 @@ const ScrapModule: React.FC<ScrapProps> = ({ scraps, setScraps }) => {
       const canvas = canvasRef.current;
       const video = videoRef.current;
       
+      const videoWidth = video.videoWidth;
+      const videoHeight = video.videoHeight;
+      
+      // Calculate source rectangle for digital zoom
+      const sw = videoWidth / zoomLevel;
+      const sh = videoHeight / zoomLevel;
+      const sx = (videoWidth - sw) / 2;
+      const sy = (videoHeight - sh) / 2;
+      
       // Resize to max 800px for persistent storage
       const maxDim = 800;
-      let width = video.videoWidth;
-      let height = video.videoHeight;
+      let width = sw;
+      let height = sh;
       
       if (width > height) {
         if (width > maxDim) {
@@ -89,7 +103,7 @@ const ScrapModule: React.FC<ScrapProps> = ({ scraps, setScraps }) => {
       canvas.height = height;
       const ctx = canvas.getContext('2d');
       if (ctx) {
-        ctx.drawImage(video, 0, 0, width, height);
+        ctx.drawImage(video, sx, sy, sw, sh, 0, 0, width, height);
         const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
         
         if (activeCamera.type === 'item' && activeCamera.index !== undefined) {
@@ -107,7 +121,7 @@ const ScrapModule: React.FC<ScrapProps> = ({ scraps, setScraps }) => {
   const addPhone = () => setForm({ ...form, phones: [...form.phones, { number: '', owner: '' }] });
   const removePhone = (idx: number) => setForm({ ...form, phones: form.phones.filter((_, i) => i !== idx) });
   
-  const addItem = () => setForm({ ...form, items: [...form.items, { name: '', weight: 0, carat: 583, image: '' }] });
+  const addItem = () => setForm({ ...form, items: [...form.items, { name: '', weight: 0, carat: settings.carats[0] || '', image: '' }] });
   const removeItem = (idx: number) => setForm({ ...form, items: form.items.filter((_, i) => i !== idx) });
 
   const updatePhone = (idx: number, field: keyof ScrapPhone, val: string) => {
@@ -146,7 +160,8 @@ const ScrapModule: React.FC<ScrapProps> = ({ scraps, setScraps }) => {
     };
     
     setScraps([newScrap, ...scraps]);
-    setForm({ customer: '', idCardFin: '', phones: [{ number: '', owner: '' }], items: [{ name: '', weight: 0, carat: 583, image: '' }], personImage: '', idCardImage: '', pricePerGram: 0 });
+    addLog(`Lom alışı edildi: ${newScrap.customerName}`, 'SCRAP', `Toplam: ${newScrap.totalPrice} AZN, ${newScrap.items.length} məhsul`);
+    setForm({ customer: '', idCardFin: '', phones: [{ number: '', owner: '' }], items: [{ name: '', weight: 0, carat: settings.carats[0] || '', image: '' }], personImage: '', idCardImage: '', pricePerGram: 0 });
     alert("Hurda alışı uğurla qeydə alındı.");
     setActiveTab('history');
   };
@@ -305,11 +320,10 @@ const ScrapModule: React.FC<ScrapProps> = ({ scraps, setScraps }) => {
                               </div>
                               <div className="space-y-2">
                                  <label className="text-[10px] font-black text-stone-700 uppercase ml-4">Əyar</label>
-                                 <select value={item.carat} onChange={(e) => updateItem(idx, 'carat', Number(e.target.value))} className="w-full bg-white border-2 border-stone-300 rounded-2xl py-4 px-4 font-black text-base text-stone-900 outline-none cursor-pointer">
-                                    <option value={583}>14K / 583</option>
-                                    <option value={750}>18K / 750</option>
-                                    <option value={22}>22K</option>
-                                    <option value={24}>24K</option>
+                                 <select value={item.carat} onChange={(e) => updateItem(idx, 'carat', e.target.value)} className="w-full bg-white border-2 border-stone-300 rounded-2xl py-4 px-4 font-black text-base text-stone-900 outline-none cursor-pointer">
+                                    {settings.carats.map(c => (
+                                       <option key={c} value={c}>{c}</option>
+                                    ))}
                                  </select>
                               </div>
                            </div>
@@ -536,7 +550,7 @@ const ScrapModule: React.FC<ScrapProps> = ({ scraps, setScraps }) => {
                             <div className="flex items-center justify-end mt-2 space-x-2">
                                <span className="text-[10px] font-black text-stone-500 uppercase">{s.pricePerGram} ₼ / qr</span>
                                <span className="w-1.5 h-1.5 bg-amber-500 rounded-full"></span>
-                               <span className="text-[10px] font-black text-amber-700 uppercase">{s.items[0]?.carat}K</span>
+                               <span className="text-[10px] font-black text-amber-700 uppercase">{s.items[0]?.carat}</span>
                             </div>
                          </td>
                       </tr>
@@ -564,7 +578,36 @@ const ScrapModule: React.FC<ScrapProps> = ({ scraps, setScraps }) => {
       {activeCamera && (
         <div className="fixed inset-0 bg-stone-950/98 z-[150] flex flex-col items-center justify-center p-4 animate-in fade-in duration-300">
            <div className="w-full max-w-2xl bg-black rounded-[3rem] overflow-hidden shadow-2xl border-4 border-white/10 relative">
-              <video ref={videoRef} autoPlay playsInline className="w-full h-auto aspect-[4/3] object-cover" />
+              <div className="relative overflow-hidden aspect-[4/3]">
+                <video 
+                  ref={videoRef} 
+                  autoPlay 
+                  playsInline 
+                  className="w-full h-full object-cover transition-transform duration-300" 
+                  style={{ transform: `scale(${zoomLevel})` }}
+                />
+                
+                {/* Zoom Controls */}
+                <div className="absolute right-6 top-1/2 -translate-y-1/2 flex flex-col space-y-6 z-20">
+                   <button 
+                     type="button" 
+                     onClick={() => setZoomLevel(prev => Math.min(prev + 0.5, 3))}
+                     className="w-14 h-14 bg-white/20 backdrop-blur-md text-white rounded-full flex items-center justify-center border border-white/30 active:scale-90 transition-all"
+                   >
+                     <Plus size={28} />
+                   </button>
+                   <div className="bg-white/20 backdrop-blur-md text-white py-1.5 px-3 rounded-xl text-xs font-black text-center border border-white/30">
+                      {zoomLevel.toFixed(1)}x
+                   </div>
+                   <button 
+                     type="button" 
+                     onClick={() => setZoomLevel(prev => Math.max(prev - 0.5, 1))}
+                     className="w-14 h-14 bg-white/20 backdrop-blur-md text-white rounded-full flex items-center justify-center border border-white/30 active:scale-90 transition-all"
+                   >
+                     <X size={28} className="rotate-45" />
+                   </button>
+                </div>
+              </div>
               <div className="absolute inset-0 border-[60px] md:border-[80px] border-black/50 pointer-events-none"></div>
               
               <div className="absolute top-8 left-8 right-8 flex justify-between items-center">

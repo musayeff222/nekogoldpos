@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { UserPlus, Search, Wallet, Coins, History, ChevronRight, X, ArrowLeft } from 'lucide-react';
-import { Customer } from '@/types';
+import { Customer, SystemLog } from '@/types';
 
 interface DebtProps {
   customers: Customer[];
   setCustomers: React.Dispatch<React.SetStateAction<Customer[]>>;
+  addLog: (action: string, category: SystemLog['category'], details?: string) => void;
 }
 
-const DebtModule: React.FC<DebtProps> = ({ customers, setCustomers }) => {
+const DebtModule: React.FC<DebtProps> = ({ customers, setCustomers, addLog }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
 

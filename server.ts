@@ -1,5 +1,6 @@
 
 import express, { Request, Response } from 'express';
+import compression from 'compression';
 import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
 import cors from 'cors';
@@ -48,6 +49,7 @@ async function startServer() {
   });
 
   // Middleware
+  app.use(compression());
   app.use(cors({
     origin: true,
     credentials: true
@@ -128,6 +130,22 @@ async function startServer() {
               id VARCHAR(50) PRIMARY KEY,
               content LONGTEXT,
               updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )`
+          },
+          {
+            name: 'expenses',
+            sql: `CREATE TABLE IF NOT EXISTS expenses (
+              id VARCHAR(100) PRIMARY KEY,
+              content LONGTEXT,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )`
+          },
+          {
+            name: 'logs',
+            sql: `CREATE TABLE IF NOT EXISTS logs (
+              id VARCHAR(100) PRIMARY KEY,
+              content LONGTEXT,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )`
           },
           {
@@ -358,39 +376,69 @@ async function startServer() {
   // Generic Data Sync Endpoints
   app.get('/api/data/:type', async (req: Request, res: Response) => {
     const { type } = req.params;
-    const allowedTypes = ['products', 'sales', 'customers', 'scraps', 'settings'];
+    const allowedTypes = ['products', 'sales', 'customers', 'scraps', 'settings', 'expenses', 'logs'];
     
     if (typeof type !== 'string' || !allowedTypes.includes(type)) {
       return res.status(400).json({ error: 'Invalid data type' });
     }
 
     try {
-      const [rows] = await pool.execute(`SELECT content FROM ${type}`);
-      const rawData = (rows as any[]).map(row => JSON.parse(row.content));
-      
-      // Migration: Convert old /uploads/ paths to base64 if they exist
-      const data = await Promise.all(rawData.map(async (item: any) => {
-        if (item && item.imageUrl && typeof item.imageUrl === 'string' && item.imageUrl.startsWith('/uploads/')) {
-          try {
-            const filePath = path.join(process.cwd(), item.imageUrl);
-            if (fs.existsSync(filePath)) {
-              const fileData = fs.readFileSync(filePath);
-              const ext = path.extname(filePath).slice(1) || 'jpeg';
-              item.imageUrl = `data:image/${ext};base64,${fileData.toString('base64')}`;
-            }
-          } catch (err) {
-            console.warn(`Failed to migrate image ${item.imageUrl}:`, err);
-          }
-        }
-        return item;
-      }));
-      
-      // Settings is a special case, it's usually just one object
       if (type === 'settings') {
-        res.json(data[0] || null);
-      } else {
-        res.json(data);
+        const [rows] = await pool.query(`SELECT content FROM ${type}`);
+        const rowArray = rows as any[];
+        if (rowArray.length > 0) {
+          res.json(JSON.parse(rowArray[0].content));
+        } else {
+          res.json(null);
+        }
+        return;
       }
+
+      // Optimization: Stream the response directly from MySQL to avoid loading everything into memory
+      const connection = await pool.getConnection();
+      
+      // Use the underlying connection for streaming (mysql2/promise doesn't support streaming directly)
+      const stream = (connection as any).connection.query(`SELECT content FROM ${type}`).stream();
+      
+      res.setHeader('Content-Type', 'application/json');
+      res.write('[');
+      
+      let first = true;
+      let hasError = false;
+
+      stream.on('data', (row: any) => {
+        if (hasError) return;
+        const chunk = (first ? '' : ',') + row.content;
+        first = false;
+        if (!res.write(chunk)) {
+          stream.pause();
+        }
+      });
+      
+      res.on('drain', () => {
+        stream.resume();
+      });
+      
+      stream.on('end', () => {
+        if (hasError) return;
+        res.write(']');
+        res.end();
+        connection.release();
+      });
+      
+      stream.on('error', (error: any) => {
+        hasError = true;
+        console.error(`Stream error for ${type}:`, error);
+        if (!res.headersSent) {
+          res.status(500).json({ 
+            error: 'Failed to fetch data', 
+            details: error instanceof Error ? error.message : String(error)
+          });
+        } else {
+          res.end();
+        }
+        connection.release();
+      });
     } catch (error) {
       console.error(`Failed to fetch ${type}:`, error);
       res.status(500).json({ 
@@ -403,7 +451,7 @@ async function startServer() {
   app.post('/api/data/:type', async (req: Request, res: Response) => {
     const { type } = req.params;
     const { data } = req.body;
-    const allowedTypes = ['products', 'sales', 'customers', 'scraps', 'settings'];
+    const allowedTypes = ['products', 'sales', 'customers', 'scraps', 'settings', 'expenses', 'logs'];
 
     if (typeof type !== 'string' || !allowedTypes.includes(type)) {
       return res.status(400).json({ error: 'Invalid data type' });
@@ -486,7 +534,7 @@ async function startServer() {
       const zip = new AdmZip();
       
       // 1. Fetch all database data
-      const allowedTypes = ['products', 'sales', 'customers', 'scraps', 'settings'];
+      const allowedTypes = ['products', 'sales', 'customers', 'scraps', 'settings', 'expenses', 'logs'];
       const allData: any = {};
       
       for (const type of allowedTypes) {
@@ -541,7 +589,7 @@ async function startServer() {
         
         await connection.beginTransaction();
         
-        const allowedTypes = ['products', 'sales', 'customers', 'scraps', 'settings'];
+        const allowedTypes = ['products', 'sales', 'customers', 'scraps', 'settings', 'expenses', 'logs'];
         for (const type of allowedTypes) {
           const data = allData[type];
           if (!data) continue;

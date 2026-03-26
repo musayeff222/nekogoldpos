@@ -15,16 +15,18 @@ import {
   History,
   Wallet
 } from 'lucide-react';
-import { Page, Product, Sale, Customer, ScrapGold, AppSettings } from '@/types';
+import { Page, Product, Sale, Customer, ScrapGold, Expense, AppSettings, SystemLog } from '@/types';
 import SalesModule from '@/modules/Sales';
 import StockModule from '@/modules/Stock';
 import CustomersModule from '@/modules/Customers';
 import SoldProductsModule from '@/modules/SoldProducts';
 import ReturnsModule from '@/modules/Returns';
 import ScrapModule from '@/modules/Scrap';
+import ExpensesModule from '@/modules/Expenses';
 import SettingsModule from '@/modules/Settings';
 import ReportsModule from '@/modules/Reports';
 import DebtModule from '@/modules/Debt';
+import LogsModule from '@/modules/Logs';
 import Login from '@/modules/Login';
 import { LogOut } from 'lucide-react';
 
@@ -41,6 +43,8 @@ const App: React.FC = () => {
   const [sales, setSales] = useState<Sale[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [scraps, setScraps] = useState<ScrapGold[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [logs, setLogs] = useState<SystemLog[]>([]);
   const [cart, setCart] = useState<Product[]>([]);
 
   // Refs to track last synced data to avoid redundant syncs
@@ -48,6 +52,8 @@ const App: React.FC = () => {
   const lastSyncedSales = React.useRef<string>('');
   const lastSyncedCustomers = React.useRef<string>('');
   const lastSyncedScraps = React.useRef<string>('');
+  const lastSyncedExpenses = React.useRef<string>('');
+  const lastSyncedLogs = React.useRef<string>('');
   const lastSyncedSettings = React.useRef<string>('');
   const [settings, setSettings] = useState<AppSettings>({
     deleteCode: '1234',
@@ -69,7 +75,7 @@ const App: React.FC = () => {
     ],
     productTypes: ['Üzük', 'Sırğa', 'Boyunbağı', 'Qolbaq', 'Dəst', 'Zəncir', 'Set', 'Saat', 'Sep', 'Külçə', 'Digər'],
     suppliers: ['Tədərükçü A', 'Tədərükçü B', 'Atelye X'],
-    carats: [14, 18, 22, 24],
+    carats: ['14', '18', '22', '24'],
     pricePerGram: 400,
     labelConfig: {
       width: 80,
@@ -102,7 +108,7 @@ const App: React.FC = () => {
       setUser({ username });
     }
 
-    const fetchData = async () => {
+    const fetchData = async (retries = 3) => {
       try {
         const fetchWithType = async (type: string) => {
           const res = await fetch(`/api/data/${type}`);
@@ -113,26 +119,35 @@ const App: React.FC = () => {
           return res.json();
         };
 
-        const [p, s, c, sc, st] = await Promise.all([
+        // Fetch in parallel for better performance
+        const [p, s, c, sc, st, ex, l] = await Promise.all([
           fetchWithType('products'),
           fetchWithType('sales'),
           fetchWithType('customers'),
           fetchWithType('scraps'),
-          fetchWithType('settings')
+          fetchWithType('settings'),
+          fetchWithType('expenses'),
+          fetchWithType('logs')
         ]);
 
         setProducts(Array.isArray(p) ? p : []);
         lastSyncedProducts.current = JSON.stringify(Array.isArray(p) ? p : []);
-        
+
         setSales(Array.isArray(s) ? s : []);
         lastSyncedSales.current = JSON.stringify(Array.isArray(s) ? s : []);
-        
+
         setCustomers(Array.isArray(c) ? c : []);
         lastSyncedCustomers.current = JSON.stringify(Array.isArray(c) ? c : []);
-        
+
         setScraps(Array.isArray(sc) ? sc : []);
         lastSyncedScraps.current = JSON.stringify(Array.isArray(sc) ? sc : []);
-        
+
+        setExpenses(Array.isArray(ex) ? ex : []);
+        lastSyncedExpenses.current = JSON.stringify(Array.isArray(ex) ? ex : []);
+
+        setLogs(Array.isArray(l) ? l : []);
+        lastSyncedLogs.current = JSON.stringify(Array.isArray(l) ? l : []);
+
         if (st && !st.error) {
           // Ensure productGroups exists for backward compatibility
           const mergedSettings = {
@@ -174,7 +189,7 @@ const App: React.FC = () => {
             ],
             productTypes: ['Üzük', 'Sırğa', 'Boyunbağı', 'Qolbaq', 'Dəst', 'Zəncir', 'Set', 'Saat', 'Sep', 'Külçə', 'Digər'],
             suppliers: ['Tədərükçü A', 'Tədərükçü B', 'Atelye X'],
-            carats: [14, 18, 22, 24],
+            carats: ['14', '18', '22', '24'],
             pricePerGram: 400,
             labelConfig: {
               width: 80,
@@ -203,8 +218,12 @@ const App: React.FC = () => {
         setIsLoaded(true);
         console.log('Initial data load complete');
       } catch (error: any) {
-        console.error('Failed to fetch data from remote source:', error);
-        setError(error.message || 'Məlumatları yükləmək mümkün olmadı. İnternet bağlantısını və ya server statusunu yoxlayın.');
+        console.error(`Failed to fetch data (retries left: ${retries}):`, error);
+        if (retries > 0) {
+          setTimeout(() => fetchData(retries - 1), 2000);
+        } else {
+          setError(error.message || 'Məlumatları yükləmək mümkün olmadı. İnternet bağlantısını və ya server statusunu yoxlayın.');
+        }
       }
     };
 
@@ -326,6 +345,38 @@ const App: React.FC = () => {
   }, [scraps, isLoaded]);
 
   useEffect(() => {
+    if (!isLoaded || expenses === null) return;
+
+    const currentData = JSON.stringify(expenses);
+    if (currentData === lastSyncedExpenses.current) return;
+
+    const syncData = async () => {
+      setIsSyncing(true);
+      try {
+        const res = await fetch('/api/data/expenses', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: expenses })
+        });
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          throw new Error(errorData.details || errorData.error || 'Sync failed');
+        }
+        lastSyncedExpenses.current = currentData;
+        setSyncError(null);
+      } catch (err: any) {
+        console.error('Failed to sync expenses:', err);
+        setSyncError(`Məlumatlar yadda saxlanılmadı: ${err.message}`);
+      } finally {
+        setIsSyncing(false);
+      }
+    };
+
+    const timeoutId = setTimeout(syncData, 1000);
+    return () => clearTimeout(timeoutId);
+  }, [expenses, isLoaded]);
+
+  useEffect(() => {
     if (!isLoaded || settings === null) return;
 
     const currentData = JSON.stringify(settings);
@@ -357,6 +408,31 @@ const App: React.FC = () => {
     return () => clearTimeout(timeoutId);
   }, [settings, isLoaded]);
 
+  const addLog = async (action: string, category: SystemLog['category'], details?: string) => {
+    const newLog: SystemLog = {
+      id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
+      date: new Date().toISOString(),
+      user: user?.username || 'Sistem',
+      action,
+      category,
+      details
+    };
+    
+    const updatedLogs = [newLog, ...logs];
+    setLogs(updatedLogs);
+    
+    try {
+      await fetch('/api/data/logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: updatedLogs })
+      });
+      lastSyncedLogs.current = JSON.stringify(updatedLogs);
+    } catch (err) {
+      console.error('Failed to save log:', err);
+    }
+  };
+
   const navItems = [
     { id: Page.Sales, icon: <ShoppingBag size={24} />, label: 'Satış' },
     { id: Page.Stock, icon: <Package size={24} />, label: 'Stok' },
@@ -364,8 +440,10 @@ const App: React.FC = () => {
     { id: Page.SoldProducts, icon: <History size={24} />, label: 'Satılan Mallar' },
     { id: Page.Return, icon: <RotateCcw size={24} />, label: 'Qaytarma' },
     { id: Page.Scrap, icon: <Flame size={24} />, label: 'Lom' },
+    { id: Page.Expenses, icon: <Wallet size={24} />, label: 'Xərclər' },
     { id: Page.Debt, icon: <Wallet size={24} />, label: 'Borclar' },
     { id: Page.Reports, icon: <BarChart3 size={24} />, label: 'Hesabat' },
+    { id: Page.Logs, icon: <History size={24} />, label: 'Loglar' },
     { id: Page.Settings, icon: <SettingsIcon size={24} />, label: 'Ayarlar' },
   ];
 
@@ -392,24 +470,38 @@ const App: React.FC = () => {
 
     if (!isLoaded) {
       return (
-        <div className="flex items-center justify-center h-64">
-          <div className="flex flex-col items-center space-y-4">
-            <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-stone-500 font-bold animate-pulse">Məlumatlar yüklənir...</p>
+        <div className="fixed inset-0 bg-stone-950 flex flex-col items-center justify-center z-[9999]">
+          <div className="relative">
+            <div className="w-24 h-24 border-4 border-amber-500/20 rounded-full"></div>
+            <div className="absolute inset-0 w-24 h-24 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-amber-500 font-black text-xl tracking-tighter">NG</span>
+            </div>
+          </div>
+          <div className="mt-8 text-center">
+            <h2 className="text-white font-black text-2xl tracking-tighter uppercase mb-2">NEKO GOLD</h2>
+            <div className="flex items-center justify-center space-x-2">
+              <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+              <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+              <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-bounce"></div>
+            </div>
+            <p className="text-stone-500 text-[10px] font-black uppercase tracking-[0.3em] mt-4">Sistem Yüklənir</p>
           </div>
         </div>
       );
     }
 
     switch (currentPage) {
-      case Page.Sales: return <SalesModule products={products} setProducts={setProducts} sales={sales} setSales={setSales} customers={customers} setCustomers={setCustomers} settings={settings} cart={cart} setCart={setCart} />;
-      case Page.Stock: return <StockModule products={products} setProducts={setProducts} settings={settings} sales={sales} />;
-      case Page.Customers: return <CustomersModule customers={customers} setCustomers={setCustomers} sales={sales} />;
+      case Page.Sales: return <SalesModule products={products} setProducts={setProducts} sales={sales} setSales={setSales} customers={customers} setCustomers={setCustomers} settings={settings} cart={cart} setCart={setCart} addLog={addLog} />;
+      case Page.Stock: return <StockModule products={products} setProducts={setProducts} settings={settings} sales={sales} cart={cart} setCart={setCart} setCurrentPage={setCurrentPage} addLog={addLog} />;
+      case Page.Customers: return <CustomersModule customers={customers} setCustomers={setCustomers} sales={sales} addLog={addLog} />;
       case Page.SoldProducts: return <SoldProductsModule sales={sales} />;
-      case Page.Return: return <ReturnsModule sales={sales} setSales={setSales} products={products} setProducts={setProducts} />;
-      case Page.Scrap: return <ScrapModule scraps={scraps} setScraps={setScraps} />;
-      case Page.Debt: return <DebtModule customers={customers} setCustomers={setCustomers} />;
-      case Page.Reports: return <ReportsModule sales={sales} products={products} scraps={scraps} customers={customers} />;
+      case Page.Return: return <ReturnsModule sales={sales} setSales={setSales} products={products} setProducts={setProducts} addLog={addLog} />;
+      case Page.Scrap: return <ScrapModule scraps={scraps} setScraps={setScraps} settings={settings} addLog={addLog} />;
+      case Page.Expenses: return <ExpensesModule expenses={expenses} setExpenses={setExpenses} sales={sales} addLog={addLog} />;
+      case Page.Debt: return <DebtModule customers={customers} setCustomers={setCustomers} addLog={addLog} />;
+      case Page.Reports: return <ReportsModule sales={sales} products={products} scraps={scraps} customers={customers} expenses={expenses} />;
+      case Page.Logs: return <LogsModule logs={logs} setLogs={setLogs} />;
       case Page.Settings: return <SettingsModule 
         settings={settings} 
         setSettings={setSettings} 
@@ -421,8 +513,9 @@ const App: React.FC = () => {
         setCustomers={setCustomers}
         scraps={scraps}
         setScraps={setScraps}
+        addLog={addLog}
       />;
-      default: return <SalesModule products={products} setProducts={setProducts} sales={sales} setSales={setSales} customers={customers} setCustomers={setCustomers} settings={settings} cart={cart} setCart={setCart} />;
+      default: return <SalesModule products={products} setProducts={setProducts} sales={sales} setSales={setSales} customers={customers} setCustomers={setCustomers} settings={settings} cart={cart} setCart={setCart} addLog={addLog} />;
     }
   };
 
