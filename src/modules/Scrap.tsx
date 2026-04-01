@@ -160,6 +160,14 @@ const ScrapModule: React.FC<ScrapProps> = ({ scraps, setScraps, settings, addLog
     };
     
     setScraps([newScrap, ...scraps]);
+    
+    // Save to server immediately
+    fetch('/api/data/scraps/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item: newScrap })
+    }).catch(err => console.error('Failed to save scrap to database:', err));
+    
     addLog(`Lom alışı edildi: ${newScrap.customerName}`, 'SCRAP', `Toplam: ${newScrap.totalPrice} AZN, ${newScrap.items.length} məhsul`);
     setForm({ customer: '', idCardFin: '', phones: [{ number: '', owner: '' }], items: [{ name: '', weight: 0, carat: settings.carats[0] || '', image: '' }], personImage: '', idCardImage: '', pricePerGram: 0 });
     alert("Hurda alışı uğurla qeydə alındı.");

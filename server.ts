@@ -394,11 +394,19 @@ async function startServer() {
         return;
       }
 
+      const isLight = req.query.light === 'true';
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : null;
+
       // Optimization: Stream the response directly from MySQL to avoid loading everything into memory
       const connection = await pool.getConnection();
       
+      let query = `SELECT content FROM ${type}`;
+      if (type === 'logs' && limit) {
+        query += ` ORDER BY created_at DESC LIMIT ${limit}`;
+      }
+      
       // Use the underlying connection for streaming (mysql2/promise doesn't support streaming directly)
-      const stream = (connection as any).connection.query(`SELECT content FROM ${type}`).stream();
+      const stream = (connection as any).connection.query(query).stream();
       
       res.setHeader('Content-Type', 'application/json');
       res.write('[');
@@ -408,7 +416,24 @@ async function startServer() {
 
       stream.on('data', (row: any) => {
         if (hasError) return;
-        const chunk = (first ? '' : ',') + row.content;
+        
+        let content = row.content;
+        if (isLight && (type === 'products' || type === 'logs')) {
+          try {
+            const item = JSON.parse(content);
+            if (type === 'products') {
+              delete item.imageUrl;
+              delete item.logs;
+            } else if (type === 'logs') {
+              // Maybe logs don't need stripping, but we can limit them
+            }
+            content = JSON.stringify(item);
+          } catch (e) {
+            console.warn(`Failed to parse content for ${type}:`, e);
+          }
+        }
+
+        const chunk = (first ? '' : ',') + content;
         first = false;
         if (!res.write(chunk)) {
           stream.pause();
@@ -445,6 +470,141 @@ async function startServer() {
         error: 'Failed to fetch data', 
         details: error instanceof Error ? error.message : String(error)
       });
+    }
+  });
+
+  // Add a single sale
+  app.post('/api/sales/add', async (req: Request, res: Response) => {
+    const { sale } = req.body;
+    if (!sale || !sale.id) return res.status(400).json({ error: 'Sale data required' });
+
+    let connection;
+    try {
+      connection = await pool.getConnection();
+      await connection.execute(
+        'INSERT INTO sales (id, content) VALUES (?, ?)',
+        [sale.id, JSON.stringify(sale)]
+      );
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error adding sale:', error);
+      res.status(500).json({ error: error.message });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
+  // Update a single customer
+  app.put('/api/customers/:id', async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { customer } = req.body;
+    if (!customer) return res.status(400).json({ error: 'Customer data required' });
+
+    let connection;
+    try {
+      connection = await pool.getConnection();
+      await connection.execute(
+        'UPDATE customers SET content = ? WHERE id = ?',
+        [JSON.stringify(customer), id]
+      );
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error updating customer:', error);
+      res.status(500).json({ error: error.message });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
+  // Add a single log
+  app.post('/api/logs/add', async (req: Request, res: Response) => {
+    const { log } = req.body;
+    if (!log) return res.status(400).json({ error: 'Log data required' });
+
+    let connection;
+    try {
+      connection = await pool.getConnection();
+      await connection.execute(
+        'INSERT INTO logs (id, content) VALUES (?, ?)',
+        [log.id, JSON.stringify(log)]
+      );
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error adding log:', error);
+      res.status(500).json({ error: error.message });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
+  // Generic add single record
+  app.post('/api/data/:type/add', async (req: Request, res: Response) => {
+    const type = req.params.type as string;
+    const { item } = req.body;
+    const allowedTypes = ['products', 'sales', 'customers', 'scraps', 'settings', 'expenses', 'logs'];
+    
+    if (!allowedTypes.includes(type)) return res.status(400).json({ error: 'Invalid type' });
+    if (!item || !item.id) return res.status(400).json({ error: 'Item data required' });
+
+    let connection;
+    try {
+      connection = await pool.getConnection();
+      await connection.execute(
+        `INSERT INTO ${type} (id, content) VALUES (?, ?)`,
+        [item.id, JSON.stringify(item)]
+      );
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error(`Error adding to ${type}:`, error);
+      res.status(500).json({ error: error.message });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
+  // Generic update/delete single record
+  app.put('/api/data/:type/:id', async (req: Request, res: Response) => {
+    const type = req.params.type as string;
+    const id = req.params.id as string;
+    const { item } = req.body;
+    const allowedTypes = ['products', 'sales', 'customers', 'scraps', 'settings', 'expenses', 'logs'];
+    
+    if (!allowedTypes.includes(type)) return res.status(400).json({ error: 'Invalid type' });
+    if (!item) return res.status(400).json({ error: 'Item data required' });
+
+    let connection;
+    try {
+      connection = await pool.getConnection();
+      await connection.execute(
+        `UPDATE ${type} SET content = ? WHERE id = ?`,
+        [JSON.stringify(item), id]
+      );
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error(`Error updating ${type}:`, error);
+      res.status(500).json({ error: error.message });
+    } finally {
+      if (connection) connection.release();
+    }
+  });
+
+  app.delete('/api/data/:type/:id', async (req: Request, res: Response) => {
+    const type = req.params.type as string;
+    const id = req.params.id as string;
+    const allowedTypes = ['products', 'sales', 'customers', 'scraps', 'settings', 'expenses', 'logs'];
+    
+    if (!allowedTypes.includes(type)) return res.status(400).json({ error: 'Invalid type' });
+
+    let connection;
+    try {
+      connection = await pool.getConnection();
+      await connection.execute(`DELETE FROM ${type} WHERE id = ?`, [id]);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error(`Error deleting from ${type}:`, error);
+      res.status(500).json({ error: error.message });
+    } finally {
+      if (connection) connection.release();
     }
   });
 

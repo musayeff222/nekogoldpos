@@ -30,6 +30,7 @@ import {
   Printer,
   Box,
   Maximize2,
+  RotateCcw,
   AlertCircle,
   User,
   Truck,
@@ -97,7 +98,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
   const [bulkKaratFilter, setBulkKaratFilter] = useState<string | 'all'>('all');
   const [bulkPrintList, setBulkPrintList] = useState<Product[]>([]);
 
-  const [viewMode, setViewMode] = useState<'folders' | 'printList'>('folders');
+  const [viewMode, setViewMode] = useState<'folders' | 'printList' | 'returns'>('folders');
   const [stockPrintList, setStockPrintList] = useState<Product[]>([]);
   const [printSupplier, setPrintSupplier] = useState<string>('all');
   const [printCategory, setPrintCategory] = useState<string>('all');
@@ -408,6 +409,32 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     });
   };
 
+  const uploadImage = async (base64: string): Promise<string> => {
+    if (!base64 || !base64.startsWith('data:')) return base64;
+    
+    try {
+      // Convert base64 to blob
+      const res = await fetch(base64);
+      const blob = await res.blob();
+      
+      const formData = new FormData();
+      formData.append('image', blob, 'product.jpg');
+      
+      const uploadRes = await fetch('/api/upload-image', {
+        method: 'POST',
+        body: formData
+      });
+      
+      if (!uploadRes.ok) throw new Error('Upload failed');
+      
+      const data = await uploadRes.json();
+      return data.imageUrl;
+    } catch (err) {
+      console.error('Image upload error:', err);
+      return base64; // Fallback to base64 if upload fails
+    }
+  };
+
   const capturePhoto = async (isEdit: boolean = false) => {
     if (videoRef.current && canvasRef.current) {
       const canvas = canvasRef.current;
@@ -445,10 +472,14 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
       if (ctx) {
         ctx.drawImage(video, sx, sy, sw, sh, 0, 0, width, height);
         
-        // Convert canvas to base64 for persistent storage
+        // Convert canvas to base64
         const base64Image = canvas.toDataURL('image/jpeg', 0.7);
-        if (isEdit) setEditForm(prev => ({ ...prev, imageUrl: base64Image }));
-        else setNewProduct(prev => ({ ...prev, imageUrl: base64Image }));
+        
+        // Upload to server
+        const imageUrl = await uploadImage(base64Image);
+        
+        if (isEdit) setEditForm(prev => ({ ...prev, imageUrl }));
+        else setNewProduct(prev => ({ ...prev, imageUrl }));
         
         stopCamera();
       }
@@ -462,8 +493,12 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
       reader.onloadend = async () => {
         const base64Image = reader.result as string;
         const resized = await resizeImage(base64Image);
-        if (isEdit) setEditForm(prev => ({ ...prev, imageUrl: resized }));
-        else setNewProduct(prev => ({ ...prev, imageUrl: resized }));
+        
+        // Upload to server
+        const imageUrl = await uploadImage(resized);
+        
+        if (isEdit) setEditForm(prev => ({ ...prev, imageUrl }));
+        else setNewProduct(prev => ({ ...prev, imageUrl }));
       };
       reader.readAsDataURL(file);
     }
@@ -941,21 +976,28 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
       )}
 
       {/* ÜST TABLAR (NO-PRINT) */}
-      <div className="flex justify-center no-print">
-        <div className="bg-white p-2 rounded-[2rem] shadow-xl border border-stone-200 flex space-x-2">
+      <div className="flex justify-center no-print overflow-x-auto scrollbar-hide py-2">
+        <div className="bg-white p-1.5 md:p-2 rounded-[1.5rem] md:rounded-[2rem] shadow-xl border border-stone-200 flex space-x-1 md:space-x-2 min-w-max mx-auto">
           <button 
             onClick={() => setViewMode('folders')}
-            className={`px-8 md:px-12 py-3 md:py-4 rounded-[1.5rem] font-black text-xs md:text-sm uppercase tracking-widest transition-all flex items-center space-x-3 ${viewMode === 'folders' ? 'bg-stone-900 text-amber-500 shadow-lg' : 'text-stone-500 hover:bg-stone-50'}`}
+            className={`px-4 md:px-10 py-2.5 md:py-4 rounded-[1rem] md:rounded-[1.5rem] font-black text-[10px] md:text-xs uppercase tracking-widest transition-all flex items-center space-x-2 md:space-x-3 ${viewMode === 'folders' ? 'bg-stone-900 text-amber-500 shadow-lg' : 'text-stone-500 hover:bg-stone-50'}`}
           >
-            <Box size={20} />
-            <span>STOKDA OLANLAR</span>
+            <Box size={18} />
+            <span>STOK</span>
+          </button>
+          <button 
+            onClick={() => setViewMode('returns')}
+            className={`px-4 md:px-10 py-2.5 md:py-4 rounded-[1rem] md:rounded-[1.5rem] font-black text-[10px] md:text-xs uppercase tracking-widest transition-all flex items-center space-x-2 md:space-x-3 ${viewMode === 'returns' ? 'bg-red-600 text-white shadow-lg shadow-red-900/20' : 'text-stone-500 hover:bg-stone-50'}`}
+          >
+            <RotateCcw size={18} />
+            <span>VAZVİRAT</span>
           </button>
           <button 
             onClick={() => setViewMode('printList')}
-            className={`px-8 md:px-12 py-3 md:py-4 rounded-[1.5rem] font-black text-xs md:text-sm uppercase tracking-widest transition-all flex items-center space-x-3 ${viewMode === 'printList' ? 'bg-stone-900 text-amber-500 shadow-lg' : 'text-stone-500 hover:bg-stone-50'}`}
+            className={`px-4 md:px-10 py-2.5 md:py-4 rounded-[1rem] md:rounded-[1.5rem] font-black text-[10px] md:text-xs uppercase tracking-widest transition-all flex items-center space-x-2 md:space-x-3 ${viewMode === 'printList' ? 'bg-stone-900 text-amber-500 shadow-lg' : 'text-stone-500 hover:bg-stone-50'}`}
           >
-            <Printer size={20} />
-            <span>SİYAHI ÇAPI (80MM)</span>
+            <Printer size={18} />
+            <span>ÇAP</span>
           </button>
         </div>
       </div>
@@ -1129,26 +1171,27 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
               )}
 
               <div className="bg-white rounded-[2.5rem] border border-stone-100 shadow-2xl overflow-hidden flex flex-col min-h-[500px]">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse min-w-[800px]">
-                  <thead>
-                    <tr className="bg-stone-50 border-b border-stone-100">
-                      {showArchived && (
-                        <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest text-center">
-                          <input 
-                            type="checkbox" 
-                            className="w-5 h-5 accent-amber-500 rounded cursor-pointer"
-                            checked={filteredProducts.length > 0 && selectedForRestore.length === filteredProducts.length}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedForRestore(filteredProducts.map(p => p.id));
-                              } else {
-                                setSelectedForRestore([]);
-                              }
-                            }}
-                          />
-                        </th>
-                      )}
+                {/* DESKTOP TABLE VIEW */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-left border-collapse min-w-[800px]">
+                    <thead>
+                      <tr className="bg-stone-50 border-b border-stone-100">
+                        {showArchived && (
+                          <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest text-center">
+                            <input 
+                              type="checkbox" 
+                              className="w-5 h-5 accent-amber-500 rounded cursor-pointer"
+                              checked={filteredProducts.length > 0 && selectedForRestore.length === filteredProducts.length}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedForRestore(filteredProducts.map(p => p.id));
+                                } else {
+                                  setSelectedForRestore([]);
+                                }
+                              }}
+                            />
+                          </th>
+                        )}
                       <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest">Şəkil</th>
                       <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest">Kod</th>
                       <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest">Məhsul Adı</th>
@@ -1156,91 +1199,255 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                       <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest text-center">Əyar</th>
                       <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest text-right">Qiymət</th>
                       <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest text-center">Əməliyyat</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-stone-50">
-                    {filteredProducts.map((p) => (
-                      <tr key={p.id} onClick={() => openDetailModal(p)} className="hover:bg-amber-50/20 transition-all group cursor-pointer">
-                        {showArchived && (
-                          <td className="px-8 py-5 text-center" onClick={(e) => e.stopPropagation()}>
-                            <input 
-                              type="checkbox" 
-                              className="w-5 h-5 accent-amber-500 rounded cursor-pointer"
-                              checked={selectedForRestore.includes(p.id)}
-                              onChange={() => {
-                                setSelectedForRestore(prev => 
-                                  prev.includes(p.id) ? prev.filter(id => id !== p.id) : [...prev, p.id]
-                                );
-                              }}
-                            />
-                          </td>
-                        )}
-                        <td className="px-8 py-5">
-                          <div 
-                            onClick={(e) => p.imageUrl ? openGallery(e, filteredProducts.indexOf(p)) : null}
-                            className={`w-14 h-14 rounded-xl overflow-hidden border-2 border-stone-100 shadow-sm bg-stone-50 flex items-center justify-center relative group/img ${p.imageUrl ? 'cursor-zoom-in hover:border-amber-400 transition-all' : ''}`}
-                          >
-                            {p.imageUrl ? (
-                              <>
-                                <img 
-                                  src={p.imageUrl} 
-                                  referrerPolicy="no-referrer" 
-                                  className="w-full h-full object-cover" 
-                                  onError={(e) => {
-                                    (e.target as HTMLImageElement).style.display = 'none';
-                                    (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="text-stone-200"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></div>';
-                                  }}
-                                />
-                                <div className="absolute inset-0 bg-amber-500/0 group-hover/img:bg-amber-500/20 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-all">
-                                  <Maximize2 size={16} className="text-amber-600" />
-                                </div>
-                              </>
-                            ) : (
-                              <div className="text-stone-200"><ImageIcon size={24} /></div>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-8 py-5 font-black text-stone-500 text-xs uppercase tracking-widest">{p.code}</td>
-                        <td className="px-8 py-5">
-                          <div className="flex flex-col">
-                            <p className="font-black text-stone-800 text-sm uppercase leading-none">{p.name}</p>
-                            <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                              {p.brilliant && <p className="text-[10px] text-amber-600 font-bold flex items-center"><Gem size={12} className="mr-1.5"/> {p.brilliant}</p>}
-                              {p.isReturned && (
-                                <div className="bg-red-500 text-white text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-widest flex items-center">
-                                  <AlertCircle size={10} className="mr-1" /> VAZVİRAT OLUNDU
-                                </div>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-stone-50">
+                      {filteredProducts.map((p) => (
+                        <tr key={p.id} onClick={() => openDetailModal(p)} className="hover:bg-amber-50/20 transition-all group cursor-pointer">
+                          {showArchived && (
+                            <td className="px-8 py-5 text-center" onClick={(e) => e.stopPropagation()}>
+                              <input 
+                                type="checkbox" 
+                                className="w-5 h-5 accent-amber-500 rounded cursor-pointer"
+                                checked={selectedForRestore.includes(p.id)}
+                                onChange={() => {
+                                  setSelectedForRestore(prev => 
+                                    prev.includes(p.id) ? prev.filter(id => id !== p.id) : [...prev, p.id]
+                                  );
+                                }}
+                              />
+                            </td>
+                          )}
+                          <td className="px-8 py-5">
+                            <div 
+                              onClick={(e) => p.imageUrl ? openGallery(e, filteredProducts.indexOf(p)) : null}
+                              className={`w-14 h-14 rounded-xl overflow-hidden border-2 border-stone-100 shadow-sm bg-stone-50 flex items-center justify-center relative group/img ${p.imageUrl ? 'cursor-zoom-in hover:border-amber-400 transition-all' : ''}`}
+                            >
+                              {p.imageUrl ? (
+                                <>
+                                  <img 
+                                    src={p.imageUrl} 
+                                    referrerPolicy="no-referrer" 
+                                    loading="lazy"
+                                    className="w-full h-full object-cover" 
+                                    onError={(e) => {
+                                      (e.target as HTMLImageElement).style.display = 'none';
+                                      (e.target as HTMLImageElement).parentElement!.innerHTML = '<div class="text-stone-200"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg></div>';
+                                    }}
+                                  />
+                                  <div className="absolute inset-0 bg-amber-500/0 group-hover/img:bg-amber-500/20 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-all">
+                                    <Maximize2 size={16} className="text-amber-600" />
+                                  </div>
+                                </>
+                              ) : (
+                                <div className="text-stone-200"><ImageIcon size={24} /></div>
                               )}
                             </div>
-                            {p.isReturned && p.returnReason && (
-                              <p className="text-[9px] font-bold text-red-400 uppercase mt-1 italic">Səbəb: {p.returnReason}</p>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-8 py-5 font-black text-stone-900 text-sm text-center">{p.weight} gr</td>
-                        <td className="px-8 py-5 font-black text-stone-900 text-sm text-center">
-                          <div className="flex flex-col items-center">
-                            <span className="text-amber-600">{p.carat}</span>
-                            {p.brilliant && <span className="text-[9px] text-stone-400 font-bold uppercase mt-0.5">{p.brilliant}</span>}
-                          </div>
-                        </td>
-                        <td className="px-8 py-5 text-stone-900 font-black text-right text-xl tracking-tighter">{(Number(p.price) || 0).toLocaleString()} ₼</td>
-                        <td className="px-8 py-5 text-center">
-                          <div className="flex items-center justify-center space-x-2">
-                            <button onClick={(e) => { e.stopPropagation(); openDetailModal(p); }} className="p-4 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded-2xl transition-all shadow-sm"><Edit2 size={20} /></button>
-                            <button onClick={(e) => { e.stopPropagation(); handleDeleteProduct(p.id); }} className="p-4 bg-red-50 text-red-600 hover:bg-red-100 rounded-2xl transition-all shadow-sm"><Trash2 size={20} /></button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {filteredProducts.length === 0 && <tr><td colSpan={showArchived ? 8 : 7} className="px-10 py-20 text-center"><p className="text-stone-300 font-black uppercase text-xs tracking-widest">Məlumat tapılmadı</p></td></tr>}
-                  </tbody>
-                </table>
+                          </td>
+                          <td className="px-8 py-5 font-black text-stone-500 text-xs uppercase tracking-widest">{p.code}</td>
+                          <td className="px-8 py-5">
+                            <div className="flex flex-col">
+                              <p className="font-black text-stone-800 text-sm uppercase leading-none">{p.name}</p>
+                              <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                                {p.brilliant && <p className="text-[10px] text-amber-600 font-bold flex items-center"><Gem size={10} className="mr-1.5"/> {p.brilliant}</p>}
+                                {p.isReturned && (
+                                  <div className="bg-red-500 text-white text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-widest flex items-center">
+                                    <AlertCircle size={8} className="mr-1" /> VAZVİRAT
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-8 py-5 font-black text-stone-900 text-sm text-center">{p.weight} gr</td>
+                          <td className="px-8 py-5 font-black text-stone-900 text-sm text-center">
+                            <div className="flex flex-col items-center">
+                              <span className="text-amber-600">{p.carat}</span>
+                              {p.brilliant && <span className="text-[9px] text-stone-400 font-bold uppercase mt-0.5">{p.brilliant}</span>}
+                            </div>
+                          </td>
+                          <td className="px-8 py-5 text-stone-900 font-black text-right text-xl tracking-tighter">{(Number(p.price) || 0).toLocaleString()} ₼</td>
+                          <td className="px-8 py-5 text-center">
+                            <div className="flex items-center justify-center space-x-2">
+                              <button onClick={(e) => { e.stopPropagation(); openDetailModal(p); }} className="p-4 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded-2xl transition-all shadow-sm"><Edit2 size={20} /></button>
+                              <button onClick={(e) => { e.stopPropagation(); handleDeleteProduct(p.id); }} className="p-4 bg-red-50 text-red-600 hover:bg-red-100 rounded-2xl transition-all shadow-sm"><Trash2 size={20} /></button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      {filteredProducts.length === 0 && <tr><td colSpan={showArchived ? 8 : 7} className="px-10 py-20 text-center"><p className="text-stone-300 font-black uppercase text-xs tracking-widest">Məlumat tapılmadı</p></td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* MOBILE CARD VIEW */}
+                <div className="md:hidden divide-y divide-stone-100">
+                  {filteredProducts.map((p) => (
+                    <div key={p.id} onClick={() => openDetailModal(p)} className="p-4 flex items-center space-x-4 active:bg-stone-50 transition-colors">
+                      <div className="w-16 h-16 rounded-2xl overflow-hidden border-2 border-stone-100 flex-shrink-0 bg-stone-50 flex items-center justify-center">
+                        {p.imageUrl ? (
+                          <img 
+                            src={p.imageUrl} 
+                            referrerPolicy="no-referrer" 
+                            loading="lazy"
+                            className="w-full h-full object-cover" 
+                          />
+                        ) : (
+                          <ImageIcon size={24} className="text-stone-200" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex justify-between items-start">
+                          <p className="font-black text-stone-900 text-sm truncate uppercase leading-tight">{p.name}</p>
+                          <p className="font-black text-amber-600 text-sm ml-2 whitespace-nowrap">{(Number(p.price) || 0).toLocaleString()} ₼</p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
+                          <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">{p.code}</span>
+                          <span className="text-[10px] font-bold text-stone-300">•</span>
+                          <span className="text-[10px] font-black text-stone-600 uppercase">{p.weight} gr</span>
+                          <span className="text-[10px] font-bold text-stone-300">•</span>
+                          <span className="text-[10px] font-black text-amber-500 uppercase">{p.carat}</span>
+                          {p.isReturned && (
+                            <span className="bg-red-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-widest">VAZVİRAT</span>
+                          )}
+                        </div>
+                      </div>
+                      <ChevronRight size={16} className="text-stone-300 flex-shrink-0" />
+                    </div>
+                  ))}
+                  {filteredProducts.length === 0 && (
+                    <div className="p-10 text-center">
+                      <p className="text-stone-300 font-black uppercase text-xs tracking-widest">Məlumat tapılmadı</p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
         </>
+      ) : viewMode === 'returns' ? (
+        <div className="flex-1 bg-white rounded-3xl md:rounded-[3rem] p-4 md:p-8 shadow-xl border border-stone-100 flex flex-col animate-in slide-in-from-bottom-12 duration-500">
+          <div className="flex items-center justify-between mb-6 md:mb-10 pb-4 md:pb-6 border-b border-stone-100">
+            <div className="flex items-center space-x-3 md:space-x-4">
+              <div className="p-3 md:p-4 bg-red-50 rounded-xl md:rounded-2xl text-red-500">
+                <RotateCcw className="w-5 h-5 md:w-6 md:h-6" />
+              </div>
+              <div>
+                <h3 className="text-base md:text-xl font-black text-stone-900 uppercase leading-none">Vazvirat Məhsullar</h3>
+                <p className="text-[9px] md:text-[10px] text-stone-400 font-bold uppercase tracking-widest">Geri qaytarılmış məhsulların siyahısı</p>
+              </div>
+            </div>
+            <div className="bg-red-50 px-4 py-2 rounded-xl border border-red-100">
+              <p className="text-[10px] font-black text-red-600 uppercase tracking-widest">Cəmi: {products.filter(p => p.isReturned).length}</p>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto pr-2 space-y-3 md:space-y-4 scrollbar-hide">
+            {/* DESKTOP VIEW */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[600px]">
+                <thead>
+                  <tr className="bg-stone-50 border-b border-stone-100">
+                    <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest">Şəkil</th>
+                    <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest">Kod</th>
+                    <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest">Məhsul</th>
+                    <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest text-center">Çəki</th>
+                    <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest text-right">Qiymət</th>
+                    <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest text-center">Əməliyyat</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-50">
+                  {products.filter(p => p.isReturned).map((p) => (
+                    <tr key={p.id} className="hover:bg-red-50/20 transition-all group">
+                      <td className="px-8 py-4">
+                        <div className="w-14 h-14 rounded-xl overflow-hidden border-2 border-stone-100 shadow-sm bg-stone-50 flex items-center justify-center">
+                          {p.imageUrl ? <img src={p.imageUrl} referrerPolicy="no-referrer" loading="lazy" className="w-full h-full object-cover" /> : <ImageIcon size={20} className="text-stone-200" />}
+                        </div>
+                      </td>
+                      <td className="px-8 py-4 font-black text-stone-500 text-xs uppercase tracking-widest">{p.code}</td>
+                      <td className="px-8 py-4">
+                        <div className="flex flex-col">
+                          <p className="font-black text-stone-800 text-sm uppercase leading-none">{p.name}</p>
+                          <p className="text-[9px] font-bold text-red-400 uppercase mt-1 italic">Səbəb: {p.returnReason || 'Qeyd olunmayıb'}</p>
+                        </div>
+                      </td>
+                      <td className="px-8 py-4 font-black text-stone-900 text-sm text-center">{p.weight} gr</td>
+                      <td className="px-8 py-4 text-stone-900 font-black text-right text-xl tracking-tighter">{(Number(p.price) || 0).toLocaleString()} ₼</td>
+                      <td className="px-8 py-4 text-center">
+                        <button 
+                          onClick={() => {
+                            const updatedProduct = { ...p, isReturned: false, stockCount: 1, returnReason: undefined };
+                            const updatedProducts = products.map(prod => prod.id === p.id ? updatedProduct : prod);
+                            setProducts(updatedProducts);
+                            
+                            // Sync to server
+                            fetch(`/api/products/${p.id}`, {
+                              method: 'PUT',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ product: updatedProduct })
+                            }).catch(err => console.error('Failed to return product to stock:', err));
+                            
+                            addLog(`${p.code} kodlu məhsul vazviratdan stoka qaytarıldı`, 'PRODUCT');
+                          }}
+                          className="px-4 py-2 bg-amber-500 text-stone-950 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-400 transition-all shadow-md"
+                        >
+                          QAYTAR
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* MOBILE VIEW */}
+            <div className="md:hidden divide-y divide-stone-100">
+              {products.filter(p => p.isReturned).map((p) => (
+                <div key={p.id} className="py-4 flex items-center space-x-4">
+                  <div className="w-16 h-16 rounded-2xl overflow-hidden border-2 border-stone-100 flex-shrink-0 bg-stone-50 flex items-center justify-center">
+                    {p.imageUrl ? <img src={p.imageUrl} referrerPolicy="no-referrer" loading="lazy" className="w-full h-full object-cover" /> : <ImageIcon size={24} className="text-stone-200" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-start">
+                      <p className="font-black text-stone-900 text-sm truncate uppercase leading-tight">{p.name}</p>
+                      <p className="font-black text-red-600 text-sm ml-2 whitespace-nowrap">{(Number(p.price) || 0).toLocaleString()} ₼</p>
+                    </div>
+                    <p className="text-[9px] font-bold text-red-400 uppercase mt-1 italic truncate">Səbəb: {p.returnReason || 'Qeyd olunmayıb'}</p>
+                    <div className="flex items-center space-x-2 mt-1">
+                      <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">{p.code}</span>
+                      <span className="text-[10px] font-bold text-stone-300">•</span>
+                      <span className="text-[10px] font-black text-stone-600 uppercase">{p.weight} gr</span>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      const updatedProduct = { ...p, isReturned: false, stockCount: 1, returnReason: undefined };
+                      const updatedProducts = products.map(prod => prod.id === p.id ? updatedProduct : prod);
+                      setProducts(updatedProducts);
+                      
+                      // Sync to server
+                      fetch(`/api/products/${p.id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ product: updatedProduct })
+                      }).catch(err => console.error('Failed to return product to stock:', err));
+                      
+                      addLog(`${p.code} kodlu məhsul vazviratdan stoka qaytarıldı`, 'PRODUCT');
+                    }}
+                    className="p-3 bg-amber-500 text-stone-950 rounded-xl shadow-md active:scale-95 transition-all"
+                  >
+                    <RotateCcw size={16} />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {products.filter(p => p.isReturned).length === 0 && (
+              <div className="py-20 text-center">
+                <p className="text-stone-300 font-black uppercase text-xs tracking-widest">Vazvirat məhsul yoxdur</p>
+              </div>
+            )}
+          </div>
+        </div>
       ) : (
         /* SİFARİŞ ÜÇÜN ÇAP BÖLMƏSİ (NO-PRINT) */
         <div className="max-w-6xl mx-auto w-full animate-in slide-in-from-bottom-8 duration-500 no-print space-y-8">

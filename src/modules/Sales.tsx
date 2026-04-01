@@ -173,12 +173,33 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
 
     if (isCredit && customerInfo.id) {
         const debtToAdd = finalTotalValue - creditDownPayment;
-        setCustomers(prev => prev.map(c => 
-            c.id === customerInfo.id ? { ...c, cashDebt: c.cashDebt + debtToAdd } : c
-        ));
+        setCustomers(prev => prev.map(c => {
+            if (c.id === customerInfo.id) {
+                const updatedCustomer = { ...c, cashDebt: c.cashDebt + debtToAdd };
+                
+                // Save to server immediately
+                fetch(`/api/customers/${updatedCustomer.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ customer: updatedCustomer })
+                }).catch(err => console.error('Failed to update customer debt:', err));
+                
+                return updatedCustomer;
+            }
+            return c;
+        }));
     }
 
     setSales([...newSalesRecords, ...sales]);
+    
+    // Save sales to server immediately
+    newSalesRecords.forEach(sale => {
+      fetch('/api/sales/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sale })
+      }).catch(err => console.error('Failed to save sale to database:', err));
+    });
     
     const cartIds = cart.map(p => p.id);
     setProducts(prevProducts => prevProducts.map(p => {
@@ -366,6 +387,7 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
                         {previouslySoldItem.imageUrl ? (
                           <img 
                             src={previouslySoldItem.imageUrl} 
+                            loading="lazy"
                             className="w-full h-full object-contain" 
                             onError={(e) => {
                               (e.target as HTMLImageElement).style.display = 'none';
@@ -436,6 +458,7 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
                       <img 
                         src={currentProduct.imageUrl} 
                         referrerPolicy="no-referrer" 
+                        loading="lazy"
                         className="w-full h-full object-contain" 
                         onError={(e) => {
                           (e.target as HTMLImageElement).style.display = 'none';

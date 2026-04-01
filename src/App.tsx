@@ -110,44 +110,47 @@ const App: React.FC = () => {
 
     const fetchData = async (retries = 3) => {
       try {
-        const fetchWithType = async (type: string) => {
-          const res = await fetch(`/api/data/${type}`);
+        const fetchWithType = async (type: string, params: Record<string, string> = {}) => {
+          const query = new URLSearchParams(params).toString();
+          const res = await fetch(`/api/data/${type}${query ? `?${query}` : ''}`);
           if (!res.ok) {
             const errorData = await res.json().catch(() => ({}));
             throw new Error(errorData.details || errorData.error || `Failed to fetch ${type}`);
           }
           return res.json();
         };
-
+ 
         // Fetch in parallel for better performance
+        // Optimization: Fetch products without images/logs initially for speed
+        // Optimization: Fetch only last 100 logs
         const [p, s, c, sc, st, ex, l] = await Promise.all([
-          fetchWithType('products'),
+          fetchWithType('products', { light: 'true' }),
           fetchWithType('sales'),
           fetchWithType('customers'),
           fetchWithType('scraps'),
           fetchWithType('settings'),
           fetchWithType('expenses'),
-          fetchWithType('logs')
+          fetchWithType('logs', { limit: '100' })
         ]);
-
+ 
         setProducts(Array.isArray(p) ? p : []);
         lastSyncedProducts.current = JSON.stringify(Array.isArray(p) ? p : []);
-
+ 
         setSales(Array.isArray(s) ? s : []);
         lastSyncedSales.current = JSON.stringify(Array.isArray(s) ? s : []);
-
+ 
         setCustomers(Array.isArray(c) ? c : []);
         lastSyncedCustomers.current = JSON.stringify(Array.isArray(c) ? c : []);
-
+ 
         setScraps(Array.isArray(sc) ? sc : []);
         lastSyncedScraps.current = JSON.stringify(Array.isArray(sc) ? sc : []);
-
+ 
         setExpenses(Array.isArray(ex) ? ex : []);
         lastSyncedExpenses.current = JSON.stringify(Array.isArray(ex) ? ex : []);
-
+ 
         setLogs(Array.isArray(l) ? l : []);
         lastSyncedLogs.current = JSON.stringify(Array.isArray(l) ? l : []);
-
+ 
         if (st && !st.error) {
           // Ensure productGroups exists for backward compatibility
           const mergedSettings = {
@@ -216,7 +219,37 @@ const App: React.FC = () => {
         }
         
         setIsLoaded(true);
-        console.log('Initial data load complete');
+        console.log('Initial lightweight data load complete');
+
+        // Background fetch for full product data (including images and logs)
+        setTimeout(async () => {
+          try {
+            console.log('Starting background fetch for full product data...');
+            const fullProducts = await fetchWithType('products');
+            if (Array.isArray(fullProducts)) {
+              setProducts(fullProducts);
+              lastSyncedProducts.current = JSON.stringify(fullProducts);
+              console.log('Full product data loaded in background');
+            }
+          } catch (err) {
+            console.error('Background product fetch failed:', err);
+          }
+        }, 1000);
+
+        // Background fetch for more logs
+        setTimeout(async () => {
+          try {
+            console.log('Starting background fetch for more logs...');
+            const fullLogs = await fetchWithType('logs', { limit: '1000' });
+            if (Array.isArray(fullLogs)) {
+              setLogs(fullLogs);
+              lastSyncedLogs.current = JSON.stringify(fullLogs);
+              console.log('Extended logs loaded in background');
+            }
+          } catch (err) {
+            console.error('Background logs fetch failed:', err);
+          }
+        }, 3000);
       } catch (error: any) {
         console.error(`Failed to fetch data (retries left: ${retries}):`, error);
         if (retries > 0) {
@@ -248,134 +281,6 @@ const App: React.FC = () => {
   // NOTE: Products are now handled individually in modules (Stock, Sales, Returns) 
   // to avoid performance issues with large Base64 images in a single massive payload.
   
-  useEffect(() => {
-    if (!isLoaded || sales === null) return;
-
-    const currentData = JSON.stringify(sales);
-    if (currentData === lastSyncedSales.current) return;
-
-    const syncData = async () => {
-      setIsSyncing(true);
-      try {
-        const res = await fetch('/api/data/sales', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ data: sales })
-        });
-        if (!res.ok) {
-          const errorData = await res.json().catch(() => ({}));
-          throw new Error(errorData.details || errorData.error || 'Sync failed');
-        }
-        lastSyncedSales.current = currentData;
-        setSyncError(null);
-      } catch (err: any) {
-        console.error('Failed to sync sales:', err);
-        setSyncError(`Məlumatlar yadda saxlanılmadı: ${err.message}`);
-      } finally {
-        setIsSyncing(false);
-      }
-    };
-
-    const timeoutId = setTimeout(syncData, 1000);
-    return () => clearTimeout(timeoutId);
-  }, [sales, isLoaded]);
-
-  useEffect(() => {
-    if (!isLoaded || customers === null) return;
-
-    const currentData = JSON.stringify(customers);
-    if (currentData === lastSyncedCustomers.current) return;
-
-    const syncData = async () => {
-      setIsSyncing(true);
-      try {
-        const res = await fetch('/api/data/customers', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ data: customers })
-        });
-        if (!res.ok) {
-          const errorData = await res.json().catch(() => ({}));
-          throw new Error(errorData.details || errorData.error || 'Sync failed');
-        }
-        lastSyncedCustomers.current = currentData;
-        setSyncError(null);
-      } catch (err: any) {
-        console.error('Failed to sync customers:', err);
-        setSyncError(`Məlumatlar yadda saxlanılmadı: ${err.message}`);
-      } finally {
-        setIsSyncing(false);
-      }
-    };
-
-    const timeoutId = setTimeout(syncData, 1000);
-    return () => clearTimeout(timeoutId);
-  }, [customers, isLoaded]);
-
-  useEffect(() => {
-    if (!isLoaded || scraps === null) return;
-
-    const currentData = JSON.stringify(scraps);
-    if (currentData === lastSyncedScraps.current) return;
-
-    const syncData = async () => {
-      setIsSyncing(true);
-      try {
-        const res = await fetch('/api/data/scraps', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ data: scraps })
-        });
-        if (!res.ok) {
-          const errorData = await res.json().catch(() => ({}));
-          throw new Error(errorData.details || errorData.error || 'Sync failed');
-        }
-        lastSyncedScraps.current = currentData;
-        setSyncError(null);
-      } catch (err: any) {
-        console.error('Failed to sync scraps:', err);
-        setSyncError(`Məlumatlar yadda saxlanılmadı: ${err.message}`);
-      } finally {
-        setIsSyncing(false);
-      }
-    };
-
-    const timeoutId = setTimeout(syncData, 1000);
-    return () => clearTimeout(timeoutId);
-  }, [scraps, isLoaded]);
-
-  useEffect(() => {
-    if (!isLoaded || expenses === null) return;
-
-    const currentData = JSON.stringify(expenses);
-    if (currentData === lastSyncedExpenses.current) return;
-
-    const syncData = async () => {
-      setIsSyncing(true);
-      try {
-        const res = await fetch('/api/data/expenses', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ data: expenses })
-        });
-        if (!res.ok) {
-          const errorData = await res.json().catch(() => ({}));
-          throw new Error(errorData.details || errorData.error || 'Sync failed');
-        }
-        lastSyncedExpenses.current = currentData;
-        setSyncError(null);
-      } catch (err: any) {
-        console.error('Failed to sync expenses:', err);
-        setSyncError(`Məlumatlar yadda saxlanılmadı: ${err.message}`);
-      } finally {
-        setIsSyncing(false);
-      }
-    };
-
-    const timeoutId = setTimeout(syncData, 1000);
-    return () => clearTimeout(timeoutId);
-  }, [expenses, isLoaded]);
-
   useEffect(() => {
     if (!isLoaded || settings === null) return;
 
@@ -418,16 +323,14 @@ const App: React.FC = () => {
       details
     };
     
-    const updatedLogs = [newLog, ...logs];
-    setLogs(updatedLogs);
+    setLogs(prev => [newLog, ...(prev || [])]);
     
     try {
-      await fetch('/api/data/logs', {
+      await fetch('/api/logs/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: updatedLogs })
+        body: JSON.stringify({ log: newLog })
       });
-      lastSyncedLogs.current = JSON.stringify(updatedLogs);
     } catch (err) {
       console.error('Failed to save log:', err);
     }
@@ -563,27 +466,27 @@ const App: React.FC = () => {
 
       {/* MOBILE BOTTOM NAV */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-stone-900 border-t border-white/10 z-50 flex justify-around items-center py-2 px-1 no-print">
-        {navItems.slice(0, 4).map((item) => (
+        {navItems.filter(item => [Page.Sales, Page.Stock, Page.Return, Page.Reports].includes(item.id)).map((item) => (
           <button
             key={item.id}
             onClick={() => setCurrentPage(item.id)}
-            className={`flex flex-col items-center p-2 rounded-xl transition-all ${currentPage === item.id ? 'text-amber-500 bg-white/5' : 'text-stone-500'}`}
+            className={`flex flex-col items-center p-2 rounded-xl transition-all ${currentPage === item.id ? 'text-amber-500 bg-white/5' : 'text-stone-50'}`}
           >
-            {item.icon}
-            <span className="text-[10px] font-black mt-1 uppercase tracking-tighter">{item.label}</span>
+            {React.cloneElement(item.icon as any, { size: 20 })}
+            <span className="text-[9px] font-black mt-1 uppercase tracking-tighter">{item.label}</span>
           </button>
         ))}
         <button
           onClick={() => setCurrentPage(Page.Settings)}
-          className={`flex flex-col items-center p-2 rounded-xl ${currentPage === Page.Settings ? 'text-amber-500 bg-white/5' : 'text-stone-500'}`}
+          className={`flex flex-col items-center p-2 rounded-xl ${currentPage === Page.Settings ? 'text-amber-500 bg-white/5' : 'text-stone-50'}`}
         >
-          <LayoutGrid size={24} />
-          <span className="text-[10px] font-black mt-1 uppercase tracking-tighter">Menyu</span>
+          <LayoutGrid size={20} />
+          <span className="text-[9px] font-black mt-1 uppercase tracking-tighter">Menyu</span>
         </button>
       </nav>
 
       {/* MAIN CONTENT AREA */}
-      <main className="flex-1 h-full overflow-y-auto bg-stone-50 scrollbar-hide pb-20 md:pb-0 no-print">
+      <main className="flex-1 h-full overflow-y-auto bg-stone-50 scrollbar-hide pb-24 md:pb-0 no-print">
         {syncError && (
           <div className="bg-red-600 text-white p-2 text-center text-[10px] font-black uppercase tracking-widest animate-pulse sticky top-0 z-50">
             {syncError}

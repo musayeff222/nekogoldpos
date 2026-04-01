@@ -368,32 +368,32 @@ const SettingsModule: React.FC<SettingsProps> = ({
       <form onSubmit={handleChangePassword} className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="space-y-2">
-            <label className="text-[10px] font-black text-stone-400 uppercase tracking-widest ml-4">Cari Şifrə</label>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Cari Şifrə</label>
             <input 
               type="password" 
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
-              className="w-full bg-stone-50 border-2 border-stone-100 rounded-2xl py-4 px-6 font-black text-xl"
+              className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-6 font-black text-xl"
               required
             />
           </div>
           <div className="space-y-2">
-            <label className="text-[10px] font-black text-stone-400 uppercase tracking-widest ml-4">Yeni Şifrə</label>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Yeni Şifrə</label>
             <input 
               type="password" 
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              className="w-full bg-stone-50 border-2 border-stone-100 rounded-2xl py-4 px-6 font-black text-xl"
+              className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-6 font-black text-xl"
               required
             />
           </div>
           <div className="space-y-2">
-            <label className="text-[10px] font-black text-stone-400 uppercase tracking-widest ml-4">Yeni Şifrəni Təsdiqlə</label>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Yeni Şifrəni Təsdiqlə</label>
             <input 
               type="password" 
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full bg-stone-50 border-2 border-stone-100 rounded-2xl py-4 px-6 font-black text-xl"
+              className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-6 font-black text-xl"
               required
             />
           </div>
@@ -408,7 +408,7 @@ const SettingsModule: React.FC<SettingsProps> = ({
         <button 
           type="submit" 
           disabled={loading}
-          className="bg-stone-900 text-amber-500 px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-black transition-all disabled:opacity-50"
+          className="bg-slate-900 text-indigo-500 px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-black transition-all disabled:opacity-50"
         >
           {loading ? 'Yüklənir...' : 'Şifrəni Yenilə'}
         </button>
@@ -419,12 +419,12 @@ const SettingsModule: React.FC<SettingsProps> = ({
   return (
     <div className="max-w-5xl mx-auto space-y-6 md:space-y-10 pb-24 md:pb-10 animate-in fade-in">
       {/* DATABASE STATUS */}
-      <div className="bg-white rounded-[2rem] border border-stone-100 shadow-xl overflow-hidden p-6 flex items-center justify-between">
+      <div className="bg-white rounded-[2rem] border border-slate-100 shadow-xl overflow-hidden p-6 flex items-center justify-between">
         <div className="flex items-center space-x-4">
           <div className={`w-3 h-3 rounded-full animate-pulse ${dbStatus?.database === 'connected' ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]'}`} />
           <div>
-            <h3 className="text-[10px] font-black text-stone-400 uppercase tracking-widest">Məlumat Bazası Statusu</h3>
-            <p className="text-sm font-black text-stone-800 uppercase">
+            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Məlumat Bazası Statusu</h3>
+            <p className="text-sm font-black text-slate-800 uppercase">
               {dbStatus?.database === 'connected' ? 'Uğurla Qoşuldu' : 'Bağlantı Xətası'}
             </p>
             {dbStatus?.error && (
@@ -435,61 +435,61 @@ const SettingsModule: React.FC<SettingsProps> = ({
           </div>
         </div>
         <div className="text-right">
-          <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest">Server</p>
-          <p className="text-sm font-black text-amber-600 uppercase">72.60.86.130</p>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Server</p>
+          <p className="text-sm font-black text-indigo-600 uppercase">72.60.86.130</p>
         </div>
       </div>
 
-      <div className="bg-white rounded-3xl md:rounded-[3rem] border border-stone-100 shadow-2xl overflow-hidden flex flex-col md:flex-row">
-        <div className="w-full md:w-5/12 p-8 bg-amber-50/30 border-b md:border-b-0 md:border-r border-stone-100">
-          <div className="w-12 h-12 bg-amber-500 text-white rounded-2xl flex items-center justify-center mb-4 shadow-xl shadow-amber-200">
+      <div className="bg-white rounded-3xl md:rounded-[3rem] border border-slate-100 shadow-2xl overflow-hidden flex flex-col md:flex-row">
+        <div className="w-full md:w-5/12 p-8 bg-indigo-50/30 border-b md:border-b-0 md:border-r border-slate-100">
+          <div className="w-12 h-12 bg-indigo-500 text-white rounded-2xl flex items-center justify-center mb-4 shadow-xl shadow-indigo-200">
             <Calculator size={24} />
           </div>
-          <h3 className="text-xl font-black text-stone-900 tracking-tighter uppercase">Avtomatik Qiymət</h3>
-          <p className="text-xs text-stone-400 font-bold mt-2">1 qramın qiymətinə görə avtomatik yuvarlaqlaşdırma.</p>
+          <h3 className="text-xl font-black text-slate-900 tracking-tighter uppercase">Avtomatik Qiymət</h3>
+          <p className="text-xs text-slate-400 font-bold mt-2">1 qramın qiymətinə görə avtomatik yuvarlaqlaşdırma.</p>
         </div>
         <div className="flex-1 p-8 space-y-4">
-          <label className="block text-[10px] font-black text-stone-400 uppercase tracking-widest ml-4">1 Qram Qiyməti (₼)</label>
+          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">1 Qram Qiyməti (₼)</label>
           <div className="relative group">
-            <Star className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-amber-500 opacity-30" />
+            <Star className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-indigo-500 opacity-30" />
             <input 
               type="number" 
               value={localSettings.pricePerGram}
               onChange={(e) => setLocalSettings({...localSettings, pricePerGram: Number(e.target.value)})}
-              className="w-full bg-stone-50 border-2 border-stone-100 rounded-2xl py-4 pl-14 pr-6 font-black text-2xl text-amber-900 focus:bg-white focus:border-amber-400 outline-none"
+              className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 pl-14 pr-6 font-black text-2xl text-indigo-900 focus:bg-white focus:border-indigo-400 outline-none"
             />
           </div>
-          <p className="text-[10px] text-stone-400 font-bold italic ml-4 leading-normal">
+          <p className="text-[10px] text-slate-400 font-bold italic ml-4 leading-normal">
             * Məhsul qiyməti ən yaxın onluğa yuvarlaşdırılacaq (Məs: 408 &rarr; 410).
           </p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {/* STOK QRUPLARI */}
-        <div className="bg-white rounded-[2rem] border border-stone-100 shadow-xl overflow-hidden flex flex-col min-h-[300px]">
-          <div className="p-6 border-b border-stone-100 bg-stone-50/50 flex items-center justify-between">
-            <h3 className="font-black text-stone-800 text-xs uppercase tracking-widest flex items-center"><Layers size={18} className="mr-2 text-amber-500"/> STOK QRUPLARI</h3>
-            <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">{(localSettings.productGroups || []).length}</span>
+        {/* MƏHSUL QRUPLARI */}
+        <div className="bg-white rounded-[2rem] border border-slate-100 shadow-xl overflow-hidden flex flex-col min-h-[300px]">
+          <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+            <h3 className="font-black text-slate-800 text-xs uppercase tracking-widest flex items-center"><Layers size={18} className="mr-2 text-indigo-500"/> MƏHSUL QRUPLARI</h3>
+            <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">{(localSettings.productGroups || []).length}</span>
           </div>
           <div className="p-6 space-y-4">
             <div className="space-y-2">
-              <input type="text" placeholder="Qrup Adı (Məs: Üzük)" value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl px-4 py-2.5 text-xs font-bold" />
+              <input type="text" placeholder="Qrup Adı (Məs: Üzük)" value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-2.5 text-xs font-bold" />
               <div className="flex space-x-2">
-                <input type="text" placeholder="Kod (Məs: UK)" value={newGroupPrefix} onChange={(e) => setNewGroupPrefix(e.target.value)} className="flex-1 bg-stone-50 border-2 border-stone-100 rounded-xl px-4 py-2.5 text-xs font-bold uppercase" />
-                <button onClick={addGroup} className="bg-stone-900 text-amber-500 p-2.5 rounded-xl"><Plus size={20} /></button>
+                <input type="text" placeholder="Kod (Məs: UK)" value={newGroupPrefix} onChange={(e) => setNewGroupPrefix(e.target.value)} className="flex-1 bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-2.5 text-xs font-bold uppercase" />
+                <button onClick={addGroup} className="bg-slate-900 text-indigo-500 p-2.5 rounded-xl"><Plus size={20} /></button>
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
               {(localSettings.productGroups || []).map((g, idx) => (
-                <div key={g.prefix + idx} className="bg-amber-50/50 text-stone-700 px-3 py-1.5 rounded-lg text-[10px] font-black border border-amber-100 flex flex-col w-full group">
+                <div key={g.prefix + idx} className="bg-indigo-50/50 text-slate-700 px-3 py-1.5 rounded-lg text-[10px] font-black border border-indigo-100 flex flex-col w-full group">
                   {editingGroup?.index === idx ? (
                     <div className="space-y-2 w-full">
                       <input 
                         type="text" 
                         value={editingGroup.name} 
                         onChange={(e) => setEditingGroup({...editingGroup, name: e.target.value})}
-                        className="w-full bg-white border border-amber-200 rounded px-2 py-1 text-[10px]"
+                        className="w-full bg-white border border-indigo-200 rounded px-2 py-1 text-[10px]"
                         placeholder="Ad"
                       />
                       <div className="flex space-x-2">
@@ -497,22 +497,22 @@ const SettingsModule: React.FC<SettingsProps> = ({
                           type="text" 
                           value={editingGroup.prefix} 
                           onChange={(e) => setEditingGroup({...editingGroup, prefix: e.target.value})}
-                          className="flex-1 bg-white border border-amber-200 rounded px-2 py-1 text-[10px] uppercase"
+                          className="flex-1 bg-white border border-indigo-200 rounded px-2 py-1 text-[10px] uppercase"
                           placeholder="Kod"
                         />
                         <button onClick={updateGroup} className="bg-emerald-500 text-white p-1 rounded"><Save size={12} /></button>
-                        <button onClick={() => setEditingGroup(null)} className="bg-stone-400 text-white p-1 rounded"><X size={12} /></button>
+                        <button onClick={() => setEditingGroup(null)} className="bg-slate-400 text-white p-1 rounded"><X size={12} /></button>
                       </div>
                     </div>
                   ) : (
                     <div className="flex items-center justify-between w-full">
                       <div className="flex items-center space-x-2">
-                        <span className="bg-amber-500 text-white px-1.5 py-0.5 rounded text-[8px]">{g.prefix}</span>
+                        <span className="bg-indigo-500 text-white px-1.5 py-0.5 rounded text-[8px]">{g.prefix}</span>
                         <span>{g.name}</span>
                       </div>
                       <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => setEditingGroup({ index: idx, name: g.name, prefix: g.prefix })} className="text-stone-400 hover:text-amber-500"><Settings2 size={12} /></button>
-                        <button onClick={() => removeItem('productGroups', g)} className="text-stone-300 hover:text-red-500"><X size={12} /></button>
+                        <button onClick={() => setEditingGroup({ index: idx, name: g.name, prefix: g.prefix })} className="text-slate-400 hover:text-indigo-500"><Settings2 size={12} /></button>
+                        <button onClick={() => removeItem('productGroups', g)} className="text-slate-300 hover:text-red-500"><X size={12} /></button>
                       </div>
                     </div>
                   )}
@@ -523,36 +523,36 @@ const SettingsModule: React.FC<SettingsProps> = ({
         </div>
 
         {/* NÖVLƏR */}
-        <div className="bg-white rounded-[2rem] border border-stone-100 shadow-xl overflow-hidden flex flex-col min-h-[300px]">
-          <div className="p-6 border-b border-stone-100 bg-stone-50/50 flex items-center justify-between">
-            <h3 className="font-black text-stone-800 text-xs uppercase tracking-widest flex items-center"><List size={18} className="mr-2 text-amber-500"/> NÖVLƏR</h3>
-            <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">{localSettings.productTypes.length}</span>
+        <div className="bg-white rounded-[2rem] border border-slate-100 shadow-xl overflow-hidden flex flex-col min-h-[300px]">
+          <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+            <h3 className="font-black text-slate-800 text-xs uppercase tracking-widest flex items-center"><List size={18} className="mr-2 text-indigo-500"/> NÖVLƏR</h3>
+            <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">{localSettings.productTypes.length}</span>
           </div>
           <div className="p-6 space-y-4">
             <div className="flex space-x-2">
-              <input type="text" placeholder="Yeni..." value={newType} onChange={(e) => setNewType(e.target.value)} className="flex-1 bg-stone-50 border-2 border-stone-100 rounded-xl px-4 py-2.5 text-xs font-bold" />
-              <button onClick={addType} className="bg-stone-900 text-amber-500 p-2.5 rounded-xl"><Plus size={20} /></button>
+              <input type="text" placeholder="Yeni..." value={newType} onChange={(e) => setNewType(e.target.value)} className="flex-1 bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-2.5 text-xs font-bold" />
+              <button onClick={addType} className="bg-slate-900 text-indigo-500 p-2.5 rounded-xl"><Plus size={20} /></button>
             </div>
             <div className="flex flex-wrap gap-2">
               {localSettings.productTypes.map((t, idx) => (
-                <div key={t + idx} className="bg-amber-50/50 text-stone-700 px-3 py-1.5 rounded-lg text-[10px] font-black border border-amber-100 flex items-center group">
+                <div key={t + idx} className="bg-indigo-50/50 text-slate-700 px-3 py-1.5 rounded-lg text-[10px] font-black border border-indigo-100 flex items-center group">
                   {editingType?.index === idx ? (
                     <div className="flex items-center space-x-1">
                       <input 
                         type="text" 
                         value={editingType.value} 
                         onChange={(e) => setEditingType({...editingType, value: e.target.value})}
-                        className="bg-white border border-amber-200 rounded px-2 py-0.5 text-[10px] w-20"
+                        className="bg-white border border-indigo-200 rounded px-2 py-0.5 text-[10px] w-20"
                       />
                       <button onClick={updateType} className="text-emerald-500"><Save size={12} /></button>
-                      <button onClick={() => setEditingType(null)} className="text-stone-400"><X size={12} /></button>
+                      <button onClick={() => setEditingType(null)} className="text-slate-400"><X size={12} /></button>
                     </div>
                   ) : (
                     <>
                       {t}
                       <div className="flex items-center ml-2 space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => setEditingType({ index: idx, value: t })} className="text-stone-400 hover:text-amber-500"><Settings2 size={10} /></button>
-                        <button onClick={() => removeItem('productTypes', t)} className="text-stone-300 hover:text-red-500"><X size={10} /></button>
+                        <button onClick={() => setEditingType({ index: idx, value: t })} className="text-slate-400 hover:text-indigo-500"><Settings2 size={10} /></button>
+                        <button onClick={() => removeItem('productTypes', t)} className="text-slate-300 hover:text-red-500"><X size={10} /></button>
                       </div>
                     </>
                   )}
@@ -563,35 +563,35 @@ const SettingsModule: React.FC<SettingsProps> = ({
         </div>
 
         {/* TƏDARÜKÇÜLƏR */}
-        <div className="bg-white rounded-[2rem] border border-stone-100 shadow-xl overflow-hidden flex flex-col min-h-[300px]">
-          <div className="p-6 border-b border-stone-100 bg-stone-50/50 flex items-center justify-between">
-            <h3 className="font-black text-stone-800 text-xs uppercase tracking-widest flex items-center"><User size={18} className="mr-2 text-amber-500"/> TƏDARÜKÇÜLƏR</h3>
+        <div className="bg-white rounded-[2rem] border border-slate-100 shadow-xl overflow-hidden flex flex-col min-h-[300px]">
+          <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+            <h3 className="font-black text-slate-800 text-xs uppercase tracking-widest flex items-center"><User size={18} className="mr-2 text-indigo-500"/> TƏDARÜKÇÜLƏR</h3>
           </div>
           <div className="p-6 space-y-4">
             <div className="flex space-x-2">
-              <input type="text" placeholder="Yeni..." value={newSupplier} onChange={(e) => setNewSupplier(e.target.value)} className="flex-1 bg-stone-50 border-2 border-stone-100 rounded-xl px-4 py-2.5 text-xs font-bold" />
-              <button onClick={addSupplier} className="bg-stone-900 text-amber-500 p-2.5 rounded-xl"><Plus size={20} /></button>
+              <input type="text" placeholder="Yeni..." value={newSupplier} onChange={(e) => setNewSupplier(e.target.value)} className="flex-1 bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-2.5 text-xs font-bold" />
+              <button onClick={addSupplier} className="bg-slate-900 text-indigo-500 p-2.5 rounded-xl"><Plus size={20} /></button>
             </div>
             <div className="flex flex-wrap gap-2">
               {localSettings.suppliers.map((s, idx) => (
-                <div key={s + idx} className="bg-stone-50 text-stone-700 px-3 py-1.5 rounded-lg text-[10px] font-black border border-stone-100 flex items-center group">
+                <div key={s + idx} className="bg-slate-50 text-slate-700 px-3 py-1.5 rounded-lg text-[10px] font-black border border-slate-100 flex items-center group">
                   {editingSupplier?.index === idx ? (
                     <div className="flex items-center space-x-1">
                       <input 
                         type="text" 
                         value={editingSupplier.value} 
                         onChange={(e) => setEditingSupplier({...editingSupplier, value: e.target.value})}
-                        className="bg-white border border-stone-200 rounded px-2 py-0.5 text-[10px] w-24"
+                        className="bg-white border border-slate-200 rounded px-2 py-0.5 text-[10px] w-24"
                       />
                       <button onClick={updateSupplier} className="text-emerald-500"><Save size={12} /></button>
-                      <button onClick={() => setEditingSupplier(null)} className="text-stone-400"><X size={12} /></button>
+                      <button onClick={() => setEditingSupplier(null)} className="text-slate-400"><X size={12} /></button>
                     </div>
                   ) : (
                     <>
                       {s}
                       <div className="flex items-center ml-2 space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => setEditingSupplier({ index: idx, value: s })} className="text-stone-400 hover:text-amber-500"><Settings2 size={10} /></button>
-                        <button onClick={() => removeItem('suppliers', s)} className="text-stone-300 hover:text-red-500"><X size={10} /></button>
+                        <button onClick={() => setEditingSupplier({ index: idx, value: s })} className="text-slate-400 hover:text-indigo-500"><Settings2 size={10} /></button>
+                        <button onClick={() => removeItem('suppliers', s)} className="text-slate-300 hover:text-red-500"><X size={10} /></button>
                       </div>
                     </>
                   )}
@@ -602,35 +602,35 @@ const SettingsModule: React.FC<SettingsProps> = ({
         </div>
 
         {/* ƏYARLAR */}
-        <div className="bg-white rounded-[2rem] border border-stone-100 shadow-xl overflow-hidden flex flex-col min-h-[300px]">
-          <div className="p-6 border-b border-stone-100 bg-stone-50/50 flex items-center justify-between">
-            <h3 className="font-black text-stone-800 text-xs uppercase tracking-widest flex items-center"><Star size={18} className="mr-2 text-amber-500"/> ƏYARLAR</h3>
+        <div className="bg-white rounded-[2rem] border border-slate-100 shadow-xl overflow-hidden flex flex-col min-h-[300px]">
+          <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+            <h3 className="font-black text-slate-800 text-xs uppercase tracking-widest flex items-center"><Star size={18} className="mr-2 text-indigo-500"/> ƏYARLAR</h3>
           </div>
           <div className="p-6 space-y-4">
             <div className="flex space-x-2">
-              <input type="text" placeholder="Məs: 583" value={newCarat} onChange={(e) => setNewCarat(e.target.value)} className="flex-1 bg-stone-50 border-2 border-stone-100 rounded-xl px-4 py-2.5 text-xs font-bold" />
-              <button onClick={addCarat} className="bg-stone-900 text-amber-500 p-2.5 rounded-xl"><Plus size={20} /></button>
+              <input type="text" placeholder="Məs: 583" value={newCarat} onChange={(e) => setNewCarat(e.target.value)} className="flex-1 bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-2.5 text-xs font-bold" />
+              <button onClick={addCarat} className="bg-slate-900 text-indigo-500 p-2.5 rounded-xl"><Plus size={20} /></button>
             </div>
             <div className="flex flex-wrap gap-2">
               {localSettings.carats.map((c, idx) => (
-                <div key={c + idx} className="bg-amber-50 text-amber-700 px-3 py-1.5 rounded-lg text-[10px] font-black border border-amber-200 flex items-center group">
+                <div key={c + idx} className="bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg text-[10px] font-black border border-indigo-200 flex items-center group">
                   {editingCarat?.index === idx ? (
                     <div className="flex items-center space-x-1">
                       <input 
                         type="text" 
                         value={editingCarat.value} 
                         onChange={(e) => setEditingCarat({...editingCarat, value: e.target.value})}
-                        className="bg-white border border-amber-200 rounded px-2 py-0.5 text-[10px] w-16"
+                        className="bg-white border border-indigo-200 rounded px-2 py-0.5 text-[10px] w-16"
                       />
                       <button onClick={updateCarat} className="text-emerald-500"><Save size={12} /></button>
-                      <button onClick={() => setEditingCarat(null)} className="text-stone-400"><X size={12} /></button>
+                      <button onClick={() => setEditingCarat(null)} className="text-slate-400"><X size={12} /></button>
                     </div>
                   ) : (
                     <>
                       {c}
                       <div className="flex items-center ml-2 space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => setEditingCarat({ index: idx, value: String(c) })} className="text-amber-400 hover:text-amber-600"><Settings2 size={10} /></button>
-                        <button onClick={() => removeItem('carats', c)} className="text-amber-300 hover:text-red-500"><X size={10} /></button>
+                        <button onClick={() => setEditingCarat({ index: idx, value: String(c) })} className="text-indigo-400 hover:text-indigo-600"><Settings2 size={10} /></button>
+                        <button onClick={() => removeItem('carats', c)} className="text-indigo-300 hover:text-red-500"><X size={10} /></button>
                       </div>
                     </>
                   )}
@@ -641,32 +641,32 @@ const SettingsModule: React.FC<SettingsProps> = ({
         </div>
       </div>
 
-      <div className="bg-white rounded-[2rem] border border-stone-100 shadow-2xl overflow-hidden p-8 md:p-12 space-y-8">
+      <div className="bg-white rounded-[2rem] border border-slate-100 shadow-2xl overflow-hidden p-8 md:p-12 space-y-8">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <Database className="text-amber-500" size={32} />
-            <h3 className="text-xl font-black text-stone-900 uppercase">Tam Sistem Backup & Bərpa (Bütün Məlumatlar + Şəkillər)</h3>
+            <Database className="text-indigo-500" size={32} />
+            <h3 className="text-xl font-black text-slate-900 uppercase">Tam Sistem Backup & Bərpa (Bütün Məlumatlar + Şəkillər)</h3>
           </div>
         </div>
         
-        <div className="p-8 bg-amber-50/50 rounded-[2rem] border-2 border-dashed border-amber-200 space-y-6">
+        <div className="p-8 bg-indigo-50/50 rounded-[2rem] border-2 border-dashed border-indigo-200 space-y-6">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="flex-1 space-y-2">
-              <h4 className="text-lg font-black text-amber-900 uppercase tracking-tight">Full System Backup (Tövsiyə Olunur)</h4>
-              <p className="text-xs text-amber-700 font-bold leading-relaxed">
+              <h4 className="text-lg font-black text-indigo-900 uppercase tracking-tight">Full System Backup (Tövsiyə Olunur)</h4>
+              <p className="text-xs text-indigo-700 font-bold leading-relaxed">
                 Bu seçim həm bütün bazanı (məhsullar, satışlar və s.), həm də <strong>uploads</strong> qovluğundakı bütün şəkilləri bir ZIP faylına yığır. Hostinger-ə köçərkən və ya sistemi yeniləyərkən ən etibarlı üsuldur.
               </p>
             </div>
             <div className="flex flex-col sm:flex-row gap-4">
               <a 
                 href="/api/admin/full-system-backup"
-                className="bg-amber-600 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-amber-700 transition-all shadow-lg flex items-center justify-center space-x-2"
+                className="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg flex items-center justify-center space-x-2"
               >
                 <Download size={18} />
                 <span>FULL BACKUP YÜKLƏ (ZIP)</span>
               </a>
               
-              <label className="bg-stone-900 text-amber-500 px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-black transition-all shadow-lg flex items-center justify-center space-x-2 cursor-pointer">
+              <label className="bg-slate-900 text-indigo-500 px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-black transition-all shadow-lg flex items-center justify-center space-x-2 cursor-pointer">
                 <Upload size={18} />
                 <span>FULL BACKUP-I BƏRPA ET</span>
                 <input 
@@ -708,12 +708,12 @@ const SettingsModule: React.FC<SettingsProps> = ({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 opacity-60">
-          <div className="p-8 bg-stone-50 rounded-[2rem] border border-stone-100 space-y-4">
+          <div className="p-8 bg-slate-50 rounded-[2rem] border border-slate-100 space-y-4">
             <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mb-4">
               <Download size={24} />
             </div>
-            <h4 className="text-lg font-black text-stone-800 uppercase tracking-tight">Məlumatları Export Et</h4>
-            <p className="text-xs text-stone-400 font-bold leading-relaxed">
+            <h4 className="text-lg font-black text-slate-800 uppercase tracking-tight">Məlumatları Export Et</h4>
+            <p className="text-xs text-slate-400 font-bold leading-relaxed">
               Bütün məhsulları, satışları, müştəriləri və ayarları bir JSON faylı olaraq kompüterinizə yükləyin. Bu faylı gələcəkdə məlumatları bərpa etmək üçün istifadə edə bilərsiniz.
             </p>
             <button 
@@ -725,15 +725,15 @@ const SettingsModule: React.FC<SettingsProps> = ({
             </button>
           </div>
 
-          <div className="p-8 bg-stone-50 rounded-[2rem] border border-stone-100 space-y-4">
-            <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mb-4">
+          <div className="p-8 bg-slate-50 rounded-[2rem] border border-slate-100 space-y-4">
+            <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center mb-4">
               <Upload size={24} />
             </div>
-            <h4 className="text-lg font-black text-stone-800 uppercase tracking-tight">Məlumatları Bərpa Et</h4>
-            <p className="text-xs text-stone-400 font-bold leading-relaxed">
+            <h4 className="text-lg font-black text-slate-800 uppercase tracking-tight">Məlumatları Bərpa Et</h4>
+            <p className="text-xs text-slate-400 font-bold leading-relaxed">
               Əvvəllər götürdüyünüz backup faylını seçərək bütün sistemi həmin tarixə geri qaytarın. <span className="text-red-500">Diqqət: Cari məlumatlar silinəcək!</span>
             </p>
-            <label className="w-full bg-amber-500 text-amber-950 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-amber-400 transition-all shadow-lg flex items-center justify-center space-x-2 cursor-pointer">
+            <label className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg flex items-center justify-center space-x-2 cursor-pointer">
               <Upload size={16} />
               <span>BACKUP-I BƏRPA ET</span>
               <input type="file" onChange={handleFullRestore} accept=".json" className="hidden" />
@@ -742,19 +742,19 @@ const SettingsModule: React.FC<SettingsProps> = ({
         </div>
 
         {/* MEDIA BACKUP SECTION */}
-        <div className="pt-8 border-t border-stone-100">
+        <div className="pt-8 border-t border-slate-100">
           <div className="flex items-center space-x-4 mb-8">
-            <RefreshCw className="text-amber-500" size={32} />
-            <h3 className="text-xl font-black text-stone-900 uppercase">Resimlerin Backup-ı (Uploads)</h3>
+            <RefreshCw className="text-indigo-500" size={32} />
+            <h3 className="text-xl font-black text-slate-900 uppercase">Resimlerin Backup-ı (Uploads)</h3>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="p-8 bg-stone-50 rounded-[2rem] border border-stone-100 space-y-4">
+            <div className="p-8 bg-slate-50 rounded-[2rem] border border-slate-100 space-y-4">
               <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mb-4">
                 <Download size={24} />
               </div>
-              <h4 className="text-lg font-black text-stone-800 uppercase tracking-tight">Resimleri Yüklə (ZIP)</h4>
-              <p className="text-xs text-stone-400 font-bold leading-relaxed">
+              <h4 className="text-lg font-black text-slate-800 uppercase tracking-tight">Resimleri Yüklə (ZIP)</h4>
+              <p className="text-xs text-slate-400 font-bold leading-relaxed">
                 Bütün yüklənmiş şəkilləri (uploads qovluğunu) bir ZIP faylı olaraq yükləyin. Hostinger-ə keçid edərkən bu faylı istifadə edə bilərsiniz.
               </p>
               <a 
@@ -766,12 +766,12 @@ const SettingsModule: React.FC<SettingsProps> = ({
               </a>
             </div>
 
-            <div className="p-8 bg-stone-50 rounded-[2rem] border border-stone-100 space-y-4">
+            <div className="p-8 bg-slate-50 rounded-[2rem] border border-slate-100 space-y-4">
               <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center mb-4">
                 <Upload size={24} />
               </div>
-              <h4 className="text-lg font-black text-stone-800 uppercase tracking-tight">Resimleri Bərpa Et (ZIP)</h4>
-              <p className="text-xs text-stone-400 font-bold leading-relaxed">
+              <h4 className="text-lg font-black text-slate-800 uppercase tracking-tight">Resimleri Bərpa Et (ZIP)</h4>
+              <p className="text-xs text-slate-400 font-bold leading-relaxed">
                 Əvvəllər yüklədiyiniz uploads ZIP faylını seçərək şəkilləri bərpa edin. <span className="text-red-500">Bu, mövcud şəkillərin üzərinə yazacaq.</span>
               </p>
               <label className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg flex items-center justify-center space-x-2 cursor-pointer">
@@ -801,10 +801,10 @@ const SettingsModule: React.FC<SettingsProps> = ({
                         alert("Xəta baş verdi.");
                       }
                     } catch (err) {
-                      alert("Serverlə bağlantı kəsildi.");
+                      console.error(err);
+                      alert("Xəta baş verdi.");
                     }
-                  }} 
-                  accept=".zip" 
+                  }}
                   className="hidden" 
                 />
               </label>
@@ -813,23 +813,24 @@ const SettingsModule: React.FC<SettingsProps> = ({
         </div>
       </div>
 
-      <div className="bg-white rounded-[2rem] border border-stone-100 shadow-2xl overflow-hidden p-8 md:p-12 space-y-8">
+      {/* Label Designer Section */}
+      <div className="bg-white rounded-[2rem] border border-slate-100 shadow-2xl overflow-hidden p-8 md:p-12 space-y-8">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <Tag className="text-amber-500" size={32} />
-            <h3 className="text-xl font-black text-stone-900 uppercase">Etiket Dizayneri (Zebra Style)</h3>
+            <Tag className="text-indigo-500" size={32} />
+            <h3 className="text-xl font-black text-slate-900 uppercase">Etiket Dizayneri (Zebra Style)</h3>
           </div>
           <div className="flex items-center space-x-2">
             <button 
               onClick={handleExport}
-              className="p-3 bg-stone-100 text-stone-600 rounded-xl hover:bg-stone-200 transition-all"
+              className="p-3 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200 transition-all"
               title="Dizaynı Export Et"
             >
               <Download size={20} />
             </button>
             <button 
               onClick={() => fileInputRef.current?.click()}
-              className="p-3 bg-stone-100 text-stone-600 rounded-xl hover:bg-stone-200 transition-all"
+              className="p-3 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200 transition-all"
               title="Dizaynı Import Et"
             >
               <Upload size={20} />
@@ -837,7 +838,7 @@ const SettingsModule: React.FC<SettingsProps> = ({
             <input type="file" ref={fileInputRef} onChange={handleImport} accept=".json" className="hidden" />
             <button 
               onClick={handleTestPrint}
-              className="bg-stone-900 text-amber-500 px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center space-x-2 hover:bg-black transition-all shadow-lg"
+              className="bg-slate-900 text-indigo-500 px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center space-x-2 hover:bg-black transition-all shadow-lg"
             >
               <Printer size={16} />
               <span>Test Çapı</span>
@@ -848,10 +849,10 @@ const SettingsModule: React.FC<SettingsProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           {/* Visual Designer */}
           <div className="lg:col-span-7 space-y-4">
-            <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest ml-2">Vizual Maket (Sürükləyərək yerini dəyiş)</p>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Vizual Maket (Sürükləyərək yerini dəyiş)</p>
             <div 
               ref={designerRef}
-              className="relative bg-white border-2 border-stone-200 rounded-xl shadow-inner overflow-hidden"
+              className="relative bg-white border-2 border-slate-200 rounded-xl shadow-inner overflow-hidden"
               style={{ 
                 aspectRatio: `${localSettings.labelConfig.width} / ${localSettings.labelConfig.height}`,
                 width: '100%'
@@ -865,7 +866,7 @@ const SettingsModule: React.FC<SettingsProps> = ({
                   <div
                     key={el.id}
                     onMouseDown={() => onMouseDown(el.id)}
-                    className={`absolute cursor-move select-none p-1 border border-transparent hover:border-amber-400 hover:bg-amber-50/50 rounded transition-colors ${selectedElementId === el.id ? 'border-amber-500 bg-amber-50/80 z-10' : ''}`}
+                    className={`absolute cursor-move select-none p-1 border border-transparent hover:border-indigo-400 hover:bg-indigo-50/50 rounded transition-colors ${selectedElementId === el.id ? 'border-indigo-500 bg-indigo-50/80 z-10' : ''}`}
                     style={{
                       left: `${el.x}%`,
                       top: `${el.y}%`,
@@ -886,7 +887,7 @@ const SettingsModule: React.FC<SettingsProps> = ({
                 )
               ))}
             </div>
-            <div className="flex justify-between text-[10px] font-bold text-stone-400 uppercase px-2">
+            <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase px-2">
               <span>En: {localSettings.labelConfig.width}mm</span>
               <span>Hündürlük: {localSettings.labelConfig.height}mm</span>
             </div>
@@ -894,31 +895,31 @@ const SettingsModule: React.FC<SettingsProps> = ({
 
           {/* Element Controls */}
           <div className="lg:col-span-5 space-y-4">
-            <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest ml-2">Elementlərin Ayarları</p>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Elementlərin Ayarları</p>
             <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 scrollbar-hide">
               {localSettings.labelConfig.elements.map(el => (
                 <div 
                   key={el.id} 
                   onClick={() => setSelectedElementId(el.id)}
-                  className={`p-4 rounded-2xl border transition-all ${selectedElementId === el.id ? 'bg-amber-50 border-amber-300 shadow-md' : 'bg-stone-50 border-stone-100 hover:border-stone-200'}`}
+                  className={`p-4 rounded-2xl border transition-all ${selectedElementId === el.id ? 'bg-indigo-50 border-indigo-300 shadow-md' : 'bg-slate-50 border-slate-100 hover:border-slate-200'}`}
                 >
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center space-x-2">
-                      <div className={`p-1.5 rounded-lg ${el.visible ? 'bg-amber-500 text-white' : 'bg-stone-200 text-stone-400'}`}>
+                      <div className={`p-1.5 rounded-lg ${el.visible ? 'bg-indigo-500 text-white' : 'bg-slate-200 text-slate-400'}`}>
                         <TypeIcon size={14} />
                       </div>
-                      <span className="text-[10px] font-black text-stone-800 uppercase">{el.field}</span>
+                      <span className="text-[10px] font-black text-slate-800 uppercase">{el.field}</span>
                     </div>
                     <div className="flex items-center space-x-1">
                       <button 
                         onClick={(e) => { e.stopPropagation(); updateLabelElement(el.id, { visible: !el.visible }); }}
-                        className={`p-1.5 rounded-lg transition-colors ${el.visible ? 'text-amber-600 hover:bg-amber-100' : 'text-stone-300 hover:bg-stone-100'}`}
+                        className={`p-1.5 rounded-lg transition-colors ${el.visible ? 'text-indigo-600 hover:bg-indigo-100' : 'text-slate-300 hover:bg-slate-100'}`}
                       >
                         {el.visible ? <Eye size={16} /> : <EyeOff size={16} />}
                       </button>
                       <button 
                         onClick={(e) => { e.stopPropagation(); updateLabelElement(el.id, { bold: !el.bold }); }}
-                        className={`p-1.5 rounded-lg transition-colors ${el.bold ? 'text-amber-600 bg-amber-100' : 'text-stone-300 hover:bg-stone-100'}`}
+                        className={`p-1.5 rounded-lg transition-colors ${el.bold ? 'text-indigo-600 bg-indigo-100' : 'text-slate-300 hover:bg-slate-100'}`}
                       >
                         <Bold size={16} />
                       </button>
@@ -928,30 +929,30 @@ const SettingsModule: React.FC<SettingsProps> = ({
                   {selectedElementId === el.id && (
                     <div className="grid grid-cols-2 gap-3 animate-in fade-in slide-in-from-top-2">
                       <div className="space-y-1">
-                        <label className="text-[8px] font-black text-stone-400 uppercase ml-1">Ölçü (px)</label>
+                        <label className="text-[8px] font-black text-slate-400 uppercase ml-1">Ölçü (px)</label>
                         <div className="flex items-center space-x-1">
                           <input 
                             type="number" 
                             value={el.fontSize} 
                             onChange={(e) => updateLabelElement(el.id, { fontSize: Number(e.target.value) })}
-                            className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs font-bold outline-none"
+                            className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold outline-none"
                           />
                         </div>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[8px] font-black text-stone-400 uppercase ml-1">Pozisiya (X, Y %)</label>
+                        <label className="text-[8px] font-black text-slate-400 uppercase ml-1">Pozisiya (X, Y %)</label>
                         <div className="flex items-center space-x-1">
                           <input 
                             type="number" 
                             value={Math.round(el.x)} 
                             onChange={(e) => updateLabelElement(el.id, { x: Number(e.target.value) })}
-                            className="w-1/2 bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs font-bold outline-none"
+                            className="w-1/2 bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold outline-none"
                           />
                           <input 
                             type="number" 
                             value={Math.round(el.y)} 
                             onChange={(e) => updateLabelElement(el.id, { y: Number(e.target.value) })}
-                            className="w-1/2 bg-white border border-stone-200 rounded-lg px-2 py-1 text-xs font-bold outline-none"
+                            className="w-1/2 bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold outline-none"
                           />
                         </div>
                       </div>
@@ -964,39 +965,39 @@ const SettingsModule: React.FC<SettingsProps> = ({
         </div>
       </div>
 
-      <div className="bg-white rounded-[2rem] border border-stone-100 shadow-2xl overflow-hidden p-8 md:p-12 space-y-8">
+      <div className="bg-white rounded-[2rem] border border-slate-100 shadow-2xl overflow-hidden p-8 md:p-12 space-y-8">
         <div className="flex items-center space-x-4">
-          <Settings2 className="text-amber-500" size={32} />
-          <h3 className="text-xl font-black text-stone-900 uppercase">Çap Ayarları</h3>
+          <Settings2 className="text-indigo-500" size={32} />
+          <h3 className="text-xl font-black text-slate-900 uppercase">Çap Ayarları</h3>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div className="space-y-4">
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-stone-400 uppercase tracking-widest ml-4">Qəbz Printeri (Receipt)</label>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Qəbz Printeri (Receipt)</label>
               <input 
                 type="text" 
                 value={localSettings.receiptPrinterPath}
                 onChange={(e) => setLocalSettings({...localSettings, receiptPrinterPath: e.target.value})}
                 placeholder="Məs: Epson TM-T20"
-                className="w-full bg-stone-50 border-2 border-stone-100 rounded-2xl py-4 px-6 font-black text-xl"
+                className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-6 font-black text-xl"
               />
             </div>
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-stone-400 uppercase tracking-widest ml-4">Etiket Printeri (Label)</label>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Etiket Printeri (Label)</label>
               <input 
                 type="text" 
                 value={localSettings.labelPrinterPath}
                 onChange={(e) => setLocalSettings({...localSettings, labelPrinterPath: e.target.value})}
                 placeholder="Məs: Zebra ZD220"
-                className="w-full bg-stone-50 border-2 border-stone-100 rounded-2xl py-4 px-6 font-black text-xl"
+                className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-6 font-black text-xl"
               />
             </div>
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-stone-400 uppercase tracking-widest ml-4">Qəbz Mətni Qalınlığı (Font Weight)</label>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Qəbz Mətni Qalınlığı (Font Weight)</label>
               <select 
                 value={localSettings.receiptFontWeight}
                 onChange={(e) => setLocalSettings({...localSettings, receiptFontWeight: e.target.value})}
-                className="w-full bg-stone-50 border-2 border-stone-100 rounded-2xl py-4 px-6 font-black text-xl outline-none"
+                className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-6 font-black text-xl outline-none"
               >
                 <option value="normal">Normal</option>
                 <option value="500">Orta (500)</option>
@@ -1007,11 +1008,11 @@ const SettingsModule: React.FC<SettingsProps> = ({
               </select>
             </div>
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-stone-400 uppercase tracking-widest ml-4">Etiket Mətni Qalınlığı (Label Weight)</label>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Etiket Mətni Qalınlığı (Label Weight)</label>
               <select 
                 value={localSettings.labelFontWeight}
                 onChange={(e) => setLocalSettings({...localSettings, labelFontWeight: e.target.value})}
-                className="w-full bg-stone-50 border-2 border-stone-100 rounded-2xl py-4 px-6 font-black text-xl outline-none"
+                className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-6 font-black text-xl outline-none"
               >
                 <option value="normal">Normal</option>
                 <option value="500">Orta (500)</option>
@@ -1029,20 +1030,20 @@ const SettingsModule: React.FC<SettingsProps> = ({
                 id="silentPrinting"
                 checked={localSettings.silentPrinting}
                 onChange={(e) => setLocalSettings({...localSettings, silentPrinting: e.target.checked})}
-                className="w-6 h-6 accent-amber-500 rounded cursor-pointer"
+                className="w-6 h-6 accent-indigo-500 rounded cursor-pointer"
               />
-              <label htmlFor="silentPrinting" className="text-sm font-black text-stone-800 uppercase cursor-pointer">Səssiz Çap (Silent Printing)</label>
+              <label htmlFor="silentPrinting" className="text-sm font-black text-slate-800 uppercase cursor-pointer">Səssiz Çap (Silent Printing)</label>
             </div>
-            <p className="text-[10px] text-stone-400 font-bold italic ml-4 leading-normal">
+            <p className="text-[10px] text-slate-400 font-bold italic ml-4 leading-normal">
               * Diqqət: Səssiz çap üçün Chrome brauzerini xüsusi parametrlərlə başlatmalısınız.
             </p>
-            <div className="mt-4 p-4 bg-amber-50 rounded-2xl border border-amber-100 space-y-3">
-              <h4 className="text-[10px] font-black text-amber-800 uppercase tracking-widest">Səssiz Çapın Qurulması (Addım-addım):</h4>
-              <ol className="text-[10px] text-stone-600 font-bold space-y-2 list-decimal ml-4">
+            <div className="mt-4 p-4 bg-indigo-50 rounded-2xl border border-indigo-100 space-y-3">
+              <h4 className="text-[10px] font-black text-indigo-800 uppercase tracking-widest">Səssiz Çapın Qurulması (Addım-addım):</h4>
+              <ol className="text-[10px] text-slate-600 font-bold space-y-2 list-decimal ml-4">
                 <li>Bütün açıq Chrome pəncərələrini tamamilə bağlayın.</li>
                 <li>Masaüstündəki <strong>Chrome qısayoluna</strong> (shortcut) sağ klikləyin və <strong>Properties</strong> (Xüsusiyyətlər) seçin.</li>
                 <li><strong>Target</strong> (Hədəf) bölməsindəki yazının sonuna bir boşluq qoyaraq aşağıdakı kodu əlavə edin:
-                  <code className="block mt-1 p-2 bg-white border border-amber-200 rounded text-amber-600 font-mono">--kiosk --kiosk-printing</code>
+                  <code className="block mt-1 p-2 bg-white border border-indigo-200 rounded text-indigo-600 font-mono">--kiosk --kiosk-printing</code>
                 </li>
                 <li><strong>Apply</strong> və <strong>OK</strong> düymələrinə basın.</li>
                 <li>Windows ayarlarında əsas istifadə etdiyiniz printeri <strong>Default Printer</strong> olaraq təyin edin.</li>
@@ -1062,42 +1063,42 @@ const SettingsModule: React.FC<SettingsProps> = ({
         </div>
       </div>
 
-      <div className="bg-white rounded-[2rem] border border-stone-100 shadow-2xl overflow-hidden p-8 md:p-12 space-y-8">
+      <div className="bg-white rounded-[2rem] border border-slate-100 shadow-2xl overflow-hidden p-8 md:p-12 space-y-8">
         <div className="flex items-center space-x-4">
-          <Key className="text-amber-500" size={32} />
-          <h3 className="text-xl font-black text-stone-900 uppercase">Giriş Şifrəsini Dəyiş</h3>
+          <Key className="text-indigo-500" size={32} />
+          <h3 className="text-xl font-black text-slate-900 uppercase">Giriş Şifrəsini Dəyiş</h3>
         </div>
         <PasswordChangeSection />
       </div>
 
-      <div className="bg-white rounded-[2rem] border border-stone-100 shadow-2xl overflow-hidden p-8 md:p-12 space-y-8">
+      <div className="bg-white rounded-[2rem] border border-slate-100 shadow-2xl overflow-hidden p-8 md:p-12 space-y-8">
         <div className="flex items-center space-x-4">
-          <Shield className="text-amber-500" size={32} />
-          <h3 className="text-xl font-black text-stone-900 uppercase">Təhlükəsizlik</h3>
+          <Shield className="text-indigo-500" size={32} />
+          <h3 className="text-xl font-black text-slate-900 uppercase">Təhlükəsizlik</h3>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div className="space-y-2">
-            <label className="text-[10px] font-black text-stone-400 uppercase tracking-widest ml-4">Silmə Təsdiq Kodu</label>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Silmə Təsdiq Kodu</label>
             <input 
               type="text" 
               value={localSettings.deleteCode}
               onChange={(e) => setLocalSettings({...localSettings, deleteCode: e.target.value})}
-              className="w-full bg-stone-50 border-2 border-stone-100 rounded-2xl py-4 px-6 font-mono font-black text-xl tracking-widest"
+              className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-6 font-mono font-black text-xl tracking-widest"
             />
           </div>
           <div className="space-y-2">
-            <label className="text-[10px] font-black text-stone-400 uppercase tracking-widest ml-4">Admin Şifrəsi</label>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Admin Şifrəsi</label>
             <input 
               type="password" 
               value={localSettings.adminPassword}
               onChange={(e) => setLocalSettings({...localSettings, adminPassword: e.target.value})}
-              className="w-full bg-stone-50 border-2 border-stone-100 rounded-2xl py-4 px-6 font-black text-xl"
+              className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 px-6 font-black text-xl"
             />
           </div>
         </div>
       </div>
 
-      <button onClick={handleSave} className="w-full bg-amber-600 text-white py-6 rounded-3xl font-black text-xl hover:bg-amber-700 shadow-2xl active:scale-95 transition-all">
+      <button onClick={handleSave} className="w-full bg-indigo-600 text-white py-6 rounded-3xl font-black text-xl hover:bg-indigo-700 shadow-2xl active:scale-95 transition-all">
         AYARLARI YADDA SAXLA
       </button>
 
