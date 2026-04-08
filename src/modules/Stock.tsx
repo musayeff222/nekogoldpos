@@ -49,12 +49,15 @@ interface StockProps {
   setCart: React.Dispatch<React.SetStateAction<Product[]>>;
   setCurrentPage: (page: any) => void;
   addLog: (action: string, category: SystemLog['category'], details?: string) => void;
+  user: { username: string } | null;
+  isBackgroundLoading?: boolean;
 }
 
-const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sales, cart, setCart, setCurrentPage, addLog }) => {
+const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sales, cart, setCart, setCurrentPage, addLog, user, isBackgroundLoading }) => {
   const [activeFolder, setActiveFolder] = useState<ProductType | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [zoomedProductIndex, setZoomedProductIndex] = useState<number | null>(null);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
@@ -62,8 +65,15 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
   const [lastAddedProduct, setLastAddedProduct] = useState<Product | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [showMoveToArchiveModal, setShowMoveToArchiveModal] = useState(false);
+  const [showPartialLogModal, setShowPartialLogModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [idToDelete, setIdToDelete] = useState<string | null>(null);
+  const [selectedProductForLog, setSelectedProductForLog] = useState<Product | null>(null);
+  const [logSearchTerm, setLogSearchTerm] = useState('');
+  const [logDateFilter, setLogDateFilter] = useState('');
   const [selectedForArchive, setSelectedForArchive] = useState<string[]>([]);
   const [selectedForRestore, setSelectedForRestore] = useState<string[]>([]);
+  const [notification, setNotification] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
   
   // Təkrarlanan kod üçün xəta halları
   const [duplicateInStock, setDuplicateInStock] = useState<Product | null>(null);
@@ -75,8 +85,20 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
   const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
+  
+  useEffect(() => {
+    if (notification) {
+      const timer = setTimeout(() => setNotification(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [notification]);
+
+  const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
+    setNotification({ message, type });
+  };
 
   const [newProduct, setNewProduct] = useState({
     code: '',
@@ -88,7 +110,8 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     weight: '' as string | number,
     price: '' as string | number,
     imageUrl: '',
-    purchaseDate: new Date().toISOString().split('T')[0]
+    purchaseDate: new Date().toISOString().split('T')[0],
+    allowPartialSale: false
   });
 
   const [autoPrint, setAutoPrint] = useState(true);
@@ -230,7 +253,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
   }, [newProduct.type, isAddingNew]);
 
   // Stokda olan məhsulları süzgəcdən keçiririk
-  const activeProducts = products.filter(p => (Number(p.stockCount) || 0) > 0 && !p.isReturned);
+  const activeProducts = products.filter(p => (Number(p.stockCount) || 0) > 0);
 
   // Unique suppliers and categories for filters
   const suppliers = Array.from(new Set(activeProducts.map(p => p.supplier).filter(Boolean)));
@@ -293,7 +316,9 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
       supplierPrice: 0, 
       stockCount: 1, 
       purchaseDate: newProduct.purchaseDate,
-      logs: [{ date: new Date().toISOString(), action: 'Sistemə əlavə edildi' }]
+      logs: [{ date: new Date().toISOString(), action: 'Sistemə əlavə edildi' }],
+      allowPartialSale: newProduct.allowPartialSale,
+      soldWeight: 0
     };
 
     // Save to server immediately
@@ -306,6 +331,15 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
         });
         if (!res.ok) throw new Error('Failed to save to database');
         console.log('Product saved successfully to database');
+
+        // Remote Print if enabled
+        if (settings.remotePrintEnabled) {
+          fetch('/api/print-queue/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ product: productToAdd })
+          }).catch(err => console.error('Remote print failed:', err));
+        }
       } catch (err) {
         console.error('Database save error:', err);
         alert('Məhsul bazaya əlavə edilmədi. Yenidən cəhd edin.');
@@ -348,7 +382,8 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
         weight: '',
         price: '',
         imageUrl: '',
-        purchaseDate: new Date().toISOString().split('T')[0]
+        purchaseDate: new Date().toISOString().split('T')[0],
+        allowPartialSale: false
       };
     });
     setDuplicateInStock(null);
@@ -476,7 +511,9 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
         const base64Image = canvas.toDataURL('image/jpeg', 0.7);
         
         // Upload to server
+        setIsUploading(true);
         const imageUrl = await uploadImage(base64Image);
+        setIsUploading(false);
         
         if (isEdit) setEditForm(prev => ({ ...prev, imageUrl }));
         else setNewProduct(prev => ({ ...prev, imageUrl }));
@@ -495,7 +532,9 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
         const resized = await resizeImage(base64Image);
         
         // Upload to server
+        setIsUploading(true);
         const imageUrl = await uploadImage(resized);
+        setIsUploading(false);
         
         if (isEdit) setEditForm(prev => ({ ...prev, imageUrl }));
         else setNewProduct(prev => ({ ...prev, imageUrl }));
@@ -504,14 +543,45 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     }
   };
 
-  const openDetailModal = (product: Product) => {
-    setSelectedProduct(product);
-    setEditForm({ ...product });
-    setShowDetailModal(true);
+  const openDetailModal = async (product: Product) => {
+    // If it's a "light" product (no logs), fetch the full data
+    if (!product.logs || product.logs.length === 0) {
+      setIsDetailLoading(true);
+      setShowDetailModal(true);
+      try {
+        const res = await fetch(`/api/products/${product.id}`);
+        if (res.ok) {
+          const fullProduct = await res.json();
+          setSelectedProduct(fullProduct);
+          setEditForm({ ...fullProduct });
+          // Update the products list so we don't fetch again
+          setProducts(prev => prev.map(p => p.id === product.id ? fullProduct : p));
+        } else {
+          setSelectedProduct(product);
+          setEditForm({ ...product });
+        }
+      } catch (err) {
+        console.error('Failed to fetch full product:', err);
+        setSelectedProduct(product);
+        setEditForm({ ...product });
+      } finally {
+        setIsDetailLoading(false);
+      }
+    } else {
+      setSelectedProduct(product);
+      setEditForm({ ...product });
+      setShowDetailModal(true);
+    }
   };
 
   const handleDeleteProduct = async (id: string) => {
-    if (!confirm('Bu məhsulu silmək istədiyinizə əminsiniz?')) return;
+    setIdToDelete(id);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!idToDelete) return;
+    const id = idToDelete;
 
     try {
       const res = await fetch(`/api/products/${id}`, {
@@ -525,10 +595,12 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
       if (productToDelete) {
         addLog(`Məhsul silindi: ${productToDelete.code}`, 'PRODUCT', `${productToDelete.name}`);
       }
-      alert('Məhsul uğurla silindi.');
+      showNotification('Məhsul uğurla silindi.');
+      setShowDeleteConfirm(false);
+      setIdToDelete(null);
     } catch (err) {
       console.error('Delete product error:', err);
-      alert('Məhsul silinərkən xəta baş verdi.');
+      showNotification('Məhsul silinərkən xəta baş verdi.', 'error');
     }
   };
 
@@ -536,7 +608,11 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     e.preventDefault();
     if (!selectedProduct || !editForm.code || !editForm.name) return;
 
-    const updatedProduct: Product = { ...selectedProduct, ...editForm } as Product;
+    const updatedProduct: Product = { 
+      ...selectedProduct, 
+      ...editForm,
+      stockCount: editForm.isReturned ? 0 : (editForm.stockCount ?? selectedProduct.stockCount)
+    } as Product;
     
     // Save to server immediately
     const saveUpdate = async () => {
@@ -550,7 +626,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
         console.log('Product updated successfully in database');
       } catch (err) {
         console.error('Database update error:', err);
-        alert('Məhsul bazada yenilənmədi. Yenidən cəhd edin.');
+        showNotification('Məhsul bazada yenilənmədi. Yenidən cəhd edin.', 'error');
       }
     };
     saveUpdate();
@@ -558,7 +634,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     setProducts((prev: Product[]) => prev.map((p: Product) => p.id === selectedProduct.id ? updatedProduct : p));
     addLog(`Məhsul redaktə edildi: ${updatedProduct.code}`, 'PRODUCT', `Yeni məlumatlar: ${updatedProduct.name}, ${updatedProduct.weight}gr, ${updatedProduct.carat} əyar`);
     setSelectedProduct(updatedProduct);
-    alert("Məhsul məlumatları uğurla yeniləndi.");
+    showNotification("Məhsul məlumatları uğurla yeniləndi.");
   };
 
   const handleMoveToArchive = () => {
@@ -737,7 +813,12 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                     </div>
                   ) : (
                     <div className="w-full h-full flex flex-col items-center justify-center cursor-pointer p-4" onClick={startCamera}>
-                      {newProduct.imageUrl ? (
+                      {isUploading ? (
+                        <div className="flex flex-col items-center justify-center space-y-3 animate-pulse">
+                          <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+                          <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">YÜKLƏNİR...</p>
+                        </div>
+                      ) : newProduct.imageUrl ? (
                         <img 
                           src={newProduct.imageUrl} 
                           className="max-w-full max-h-full object-contain" 
@@ -837,6 +918,17 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                 <div className="space-y-1 bg-amber-50/50 p-3 rounded-2xl border border-amber-100">
                   <label className="text-[9px] font-black text-amber-500 uppercase text-center block tracking-[0.2em] mb-1">QİYMƏT</label>
                   <div className="flex items-center justify-center space-x-2"><input type="number" required value={newProduct.price} onChange={(e) => setNewProduct({...newProduct, price: e.target.value})} className="w-full max-w-[200px] bg-white border-2 border-amber-200 rounded-xl py-2 px-4 font-black text-2xl text-amber-900 outline-none text-center shadow-sm" /><span className="text-lg font-black text-amber-300">₼</span></div>
+                </div>
+
+                <div className="flex items-center space-x-2 bg-stone-50 p-3 rounded-2xl border border-stone-100">
+                  <input 
+                    type="checkbox" 
+                    id="allowPartialSale" 
+                    checked={newProduct.allowPartialSale} 
+                    onChange={(e) => setNewProduct({...newProduct, allowPartialSale: e.target.checked})} 
+                    className="w-5 h-5 accent-amber-500 rounded cursor-pointer"
+                  />
+                  <label htmlFor="allowPartialSale" className="text-[10px] font-black text-stone-600 uppercase cursor-pointer select-none">Hissəli satışa icazə ver</label>
                 </div>
 
                 <div className="flex items-center space-x-2 bg-stone-50 p-3 rounded-2xl border border-stone-100">
@@ -1220,7 +1312,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                           )}
                           <td className="px-8 py-5">
                             <div 
-                              onClick={(e) => p.imageUrl ? openGallery(e, filteredProducts.indexOf(p)) : null}
+                              onClick={(e) => { e.stopPropagation(); if (p.imageUrl) openGallery(e, filteredProducts.indexOf(p)); }}
                               className={`w-14 h-14 rounded-xl overflow-hidden border-2 border-stone-100 shadow-sm bg-stone-50 flex items-center justify-center relative group/img ${p.imageUrl ? 'cursor-zoom-in hover:border-amber-400 transition-all' : ''}`}
                             >
                               {p.imageUrl ? (
@@ -1239,6 +1331,11 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                                     <Maximize2 size={16} className="text-amber-600" />
                                   </div>
                                 </>
+                              ) : isBackgroundLoading ? (
+                                <div className="flex flex-col items-center justify-center">
+                                  <div className="w-4 h-4 border-2 border-amber-500/20 border-t-amber-500 rounded-full animate-spin"></div>
+                                  <span className="text-[6px] font-black text-amber-600 mt-1 uppercase">Yüklənir</span>
+                                </div>
                               ) : (
                                 <div className="text-stone-200"><ImageIcon size={24} /></div>
                               )}
@@ -1250,6 +1347,11 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                               <p className="font-black text-stone-800 text-sm uppercase leading-none">{p.name}</p>
                               <div className="flex flex-wrap items-center gap-2 mt-1.5">
                                 {p.brilliant && <p className="text-[10px] text-amber-600 font-bold flex items-center"><Gem size={10} className="mr-1.5"/> {p.brilliant}</p>}
+                                {p.allowPartialSale && (
+                                  <div className="bg-amber-100 text-amber-700 text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-widest flex items-center">
+                                    <Zap size={8} className="mr-1" /> HİSSƏLİ
+                                  </div>
+                                )}
                                 {p.isReturned && (
                                   <div className="bg-red-500 text-white text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-widest flex items-center">
                                     <AlertCircle size={8} className="mr-1" /> VAZVİRAT
@@ -1258,7 +1360,17 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                               </div>
                             </div>
                           </td>
-                          <td className="px-8 py-5 font-black text-stone-900 text-sm text-center">{p.weight} gr</td>
+                          <td className="px-8 py-5 text-center">
+                            <div className="flex flex-col items-center">
+                               <span className="font-black text-stone-900 text-sm">{p.weight} gr</span>
+                               {p.allowPartialSale && (Number(p.soldWeight) || 0) > 0 && (
+                                 <div className="flex flex-col items-center mt-1">
+                                   <span className="text-[8px] font-bold text-amber-600 uppercase">Bu məhsuldan {p.soldWeight} gr hissəli satılıb</span>
+                                   <span className="text-[8px] font-bold text-stone-400 uppercase">Qalan: {(Number(p.weight) - (Number(p.soldWeight) || 0)).toFixed(2)} gr</span>
+                                 </div>
+                               )}
+                            </div>
+                          </td>
                           <td className="px-8 py-5 font-black text-stone-900 text-sm text-center">
                             <div className="flex flex-col items-center">
                               <span className="text-amber-600">{p.carat}</span>
@@ -1268,6 +1380,15 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                           <td className="px-8 py-5 text-stone-900 font-black text-right text-xl tracking-tighter">{(Number(p.price) || 0).toLocaleString()} ₼</td>
                           <td className="px-8 py-5 text-center">
                             <div className="flex items-center justify-center space-x-2">
+                              {p.allowPartialSale && (
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); setSelectedProductForLog(p); setShowPartialLogModal(true); }} 
+                                  className="p-4 bg-stone-100 text-stone-600 hover:bg-stone-200 rounded-2xl transition-all shadow-sm"
+                                  title="Satış Logları"
+                                >
+                                  <History size={20} />
+                                </button>
+                              )}
                               <button onClick={(e) => { e.stopPropagation(); openDetailModal(p); }} className="p-4 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded-2xl transition-all shadow-sm"><Edit2 size={20} /></button>
                               <button onClick={(e) => { e.stopPropagation(); handleDeleteProduct(p.id); }} className="p-4 bg-red-50 text-red-600 hover:bg-red-100 rounded-2xl transition-all shadow-sm"><Trash2 size={20} /></button>
                             </div>
@@ -1291,6 +1412,11 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                             loading="lazy"
                             className="w-full h-full object-cover" 
                           />
+                        ) : isBackgroundLoading ? (
+                          <div className="flex flex-col items-center justify-center">
+                            <div className="w-5 h-5 border-2 border-amber-500/20 border-t-amber-500 rounded-full animate-spin"></div>
+                            <span className="text-[8px] font-black text-amber-600 mt-1 uppercase">Yüklənir</span>
+                          </div>
                         ) : (
                           <ImageIcon size={24} className="text-stone-200" />
                         )}
@@ -1300,16 +1426,24 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                           <p className="font-black text-stone-900 text-sm truncate uppercase leading-tight">{p.name}</p>
                           <p className="font-black text-amber-600 text-sm ml-2 whitespace-nowrap">{(Number(p.price) || 0).toLocaleString()} ₼</p>
                         </div>
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
-                          <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">{p.code}</span>
-                          <span className="text-[10px] font-bold text-stone-300">•</span>
-                          <span className="text-[10px] font-black text-stone-600 uppercase">{p.weight} gr</span>
-                          <span className="text-[10px] font-bold text-stone-300">•</span>
-                          <span className="text-[10px] font-black text-amber-500 uppercase">{p.carat}</span>
-                          {p.isReturned && (
-                            <span className="bg-red-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-widest">VAZVİRAT</span>
-                          )}
-                        </div>
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
+                            <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">{p.code}</span>
+                            <span className="text-[10px] font-bold text-stone-300">•</span>
+                            <span className="text-[10px] font-black text-stone-600 uppercase">
+                              {p.allowPartialSale && (Number(p.soldWeight) || 0) > 0 
+                                ? `${(Number(p.weight) - (Number(p.soldWeight) || 0)).toFixed(2)} / ${p.weight} gr`
+                                : `${p.weight} gr`
+                              }
+                            </span>
+                            <span className="text-[10px] font-bold text-stone-300">•</span>
+                            <span className="text-[10px] font-black text-amber-500 uppercase">{p.carat}</span>
+                            {p.allowPartialSale && (
+                              <span className="bg-amber-100 text-amber-700 text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-widest">HİSSƏLİ</span>
+                            )}
+                            {p.isReturned && (
+                              <span className="bg-red-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-widest">VAZVİRAT</span>
+                            )}
+                          </div>
                       </div>
                       <ChevronRight size={16} className="text-stone-300 flex-shrink-0" />
                     </div>
@@ -1535,10 +1669,17 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
       {showDetailModal && selectedProduct && (
         <div className="fixed inset-0 bg-stone-950/80 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
           <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[95vh] animate-in zoom-in-95">
-            <header className="px-8 py-6 border-b border-stone-100 flex justify-between items-center bg-stone-50/50">
-              <h3 className="text-xl font-black text-stone-900 uppercase tracking-tighter">Redaktə: {selectedProduct.code}</h3>
-              <button onClick={() => setShowDetailModal(false)} className="p-2 text-stone-300 hover:text-stone-900 transition-colors"><X size={24} /></button>
-            </header>
+            {isDetailLoading ? (
+              <div className="flex flex-col items-center justify-center p-20">
+                <div className="w-12 h-12 border-4 border-amber-500/20 border-t-amber-500 rounded-full animate-spin mb-4"></div>
+                <p className="text-stone-500 font-black uppercase tracking-widest text-xs">Məlumatlar Yüklənir...</p>
+              </div>
+            ) : (
+              <>
+                <header className="px-8 py-6 border-b border-stone-100 flex justify-between items-center bg-stone-50/50">
+                  <h3 className="text-xl font-black text-stone-900 uppercase tracking-tighter">Redaktə: {editForm.code || selectedProduct.code}</h3>
+                  <button onClick={() => setShowDetailModal(false)} className="p-2 text-stone-300 hover:text-stone-900 transition-colors"><X size={24} /></button>
+                </header>
             <main className="flex-1 overflow-y-auto p-8 scrollbar-hide">
                <form id="fullEditForm" onSubmit={handleUpdateProduct} className="space-y-8">
                   <div className="flex flex-col items-center space-y-4">
@@ -1564,7 +1705,13 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                            </div>
                         </div>
                       ) : (
-                        <>
+                        <div className="w-full h-full relative flex items-center justify-center">
+                          {isUploading && (
+                            <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center space-y-3">
+                              <div className="w-10 h-10 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+                              <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">YÜKLƏNİR...</p>
+                            </div>
+                          )}
                           {editForm.imageUrl || selectedProduct.imageUrl ? (
                             <img 
                               src={editForm.imageUrl || selectedProduct.imageUrl} 
@@ -1578,7 +1725,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                           ) : (
                             <ImageIcon size={48} className="text-stone-200" />
                           )}
-                        </>
+                        </div>
                       )}
                     </div>
                     <div className="flex space-x-2">
@@ -1588,6 +1735,32 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                     <input type="file" ref={editFileInputRef} onChange={(e) => handleImageUpload(e, true)} className="hidden" />
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                       <div className="space-y-1.5">
+                         <label className="text-[10px] font-black text-stone-400 uppercase ml-2">Kateqoriya (Qovluq)</label>
+                         <select 
+                           value={editForm.type || selectedProduct.type} 
+                           onChange={(e) => {
+                             const newType = e.target.value;
+                             const oldType = editForm.type || selectedProduct.type;
+                             const currentCode = editForm.code || selectedProduct.code;
+                             
+                             const oldPrefix = getPrefix(oldType);
+                             const newPrefix = getPrefix(newType);
+                             
+                             let newCode = currentCode;
+                             if (oldPrefix && currentCode.startsWith(oldPrefix)) {
+                               newCode = newPrefix + currentCode.substring(oldPrefix.length);
+                             } else if (newPrefix && !currentCode.startsWith(newPrefix)) {
+                               newCode = newPrefix + currentCode;
+                             }
+                             
+                             setEditForm({...editForm, type: newType, code: newCode});
+                           }} 
+                           className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-4 px-5 font-black text-stone-800 outline-none cursor-pointer"
+                         >
+                           {settings.productGroups.map(g => <option key={g.name} value={g.name}>{g.name}</option>)}
+                         </select>
+                       </div>
                        <div className="space-y-1.5"><label className="text-[10px] font-black text-stone-400 uppercase ml-2">Məhsul Kodu</label><input type="text" value={editForm.code || ''} onChange={(e) => setEditForm({...editForm, code: e.target.value})} className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-4 px-5 font-black text-stone-800 outline-none" /></div>
                        <div className="space-y-1.5"><label className="text-[10px] font-black text-stone-400 uppercase ml-2">Ad</label><input type="text" value={editForm.name || ''} onChange={(e) => setEditForm({...editForm, name: e.target.value})} className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-4 px-5 font-black text-stone-800 outline-none" /></div>
                        <div className="space-y-1.5"><label className="text-[10px] font-black text-stone-400 uppercase ml-2">Çəki (gr)</label><input type="number" step="0.001" value={editForm.weight || ''} onChange={(e) => setEditForm({...editForm, weight: Number(e.target.value)})} className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-4 px-5 font-black text-stone-800 outline-none" /></div>
@@ -1610,6 +1783,16 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                        </div>
                        <div className="space-y-1.5 md:col-span-2"><label className="text-[10px] font-black text-amber-600 uppercase ml-2">Qiymət (₼)</label><input type="number" value={editForm.price || ''} onChange={(e) => setEditForm({...editForm, price: Number(e.target.value)})} className="w-full bg-amber-50 border-2 border-amber-200 rounded-xl py-6 px-6 font-black text-4xl text-amber-900 text-center outline-none" /></div>
                        <div className="md:col-span-2 flex items-center space-x-3 bg-stone-50 p-4 rounded-2xl border border-stone-100">
+                          <input 
+                            type="checkbox" 
+                            id="editAllowPartialSale" 
+                            checked={!!editForm.allowPartialSale} 
+                            onChange={(e) => setEditForm({...editForm, allowPartialSale: e.target.checked})} 
+                            className="w-5 h-5 accent-amber-500 rounded cursor-pointer"
+                          />
+                          <label htmlFor="editAllowPartialSale" className="text-xs font-black text-stone-600 uppercase cursor-pointer select-none">Hissəli satışa icazə ver</label>
+                        </div>
+                        <div className="md:col-span-2 flex items-center space-x-3 bg-stone-50 p-4 rounded-2xl border border-stone-100">
                           <input 
                             type="checkbox" 
                             id="isArchived" 
@@ -1662,6 +1845,8 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
               <button type="button" onClick={() => setShowDetailModal(false)} className="flex-1 px-8 py-4 rounded-xl font-black text-stone-400 uppercase tracking-widest text-[11px] border border-stone-200 hover:bg-white transition-all">Ləğv Et</button>
               <button form="fullEditForm" type="submit" className="flex-[2] px-8 py-4 bg-amber-500 text-stone-950 rounded-xl font-black uppercase tracking-widest text-xs shadow-xl">Yadda Saxla</button>
             </footer>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -1723,6 +1908,168 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                   Arxivə Daşı
                 </button>
               </div>
+            </footer>
+          </div>
+        </div>
+      )}
+
+      {notification && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[200] animate-in slide-in-from-top duration-300">
+          <div className={`px-6 py-3 rounded-2xl shadow-2xl flex items-center space-x-3 border ${notification.type === 'success' ? 'bg-emerald-500 border-emerald-400 text-white' : 'bg-red-500 border-red-400 text-white'}`}>
+            {notification.type === 'success' ? <Zap size={18} /> : <AlertCircle size={18} />}
+            <span className="font-black uppercase tracking-widest text-[10px]">{notification.message}</span>
+          </div>
+        </div>
+      )}
+
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-[2.5rem] p-8 max-w-md w-full shadow-2xl border border-stone-100 animate-in zoom-in-95 duration-200">
+            <div className="flex flex-col items-center text-center">
+              <div className="p-4 bg-red-50 rounded-2xl text-red-500 mb-6">
+                <Trash2 size={32} />
+              </div>
+              <h3 className="text-2xl font-black text-stone-900 mb-2 uppercase tracking-tight">Məhsulu Sil?</h3>
+              <p className="text-stone-500 font-medium mb-8">Bu məhsulu silmək istədiyinizə əminsiniz? Bu əməliyyat geri qaytarıla bilməz.</p>
+              
+              <div className="flex space-x-3 w-full">
+                <button 
+                  onClick={() => { setShowDeleteConfirm(false); setIdToDelete(null); }}
+                  className="flex-1 py-4 bg-stone-100 text-stone-600 font-black rounded-2xl hover:bg-stone-200 transition-all uppercase tracking-widest text-xs"
+                >
+                  Ləğv et
+                </button>
+                <button 
+                  onClick={confirmDelete}
+                  className="flex-1 py-4 bg-red-500 text-white font-black rounded-2xl hover:bg-red-600 transition-all shadow-lg shadow-red-200 uppercase tracking-widest text-xs"
+                >
+                  Bəli, Sil
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPartialLogModal && selectedProductForLog && (
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-4xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <header className="p-6 border-b border-stone-100 flex items-center justify-between bg-stone-50/50">
+              <div className="flex items-center space-x-4">
+                <div className="w-12 h-12 bg-amber-500 text-amber-950 rounded-2xl flex items-center justify-center shadow-lg">
+                  <History size={24} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-stone-900 uppercase tracking-tighter">Hissəli Satış Tarixçəsi</h3>
+                  <p className="text-[10px] font-bold text-stone-500 uppercase tracking-widest">{selectedProductForLog.name} ({selectedProductForLog.code})</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => { setShowPartialLogModal(false); setSelectedProductForLog(null); }}
+                className="p-3 hover:bg-white rounded-2xl text-stone-400 hover:text-stone-900 transition-all shadow-sm border border-transparent hover:border-stone-100"
+              >
+                <X size={20} />
+              </button>
+            </header>
+            
+            <div className="p-6 border-b border-stone-100 bg-stone-50/30 flex flex-col md:flex-row gap-4">
+              <div className="flex-1 relative group">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 group-focus-within:text-amber-600 transition-colors" size={18} />
+                <input 
+                  type="text" 
+                  placeholder="Hissə adı və ya satıcı..." 
+                  value={logSearchTerm}
+                  onChange={(e) => setLogSearchTerm(e.target.value)}
+                  className="w-full bg-white border-2 border-stone-100 rounded-2xl py-3 pl-12 pr-6 font-bold text-stone-800 outline-none focus:border-amber-400 transition-all text-sm"
+                />
+              </div>
+              <div className="flex gap-4">
+                <input 
+                  type="date" 
+                  value={logDateFilter}
+                  onChange={(e) => setLogDateFilter(e.target.value)}
+                  className="bg-white border-2 border-stone-100 rounded-2xl py-3 px-6 font-bold text-stone-800 outline-none focus:border-amber-400 transition-all cursor-pointer text-sm"
+                />
+              </div>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
+              <div className="bg-stone-50 rounded-3xl border border-stone-100 overflow-hidden">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-stone-100/50 border-b border-stone-100">
+                      <th className="px-6 py-4 text-[9px] font-black text-stone-500 uppercase tracking-widest">Hissə Adı</th>
+                      <th className="px-6 py-4 text-[9px] font-black text-stone-500 uppercase tracking-widest text-center">Çəki</th>
+                      <th className="px-6 py-4 text-[9px] font-black text-stone-500 uppercase tracking-widest text-center">Tarix</th>
+                      <th className="px-6 py-4 text-[9px] font-black text-stone-500 uppercase tracking-widest text-center">Satıcı</th>
+                      <th className="px-6 py-4 text-[9px] font-black text-stone-500 uppercase tracking-widest text-center">Müştəri</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100">
+                    {sales
+                      .filter(s => {
+                        const matchesProduct = s.productId === selectedProductForLog.id && s.isPartial;
+                        const matchesSearch = s.partialName?.toLowerCase().includes(logSearchTerm.toLowerCase()) || 
+                                            s.sellerName?.toLowerCase().includes(logSearchTerm.toLowerCase()) ||
+                                            s.customerName?.toLowerCase().includes(logSearchTerm.toLowerCase());
+                        const matchesDate = !logDateFilter || s.date.startsWith(logDateFilter);
+                        return matchesProduct && matchesSearch && matchesDate;
+                      })
+                      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                      .map((s) => (
+                        <tr key={s.id} className="hover:bg-white transition-colors">
+                          <td className="px-6 py-4">
+                            <p className="font-black text-stone-900 text-sm uppercase">{s.partialName}</p>
+                          </td>
+                          <td className="px-6 py-4 text-center font-black text-amber-600 text-sm">{s.soldWeight} gr</td>
+                          <td className="px-6 py-4 text-center">
+                            <div className="flex flex-col items-center">
+                              <span className="text-[11px] font-black text-stone-900">{new Date(s.date).toLocaleDateString('az-AZ')}</span>
+                              <span className="text-[9px] font-bold text-stone-400">{new Date(s.date).toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit' })}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <span className="text-[10px] font-black text-stone-600 uppercase bg-stone-100 px-2 py-1 rounded-lg">{s.sellerName || 'Sistem'}</span>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <span className="text-[10px] font-black text-stone-600 uppercase">{s.customerName}</span>
+                          </td>
+                        </tr>
+                      ))}
+                    {sales.filter(s => s.productId === selectedProductForLog.id && s.isPartial).length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-20 text-center opacity-40">
+                          <History size={48} className="mx-auto text-stone-200 mb-4" />
+                          <p className="text-xs font-black text-stone-400 uppercase tracking-widest">Hələ ki, hissəli satış edilməyib</p>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            
+            <footer className="p-6 bg-stone-50 border-t border-stone-100 flex justify-between items-center">
+               <div className="flex space-x-6">
+                  <div>
+                    <p className="text-[9px] font-black text-stone-400 uppercase tracking-widest leading-none">Ümumi Çəki</p>
+                    <p className="text-lg font-black text-stone-900 mt-1">{selectedProductForLog.weight} gr</p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-black text-stone-400 uppercase tracking-widest leading-none">Satılan</p>
+                    <p className="text-lg font-black text-amber-600 mt-1">{selectedProductForLog.soldWeight || 0} gr</p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-black text-stone-400 uppercase tracking-widest leading-none">Qalan</p>
+                    <p className="text-lg font-black text-stone-900 mt-1">{(Number(selectedProductForLog.weight) - (Number(selectedProductForLog.soldWeight) || 0)).toFixed(2)} gr</p>
+                  </div>
+               </div>
+               <button 
+                 onClick={() => { setShowPartialLogModal(false); setSelectedProductForLog(null); }}
+                 className="px-8 py-3 bg-stone-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-black transition-all shadow-lg active:scale-95"
+               >
+                 BAĞLA
+               </button>
             </footer>
           </div>
         </div>

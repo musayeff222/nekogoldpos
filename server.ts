@@ -145,7 +145,8 @@ async function startServer() {
             sql: `CREATE TABLE IF NOT EXISTS logs (
               id VARCHAR(100) PRIMARY KEY,
               content LONGTEXT,
-              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              INDEX (created_at)
             )`
           },
           {
@@ -155,6 +156,15 @@ async function startServer() {
               username VARCHAR(50) UNIQUE NOT NULL,
               password VARCHAR(255) NOT NULL,
               updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )`
+          },
+          {
+            name: 'print_queue',
+            sql: `CREATE TABLE IF NOT EXISTS print_queue (
+              id INT AUTO_INCREMENT PRIMARY KEY,
+              product_data LONGTEXT,
+              status ENUM('pending', 'completed') DEFAULT 'pending',
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )`
           }
         ];
@@ -346,6 +356,22 @@ async function startServer() {
     }
   });
 
+  app.get('/api/products/:id', async (req: Request, res: Response) => {
+    const { id } = req.params;
+    try {
+      const [rows] = await pool.execute('SELECT content FROM products WHERE id = ?', [id]);
+      const rowArray = rows as any[];
+      if (rowArray.length > 0) {
+        res.json(JSON.parse(rowArray[0].content));
+      } else {
+        res.status(404).json({ error: 'Product not found' });
+      }
+    } catch (error: any) {
+      console.error('Failed to fetch product:', error);
+      res.status(500).json({ error: 'Failed to fetch product', details: error.message });
+    }
+  });
+
   app.post('/api/products/bulk-update', async (req: Request, res: Response) => {
     const { products } = req.body;
     if (!Array.isArray(products)) {
@@ -370,6 +396,49 @@ async function startServer() {
       res.status(500).json({ error: 'Failed to bulk update products', details: error.message });
     } finally {
       connection.release();
+    }
+  });
+
+  // Print Queue Endpoints
+  app.post('/api/print-queue/add', async (req: Request, res: Response) => {
+    const { product } = req.body;
+    if (!product) return res.status(400).json({ error: 'Product data is required' });
+
+    try {
+      await pool.execute(
+        'INSERT INTO print_queue (product_data) VALUES (?)',
+        [JSON.stringify(product)]
+      );
+      res.json({ status: 'success' });
+    } catch (error: any) {
+      console.error('Failed to add to print queue:', error);
+      res.status(500).json({ error: 'Failed to add to print queue' });
+    }
+  });
+
+  app.get('/api/print-queue/pending', async (req: Request, res: Response) => {
+    try {
+      const [rows] = await pool.execute(
+        'SELECT id, product_data FROM print_queue WHERE status = "pending" ORDER BY created_at ASC'
+      );
+      res.json(rows);
+    } catch (error: any) {
+      console.error('Failed to fetch pending print jobs:', error);
+      res.status(500).json({ error: 'Failed to fetch pending print jobs' });
+    }
+  });
+
+  app.post('/api/print-queue/complete/:id', async (req: Request, res: Response) => {
+    const { id } = req.params;
+    try {
+      await pool.execute(
+        'UPDATE print_queue SET status = "completed" WHERE id = ?',
+        [id]
+      );
+      res.json({ status: 'success' });
+    } catch (error: any) {
+      console.error('Failed to complete print job:', error);
+      res.status(500).json({ error: 'Failed to complete print job' });
     }
   });
 
@@ -405,28 +474,46 @@ async function startServer() {
         query += ` ORDER BY created_at DESC LIMIT ${limit}`;
       }
       
+      // Optimization: For light products, remove heavy fields at the SQL level if possible
+      if (isLight && type === 'products') {
+        query = `SELECT JSON_REMOVE(content, '$.imageUrl', '$.logs') as content FROM products`;
+      }
+      
       // Use the underlying connection for streaming (mysql2/promise doesn't support streaming directly)
       const stream = (connection as any).connection.query(query).stream();
+      
+      // Handle client disconnect
+      let isReleased = false;
+      let hasError = false;
+      const releaseConnection = () => {
+        if (!isReleased) {
+          connection.release();
+          isReleased = true;
+        }
+      };
+
+      res.on('close', () => {
+        hasError = true;
+        stream.destroy();
+        releaseConnection();
+      });
       
       res.setHeader('Content-Type', 'application/json');
       res.write('[');
       
       let first = true;
-      let hasError = false;
 
       stream.on('data', (row: any) => {
         if (hasError) return;
         
         let content = row.content;
-        if (isLight && (type === 'products' || type === 'logs')) {
+        if (!content) return;
+
+        // If it's a light fetch but not optimized by SQL (e.g. logs), do it here
+        if (isLight && type === 'logs') {
           try {
             const item = JSON.parse(content);
-            if (type === 'products') {
-              delete item.imageUrl;
-              delete item.logs;
-            } else if (type === 'logs') {
-              // Maybe logs don't need stripping, but we can limit them
-            }
+            // Logs don't have specific heavy fields to remove yet, but we could add some
             content = JSON.stringify(item);
           } catch (e) {
             console.warn(`Failed to parse content for ${type}:`, e);
@@ -435,8 +522,15 @@ async function startServer() {
 
         const chunk = (first ? '' : ',') + content;
         first = false;
-        if (!res.write(chunk)) {
-          stream.pause();
+        try {
+          if (!res.write(chunk)) {
+            stream.pause();
+          }
+        } catch (err) {
+          hasError = true;
+          console.error(`Write error for ${type}:`, err);
+          stream.destroy();
+          releaseConnection();
         }
       });
       
@@ -448,7 +542,7 @@ async function startServer() {
         if (hasError) return;
         res.write(']');
         res.end();
-        connection.release();
+        releaseConnection();
       });
       
       stream.on('error', (error: any) => {
@@ -462,7 +556,7 @@ async function startServer() {
         } else {
           res.end();
         }
-        connection.release();
+        releaseConnection();
       });
     } catch (error) {
       console.error(`Failed to fetch ${type}:`, error);

@@ -27,13 +27,17 @@ import {
   ChevronRight,
   Maximize2
 } from 'lucide-react';
-import { Sale } from '@/types';
+import { Sale, Product, SystemLog } from '@/types';
 
 interface SoldProductsProps {
   sales: Sale[];
+  setSales: React.Dispatch<React.SetStateAction<Sale[]>>;
+  products: Product[];
+  setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
+  addLog: (action: string, category: SystemLog['category'], details?: string) => void;
 }
 
-const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales }) => {
+const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales, setSales, products, setProducts, addLog }) => {
   const [viewMode, setViewMode] = useState<'history' | 'printList'>('history');
   const [searchTerm, setSearchTerm] = useState('');
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
@@ -155,6 +159,62 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales }) => {
     return d.toLocaleDateString('az-AZ');
   };
 
+  const handleCustomerReturn = async (sale: Sale) => {
+    if (!confirm(`"${sale.productName}" məhsulunu geri qaytarmaq istəyirsiniz?`)) return;
+
+    try {
+      // 1. Satışın statusunu yenilə
+      const updatedSale: Sale = { ...sale, status: 'returned', returnNote: 'Müştəri tərəfindən geri qaytarıldı' };
+      
+      // 2. Məhsulu tap və stoka qaytar
+      const product = products.find(p => p.id === sale.productId);
+      if (product) {
+        let updatedProduct: Product;
+        if (sale.isPartial) {
+          // Hissəli satışdırsa, çəkini geri əlavə et
+          updatedProduct = {
+            ...product,
+            soldWeight: Math.max(0, (product.soldWeight || 0) - (sale.soldWeight || 0)),
+            stockCount: 1 // Yenidən satıla bilsin
+          };
+        } else {
+          // Tam satışdırsa, stockCount-u 1 et
+          updatedProduct = {
+            ...product,
+            stockCount: 1
+          };
+        }
+
+        // Serverdə məhsulu yenilə
+        await fetch(`/api/products/${updatedProduct.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ product: updatedProduct })
+        });
+
+        // Local state-də məhsulu yenilə
+        setProducts(prev => prev.map(p => p.id === updatedProduct.id ? updatedProduct : p));
+      }
+
+      // Serverdə satışı yenilə
+      await fetch(`/api/data/sales/${updatedSale.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sale: updatedSale })
+      });
+
+      // Local state-də satışı yenilə
+      setSales(prev => prev.map(s => s.id === updatedSale.id ? updatedSale : s));
+      setSelectedSale(updatedSale);
+
+      addLog(`Müştəri İadəsi: ${sale.productCode}`, 'SALE', `Məhsul: ${sale.productName}, Məbləğ: ${sale.total} AZN`);
+      alert("Məhsul uğurla geri qaytarıldı və stoka əlavə olundu.");
+    } catch (err) {
+      console.error('Return error:', err);
+      alert("Geri qaytarma zamanı xəta baş verdi.");
+    }
+  };
+
   if (selectedSale) {
     return (
       <div className="fixed inset-0 bg-stone-50 z-[100] flex flex-col animate-in fade-in duration-500 overflow-hidden">
@@ -222,14 +282,24 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales }) => {
                 {[
                   { label: 'MƏHSUL ÇƏKİSİ', val: `${selectedSale.weight} GR`, icon: Scale },
                   { label: 'QIZIL ƏYARI', val: `${selectedSale.carat} K`, icon: Tag },
-                  { label: 'BRİLLİANT / DAŞ', val: selectedSale.brilliant || 'YOXDUR', icon: Sparkles },
+                  { label: 'SATIŞI EDƏN', val: selectedSale.sellerName || 'SİSTEM', icon: User },
                   { label: 'TƏDARÜKÇÜ', val: selectedSale.supplier || 'N/A', icon: Truck },
                 ].map((item, idx) => (
                   <div key={idx} className="bg-white p-6 rounded-3xl border border-stone-200 shadow-md flex flex-col justify-between group hover:border-amber-500 transition-all duration-300"><div className="flex justify-between items-center mb-6"><div className="p-3 bg-stone-50 rounded-2xl text-amber-600 group-hover:bg-amber-50 transition-all"><item.icon size={20} strokeWidth={2.5} /></div><span className="text-[9px] font-black text-stone-500 uppercase tracking-widest leading-none text-right">{item.label}</span></div><p className="text-lg font-black text-stone-900 uppercase truncate">{item.val}</p></div>
                 ))}
               </div>
               <div className="mt-auto bg-stone-900 rounded-[2.5rem] p-6 md:p-8 shadow-2xl relative overflow-hidden group border border-white/10"><div className="absolute top-0 right-0 w-full h-full gold-gradient opacity-[0.03] rounded-full blur-[100px] -mr-1/2 -mt-1/2"></div><div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6"><div><p className="text-[10px] font-black text-stone-400 uppercase tracking-[0.4em] mb-2">YEKUN SATIŞ MƏBLƏĞİ</p><div className="flex items-baseline space-x-2"><h3 className="text-4xl md:text-5xl font-black text-amber-500 tracking-tighter leading-none">{selectedSale.total.toLocaleString()}</h3><span className="text-2xl font-bold text-amber-700">₼</span></div>{selectedSale.discount > 0 && <div className="inline-flex items-center bg-white/5 px-3 py-1.5 rounded-xl border border-white/5 mt-4"><CheckCircle2 size={10} className="mr-2 text-green-500" /><span className="text-stone-400 font-bold text-[10px] uppercase tracking-widest">{selectedSale.discount.toLocaleString()} ₼ ENDİRİM</span></div>}</div><div className="flex flex-col md:items-end space-y-2 bg-white/5 p-4 rounded-[1.5rem] border border-white/5"><div className="flex items-center space-x-2 text-[10px] font-black text-stone-300 uppercase tracking-widest"><Calendar size={14} className="text-stone-500" /><span>{formatDate(selectedSale.date)}</span></div><div className="flex items-center space-x-2 text-[10px] font-black text-stone-400 uppercase tracking-widest"><Clock size={14} className="text-stone-500" /><span>{formatTime(selectedSale.date)}</span></div></div></div></div>
-              <div className="flex justify-center pt-6"><button onClick={() => setSelectedSale(null)} className="px-16 py-4 bg-stone-200 text-stone-600 hover:bg-stone-900 hover:text-white rounded-2xl font-black text-[11px] uppercase tracking-[0.5em] transition-all shadow-lg active:scale-95">SƏHİFƏNİ BAĞLA</button></div>
+              <div className="flex flex-col md:flex-row justify-center gap-4 pt-6">
+                {selectedSale.status !== 'returned' && (
+                  <button 
+                    onClick={() => handleCustomerReturn(selectedSale)} 
+                    className="px-10 py-4 bg-red-600 text-white hover:bg-red-700 rounded-2xl font-black text-[11px] uppercase tracking-[0.2em] transition-all shadow-lg active:scale-95 flex items-center justify-center"
+                  >
+                    <RotateCcw size={18} className="mr-2" /> MƏHSULU GERİ QAYTAR
+                  </button>
+                )}
+                <button onClick={() => setSelectedSale(null)} className="px-16 py-4 bg-stone-200 text-stone-600 hover:bg-stone-900 hover:text-white rounded-2xl font-black text-[11px] uppercase tracking-[0.5em] transition-all shadow-lg active:scale-95">SƏHİFƏNİ BAĞLA</button>
+              </div>
             </div>
           </main>
         </div>
@@ -408,7 +478,20 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales }) => {
                               <Gem size={20} />
                             )}
                           </div>
-                          <div><p className="font-black text-stone-950 text-sm uppercase leading-none">{s.productName}</p><p className="text-[10px] text-stone-500 font-black mt-1.5 uppercase tracking-widest">{s.productCode} | {s.weight} gr</p></div>
+                          <div>
+                            <p className="font-black text-stone-950 text-sm uppercase leading-none">{s.productName}</p>
+                            {s.status === 'returned' && (
+                              <p className="text-[10px] text-red-600 font-black mt-1 uppercase tracking-widest animate-pulse">
+                                Bu məhsul geri qaytarıldı
+                              </p>
+                            )}
+                            {s.isPartial && (
+                              <p className="text-[10px] text-amber-600 font-bold mt-1 uppercase tracking-widest">
+                                Hissə: {s.partialName} ({s.soldWeight} gr)
+                              </p>
+                            )}
+                            <p className="text-[10px] text-stone-500 font-black mt-1.5 uppercase tracking-widest">{s.productCode} | {s.weight} gr</p>
+                          </div>
                         </div>
                       </td>
                       <td className="px-8 py-5 text-center">

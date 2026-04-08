@@ -29,6 +29,8 @@ export interface Product {
   imageUrl?: string;
   purchaseDate: string; // Alış tarixi
   logs: ProductLog[]; // Dəyişiklik tarixçəsi
+  allowPartialSale?: boolean;
+  soldWeight?: number; // Hissəli satışda satılan ümumi çəki
 }
 
 export interface Customer {
@@ -54,12 +56,16 @@ export interface Sale {
   date: string;
   status: 'completed' | 'returned' | 'exchanged';
   returnNote?: string; // Geri qaytarılma və ya dəyişdirilmə detalları
+  isPartial?: boolean;
+  partialName?: string;
+  soldWeight?: number; // Bu satışda satılan çəki
   // Snapshot fields for history
   weight?: number;
   carat?: string;
   supplier?: string;
   brilliant?: string; // Brilliant məlumatı (tarixçə üçün)
   imageUrl?: string;
+  sellerName?: string;
 }
 
 export interface Expense {
@@ -128,6 +134,8 @@ export interface AppSettings {
   labelPrinterPath: string;
   receiptFontWeight: string;
   labelFontWeight: string;
+  isPrintStation?: boolean;
+  remotePrintEnabled?: boolean;
 }
 
 export interface SystemLog {

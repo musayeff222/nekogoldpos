@@ -1065,6 +1065,45 @@ const SettingsModule: React.FC<SettingsProps> = ({
 
       <div className="bg-white rounded-[2rem] border border-slate-100 shadow-2xl overflow-hidden p-8 md:p-12 space-y-8">
         <div className="flex items-center space-x-4">
+          <Printer className="text-indigo-500" size={32} />
+          <h3 className="text-xl font-black text-slate-900 uppercase">Məsafədən Çap (Remote Printing)</h3>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="flex flex-col space-y-4">
+            <div className="flex items-center space-x-3 ml-4">
+              <input 
+                type="checkbox" 
+                id="isPrintStation"
+                checked={localSettings.isPrintStation}
+                onChange={(e) => setLocalSettings({...localSettings, isPrintStation: e.target.checked})}
+                className="w-6 h-6 accent-indigo-500 rounded cursor-pointer"
+              />
+              <label htmlFor="isPrintStation" className="text-sm font-black text-slate-800 uppercase cursor-pointer">Bu cihazı Çap Stansiyası kimi təyin et</label>
+            </div>
+            <p className="text-[10px] text-slate-400 font-bold italic ml-4 leading-normal">
+              * Aktiv edildikdə, bu cihaz digər cihazlardan (məs: telefon) gələn çap sorğularını avtomatik yerinə yetirəcək.
+            </p>
+          </div>
+          <div className="flex flex-col space-y-4">
+            <div className="flex items-center space-x-3 ml-4">
+              <input 
+                type="checkbox" 
+                id="remotePrintEnabled"
+                checked={localSettings.remotePrintEnabled}
+                onChange={(e) => setLocalSettings({...localSettings, remotePrintEnabled: e.target.checked})}
+                className="w-6 h-6 accent-indigo-500 rounded cursor-pointer"
+              />
+              <label htmlFor="remotePrintEnabled" className="text-sm font-black text-slate-800 uppercase cursor-pointer">Məhsul əlavə etdikdə avtomatik çap sorğusu göndər</label>
+            </div>
+            <p className="text-[10px] text-slate-400 font-bold italic ml-4 leading-normal">
+              * Aktiv edildikdə, bu cihazda yeni məhsul əlavə edildikdə Çap Stansiyasına avtomatik bildiriş gedəcək.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-[2rem] border border-slate-100 shadow-2xl overflow-hidden p-8 md:p-12 space-y-8">
+        <div className="flex items-center space-x-4">
           <Key className="text-indigo-500" size={32} />
           <h3 className="text-xl font-black text-slate-900 uppercase">Giriş Şifrəsini Dəyiş</h3>
         </div>

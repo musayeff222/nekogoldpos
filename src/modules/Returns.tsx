@@ -7,6 +7,7 @@ import {
   ArrowRightLeft, 
   Package, 
   Gem, 
+  ShoppingBag,
   X,
   Barcode,
   CheckCircle2,
@@ -71,17 +72,20 @@ const ReturnsModule: React.FC<ReturnsProps> = ({ sales, setSales, products, setP
 
     addLog(`${actionText}: ${selectedSale.productCode}`, 'SALE', `Müştəri: ${selectedSale.customerName}, Məbləğ: ${selectedSale.total} AZN, Səbəb: ${note}`);
 
-    // 1. Satış tarixçəsini yenilə
-    setSales((prev: Sale[]) => prev.map((s: Sale) => 
-      s.id === selectedSale.id ? { ...s, status: finalStatus, returnNote: note } : s
-    ));
+    // 1. Satış tarixçəsindən sil
+    setSales((prev: Sale[]) => prev.filter((s: Sale) => s.id !== selectedSale.id));
     
-    // 2. Məhsulu stoka əlavə et (Amma 'isReturned' olaraq işarələ və stockCount-u 0 et ki, əsas stokda görünməsin)
+    // Serverdən sil
+    fetch(`/api/data/sales/${selectedSale.id}`, {
+      method: 'DELETE'
+    }).catch(err => console.error('Failed to delete sale from database:', err));
+    
+    // 2. Məhsulu stoka əlavə et (stockCount: 1 və isReturned: true)
     setProducts((prev: Product[]) => prev.map((p: Product) => {
         if (p.id === selectedSale.productId) {
             const updatedProduct = { 
                 ...p, 
-                stockCount: 0, 
+                stockCount: 1, 
                 isReturned: true,
                 returnReason: note,
                 code: finalCode,
@@ -128,6 +132,7 @@ const ReturnsModule: React.FC<ReturnsProps> = ({ sales, setSales, products, setP
   };
 
   const returnedProducts = products.filter(p => p.isReturned);
+  const returnedSales = sales.filter(s => s.status === 'returned');
 
   return (
     <div className="flex flex-col space-y-6 pb-24 md:pb-10 animate-in fade-in duration-500">
@@ -300,72 +305,143 @@ const ReturnsModule: React.FC<ReturnsProps> = ({ sales, setSales, products, setP
         </div>
       ) : (
         /* İADƏLƏR SİYAHISI TABI */
-        <div className="bg-white rounded-[2.5rem] md:rounded-[3rem] border border-slate-100 shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
-          <div className="p-8 md:p-12 border-b border-slate-50 bg-slate-50/30 flex items-center justify-between">
-            <div>
-              <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter">İadələr Siyahısı</h3>
-              <p className="text-xs text-slate-400 font-bold mt-1 uppercase tracking-widest">Geri qaytarılmış və stoka hələ əlavə edilməmiş məhsullar</p>
+        <div className="space-y-8">
+          {/* TOPDANÇIYA QAYTARILANLAR */}
+          <div className="bg-white rounded-[2.5rem] md:rounded-[3rem] border border-slate-100 shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
+            <div className="p-8 md:p-12 border-b border-slate-50 bg-slate-50/30 flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter">Topdançıya Qaytarılanlar (Vazvrat)</h3>
+                <p className="text-xs text-slate-400 font-bold mt-1 uppercase tracking-widest">Stokdan çıxarılmış və topdançıya geri qaytarılan məhsullar</p>
+              </div>
+              <div className="bg-red-500 text-white px-6 py-3 rounded-2xl font-black text-lg shadow-lg">
+                {returnedProducts.length} <span className="text-[10px] uppercase tracking-widest ml-1">Məhsul</span>
+              </div>
             </div>
-            <div className="bg-indigo-500 text-white px-6 py-3 rounded-2xl font-black text-lg shadow-lg">
-              {returnedProducts.length} <span className="text-[10px] uppercase tracking-widest ml-1">Məhsul</span>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/50">
+                    <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Məhsul</th>
+                    <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Kod</th>
+                    <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Çəki</th>
+                    <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Səbəb / Qeyd</th>
+                    <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Əməliyyat</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {returnedProducts.length > 0 ? returnedProducts.map(p => (
+                    <tr key={p.id} className="hover:bg-indigo-50/30 transition-colors group">
+                      <td className="px-8 py-6">
+                        <div className="flex items-center space-x-4">
+                          <div className="w-12 h-12 bg-slate-50 rounded-xl flex items-center justify-center text-indigo-500 border border-slate-100 overflow-hidden">
+                            {p.imageUrl ? (
+                              <img src={p.imageUrl} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                            ) : (
+                              <Gem size={20} />
+                            )}
+                          </div>
+                          <span className="font-black text-slate-800 uppercase text-sm">{p.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-8 py-6">
+                        <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-1 rounded uppercase tracking-widest">{p.code}</span>
+                      </td>
+                      <td className="px-8 py-6 font-bold text-slate-500 text-sm">{p.weight} gr</td>
+                      <td className="px-8 py-6">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase leading-relaxed max-w-xs">{p.returnReason || 'Qeyd yoxdur'}</p>
+                      </td>
+                      <td className="px-8 py-6 text-right">
+                        <button 
+                          onClick={() => handleRestoreToStock(p)}
+                          className="bg-slate-900 text-indigo-500 px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-black transition-all shadow-md flex items-center space-x-2 ml-auto"
+                        >
+                          <RefreshCw size={14} />
+                          <span>Stoka Qaytar</span>
+                        </button>
+                      </td>
+                    </tr>
+                  )) : (
+                    <tr>
+                      <td colSpan={5} className="px-8 py-20 text-center">
+                        <div className="flex flex-col items-center justify-center text-slate-300">
+                          <RotateCcw size={48} className="mb-4 opacity-20" />
+                          <p className="font-black uppercase tracking-[0.3em]">Topdançıya qaytarılmış məhsul yoxdur</p>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50/50">
-                  <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Məhsul</th>
-                  <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Kod</th>
-                  <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Çəki</th>
-                  <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Səbəb / Qeyd</th>
-                  <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Əməliyyat</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {returnedProducts.length > 0 ? returnedProducts.map(p => (
-                  <tr key={p.id} className="hover:bg-indigo-50/30 transition-colors group">
-                    <td className="px-8 py-6">
-                      <div className="flex items-center space-x-4">
-                        <div className="w-12 h-12 bg-slate-50 rounded-xl flex items-center justify-center text-indigo-500 border border-slate-100 overflow-hidden">
-                          {p.imageUrl ? (
-                            <img src={p.imageUrl} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
-                          ) : (
-                            <Gem size={20} />
-                          )}
+          {/* MÜŞTƏRİ İADƏLƏRİ */}
+          <div className="bg-white rounded-[2.5rem] md:rounded-[3rem] border border-slate-100 shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
+            <div className="p-8 md:p-12 border-b border-slate-50 bg-slate-50/30 flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter">Müştəri İadələri (İade Edilənlər)</h3>
+                <p className="text-xs text-slate-400 font-bold mt-1 uppercase tracking-widest">Müştəri tərəfindən geri qaytarılmış satışlar</p>
+              </div>
+              <div className="bg-amber-500 text-white px-6 py-3 rounded-2xl font-black text-lg shadow-lg">
+                {returnedSales.length} <span className="text-[10px] uppercase tracking-widest ml-1">İadə</span>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/50">
+                    <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Məhsul</th>
+                    <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Kod</th>
+                    <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Müştəri</th>
+                    <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Məbləğ</th>
+                    <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Tarix</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {returnedSales.length > 0 ? returnedSales.map(s => (
+                    <tr key={s.id} className="hover:bg-amber-50/30 transition-colors group">
+                      <td className="px-8 py-6">
+                        <div className="flex items-center space-x-4">
+                          <div className="w-12 h-12 bg-slate-50 rounded-xl flex items-center justify-center text-amber-500 border border-slate-100 overflow-hidden">
+                            {s.imageUrl ? (
+                              <img src={s.imageUrl} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                            ) : (
+                              <Gem size={20} />
+                            )}
+                          </div>
+                          <div>
+                            <span className="font-black text-slate-800 uppercase text-sm block">{s.productName}</span>
+                            {s.isPartial && <span className="text-[9px] font-bold text-amber-600 uppercase">Hissəli: {s.partialName} ({s.soldWeight} gr)</span>}
+                          </div>
                         </div>
-                        <span className="font-black text-slate-800 uppercase text-sm">{p.name}</span>
-                      </div>
-                    </td>
-                    <td className="px-8 py-6">
-                      <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-1 rounded uppercase tracking-widest">{p.code}</span>
-                    </td>
-                    <td className="px-8 py-6 font-bold text-slate-500 text-sm">{p.weight} gr</td>
-                    <td className="px-8 py-6">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase leading-relaxed max-w-xs">{p.returnReason || 'Qeyd yoxdur'}</p>
-                    </td>
-                    <td className="px-8 py-6 text-right">
-                      <button 
-                        onClick={() => handleRestoreToStock(p)}
-                        className="bg-slate-900 text-indigo-500 px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-black transition-all shadow-md flex items-center space-x-2 ml-auto"
-                      >
-                        <RefreshCw size={14} />
-                        <span>Stoka Qaytar</span>
-                      </button>
-                    </td>
-                  </tr>
-                )) : (
-                  <tr>
-                    <td colSpan={5} className="px-8 py-20 text-center">
-                      <div className="flex flex-col items-center justify-center text-slate-300">
-                        <RotateCcw size={48} className="mb-4 opacity-20" />
-                        <p className="font-black uppercase tracking-[0.3em]">İadə edilmiş məhsul yoxdur</p>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                      </td>
+                      <td className="px-8 py-6">
+                        <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-1 rounded uppercase tracking-widest">{s.productCode}</span>
+                      </td>
+                      <td className="px-8 py-6 font-bold text-slate-500 text-sm uppercase">{s.customerName}</td>
+                      <td className="px-8 py-6 font-black text-slate-900 text-lg">{s.total.toLocaleString()} ₼</td>
+                      <td className="px-8 py-6 text-right">
+                        <div className="flex flex-col items-end">
+                          <span className="text-[11px] font-black text-slate-900">{new Date(s.date).toLocaleDateString('az-AZ')}</span>
+                          <span className="text-[9px] font-bold text-slate-400">{new Date(s.date).toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+                      </td>
+                    </tr>
+                  )) : (
+                    <tr>
+                      <td colSpan={5} className="px-8 py-20 text-center">
+                        <div className="flex flex-col items-center justify-center text-slate-300">
+                          <ShoppingBag size={48} className="mb-4 opacity-20" />
+                          <p className="font-black uppercase tracking-[0.3em]">Müştəri iadəsi yoxdur</p>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}

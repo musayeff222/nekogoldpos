@@ -43,9 +43,10 @@ interface SalesProps {
   cart: Product[];
   setCart: React.Dispatch<React.SetStateAction<Product[]>>;
   addLog: (action: string, category: SystemLog['category'], details?: string) => void;
+  user: { username: string } | null;
 }
 
-const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSales, customers, setCustomers, settings, cart, setCart, addLog }) => {
+const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSales, customers, setCustomers, settings, cart, setCart, addLog, user }) => {
   const [step, setStep] = useState(1);
   const [currentProduct, setCurrentProduct] = useState<Product | null>(null);
   const [previouslySoldItem, setPreviouslySoldItem] = useState<Sale | null>(null);
@@ -71,6 +72,11 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
     total: number;
   } | null>(null);
 
+  const [showPartialSaleModal, setShowPartialSaleModal] = useState(false);
+  const [partialSaleInfo, setPartialSaleInfo] = useState({ name: '', weight: '' as string | number });
+
+  const [zoomedImage, setZoomedImage] = useState<string | null>(null);
+
   const handleProductSearch = () => {
     const code = searchCode.trim().toLowerCase();
     if (!code) return;
@@ -78,15 +84,33 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
     // 1. Aktiv stokda tapmağa çalışırıq
     const found = products.find(p => 
       p.code.toLowerCase() === code && 
-      p.stockCount === 1 &&
       !cart.some(item => item.id === p.id)
     );
 
     if (found) {
-      setCurrentProduct(found);
-      setPreviouslySoldItem(null);
+      if (found.isReturned) {
+        alert(`BU MƏHSUL VAZVRAT OLUNUB! (Səbəb: ${found.returnReason || 'Qeyd yoxdur'})`);
+        setCurrentProduct(null);
+        setPreviouslySoldItem(null);
+        return;
+      }
+      if (found.stockCount === 1) {
+        setCurrentProduct(found);
+        setPreviouslySoldItem(null);
+      } else {
+        // Stokda yoxdursa, satış tarixçəsində yoxlayırıq
+        const sold = sales.find(s => s.productCode.toLowerCase() === code);
+        if (sold) {
+          setPreviouslySoldItem(sold);
+          setCurrentProduct(null);
+        } else {
+          alert(`'${searchCode}' kodlu aktiv məhsul tapılmadı!`);
+          setCurrentProduct(null);
+          setPreviouslySoldItem(null);
+        }
+      }
     } else {
-      // 2. Stokda yoxdursa, satış tarixçəsində yoxlayırıq
+      // Heç tapılmadısa satış tarixçəsində yoxlayırıq
       const sold = sales.find(s => s.productCode.toLowerCase() === code);
       if (sold) {
         setPreviouslySoldItem(sold);
@@ -130,8 +154,28 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
     setCart(cart.filter(item => item.id !== id));
   };
 
-  const handleCompleteSale = (isCredit: boolean = false) => {
+  const handleCompleteSale = (isCredit: boolean = false, isPartial: boolean = false) => {
     if (cart.length === 0) return;
+    
+    // If partial sale, we only support one item in cart for simplicity or we handle the first one
+    const product = cart[0];
+    
+    if (isPartial) {
+      const soldWeight = Number(partialSaleInfo.weight);
+      if (!partialSaleInfo.name || !soldWeight || soldWeight <= 0) {
+        alert("Hissənin adı və çəkisi düzgün daxil edilməlidir!");
+        return;
+      }
+      if (soldWeight > (Number(product.weight) - (product.soldWeight || 0))) {
+        alert("Satılan çəki mövcud stokdan çox ola bilməz!");
+        return;
+      }
+      if (soldWeight < 0.01) {
+        alert("Minimum satış çəkisi 0.01 gr olmalıdır!");
+        return;
+      }
+    }
+
     if (isCredit && !customerInfo.fullName) {
         alert("Kreditlə satış üçün müştəri seçilməlidir!");
         return;
@@ -140,10 +184,34 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
     const transactionId = Math.random().toString(36).substr(2, 6).toUpperCase();
     const date = new Date().toISOString();
     
-    const subtotalValue = cart.reduce((acc, p) => acc + (Number(p.price) || 0), 0);
+    const subtotalValue = isPartial 
+      ? (Number(product.price) / Number(product.weight)) * Number(partialSaleInfo.weight)
+      : cart.reduce((acc, p) => acc + (Number(p.price) || 0), 0);
+    
     const finalTotalValue = subtotalValue - discount;
 
-    const newSalesRecords: Sale[] = cart.map((product, index) => ({
+    const newSalesRecords: Sale[] = isPartial ? [{
+      id: `${transactionId}-1`,
+      productId: product.id,
+      productName: product.name,
+      productCode: product.code,
+      type: product.type,
+      customerName: customerInfo.fullName || 'Anonim Müştəri',
+      price: subtotalValue,
+      discount: discount,
+      total: finalTotalValue,
+      date: date,
+      status: 'completed',
+      isPartial: true,
+      partialName: partialSaleInfo.name,
+      soldWeight: Number(partialSaleInfo.weight),
+      weight: Number(partialSaleInfo.weight),
+      carat: product.carat,
+      supplier: product.supplier,
+      brilliant: product.brilliant,
+      imageUrl: product.imageUrl,
+      sellerName: user?.username || 'Sistem'
+    }] : cart.map((product, index) => ({
       id: `${transactionId}-${index + 1}`,
       productId: product.id,
       productName: product.name,
@@ -159,7 +227,8 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
       carat: product.carat,
       supplier: product.supplier,
       brilliant: product.brilliant,
-      imageUrl: product.imageUrl
+      imageUrl: product.imageUrl,
+      sellerName: user?.username || 'Sistem'
     }));
 
     setLastTransaction({
@@ -201,24 +270,52 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
       }).catch(err => console.error('Failed to save sale to database:', err));
     });
     
-    const cartIds = cart.map(p => p.id);
-    setProducts(prevProducts => prevProducts.map(p => {
-      if (cartIds.includes(p.id)) {
-        const updatedProduct = { ...p, stockCount: 0 };
-        
-        // Save to server immediately
-        fetch(`/api/products/${updatedProduct.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ product: updatedProduct })
-        }).catch(err => console.error('Failed to update product in database during sale:', err));
+    if (isPartial) {
+      setProducts(prevProducts => prevProducts.map(p => {
+        if (p.id === product.id) {
+          const newSoldWeight = (p.soldWeight || 0) + Number(partialSaleInfo.weight);
+          const remainingWeight = Number(p.weight) - newSoldWeight;
+          const updatedProduct = { 
+            ...p, 
+            soldWeight: newSoldWeight,
+            stockCount: remainingWeight <= 0.001 ? 0 : 1 // Mark as out of stock if weight is negligible
+          };
+          
+          // Save to server immediately
+          fetch(`/api/products/${updatedProduct.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ product: updatedProduct })
+          }).catch(err => console.error('Failed to update product in database during partial sale:', err));
 
-        return updatedProduct;
-      }
-      return p;
-    }));
+          return updatedProduct;
+        }
+        return p;
+      }));
+      addLog(`Hissəli satış edildi: ${product.name} (${product.code})`, 'SALE', `${partialSaleInfo.name}, ${partialSaleInfo.weight}gr`);
+    } else {
+      const cartIds = cart.map(p => p.id);
+      setProducts(prevProducts => prevProducts.map(p => {
+        if (cartIds.includes(p.id)) {
+          const updatedProduct = { ...p, stockCount: 0 };
+          
+          // Save to server immediately
+          fetch(`/api/products/${updatedProduct.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ product: updatedProduct })
+          }).catch(err => console.error('Failed to update product in database during sale:', err));
+
+          return updatedProduct;
+        }
+        return p;
+      }));
+      addLog(`Məhsul satıldı: ${cart.map(p => p.code).join(', ')}`, 'SALE', `${finalTotalValue} ₼`);
+    }
 
     setShowCreditModal(false);
+    setShowPartialSaleModal(false);
+    setPartialSaleInfo({ name: '', weight: '' });
     setStep(4);
   };
 
@@ -383,7 +480,10 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
             {previouslySoldItem && (
               <div className="w-full max-w-3xl bg-red-50 border-2 md:border-4 border-white shadow-2xl rounded-3xl md:rounded-[3rem] p-6 md:p-10 flex flex-col md:flex-row items-center space-y-6 md:space-y-0 md:space-x-10 animate-in zoom-in-95">
                  <div className="relative">
-                    <div className="w-32 h-32 md:w-48 md:h-48 bg-white rounded-2xl md:rounded-3xl flex items-center justify-center p-2 shadow-xl border-2 border-red-100 overflow-hidden group">
+                    <div 
+                      onClick={() => previouslySoldItem.imageUrl && setZoomedImage(previouslySoldItem.imageUrl)}
+                      className={`w-32 h-32 md:w-48 md:h-48 bg-white rounded-2xl md:rounded-3xl flex items-center justify-center p-2 shadow-xl border-2 border-red-100 overflow-hidden group ${previouslySoldItem.imageUrl ? 'cursor-zoom-in' : ''}`}
+                    >
                         {previouslySoldItem.imageUrl ? (
                           <img 
                             src={previouslySoldItem.imageUrl} 
@@ -453,7 +553,10 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
 
             {currentProduct && (
               <div className="w-full max-w-3xl bg-amber-50 mt-4 rounded-3xl md:rounded-[3rem] p-4 md:p-10 border-2 md:border-4 border-white shadow-2xl flex flex-col md:flex-row items-center space-y-4 md:space-y-0 md:space-x-10 animate-in zoom-in-95">
-                 <div className="w-32 h-32 md:w-40 md:h-40 bg-white rounded-2xl md:rounded-3xl flex items-center justify-center p-2 shadow-sm border border-stone-100 overflow-hidden">
+                 <div 
+                    onClick={() => currentProduct.imageUrl && setZoomedImage(currentProduct.imageUrl)}
+                    className={`w-32 h-32 md:w-40 md:h-40 bg-white rounded-2xl md:rounded-3xl flex items-center justify-center p-2 shadow-sm border border-stone-100 overflow-hidden ${currentProduct.imageUrl ? 'cursor-zoom-in' : ''}`}
+                 >
                     {currentProduct.imageUrl ? (
                       <img 
                         src={currentProduct.imageUrl} 
@@ -470,6 +573,12 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
                     )}
                  </div>
                  <div className="flex-1 text-center md:text-left space-y-2 md:space-y-4">
+                    {currentProduct.allowPartialSale && (
+                      <div className="inline-flex items-center space-x-2 bg-amber-200 text-amber-900 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest mb-2">
+                        <Scale size={12} />
+                        <span>Qalıq Çəki: {((Number(currentProduct.weight) || 0) - (currentProduct.soldWeight || 0)).toFixed(2)} gr</span>
+                      </div>
+                    )}
                     <h4 className="text-xl md:text-3xl font-black text-stone-900 uppercase tracking-tighter leading-none">{currentProduct.name}</h4>
                     <p className="text-[10px] md:text-[11px] font-bold text-stone-400 uppercase tracking-widest">{currentProduct.code} | {currentProduct.weight} gr | {currentProduct.carat}</p>
                     <p className="text-3xl md:text-5xl font-black text-amber-600 tracking-tighter">{(Number(currentProduct.price) || 0).toLocaleString()} <span className="text-xl md:text-2xl text-amber-400">₼</span></p>
@@ -504,8 +613,15 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
                   {cart.map(item => (
                     <div key={item.id} className="flex justify-between items-center p-4 md:p-6 bg-stone-50 rounded-2xl md:rounded-[2rem] border border-stone-100">
                        <div className="flex items-center space-x-3 md:space-x-5">
-                          <div className="w-10 h-10 md:w-14 md:h-14 bg-white rounded-xl flex items-center justify-center text-amber-500 border border-stone-100">
-                             <Gem size={20}/>
+                          <div 
+                            onClick={() => item.imageUrl && setZoomedImage(item.imageUrl)}
+                            className={`w-10 h-10 md:w-14 md:h-14 bg-white rounded-xl flex items-center justify-center text-amber-500 border border-stone-100 overflow-hidden ${item.imageUrl ? 'cursor-zoom-in' : ''}`}
+                          >
+                             {item.imageUrl ? (
+                               <img src={item.imageUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                             ) : (
+                               <Gem size={20}/>
+                             )}
                           </div>
                           <div className="max-w-[120px] md:max-w-none">
                             <p className="font-black text-stone-800 uppercase text-xs md:text-base truncate">{item.name}</p>
@@ -567,12 +683,18 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
                 </div>
 
                 <div className="space-y-3 md:space-y-4 pt-8 md:pt-12">
-                   <button 
-                     onClick={() => handleCompleteSale(false)} 
-                     className="w-full bg-amber-500 text-amber-950 py-5 md:py-7 rounded-2xl md:rounded-[2.5rem] font-black text-xl md:text-2xl hover:bg-amber-400 transition-all shadow-xl active:scale-95 uppercase tracking-widest flex items-center justify-center"
-                   >
-                     ÖDƏ <Wallet className="ml-3 md:ml-4 w-6 h-6 md:w-8 md:h-8" />
-                   </button>
+                    <button 
+                      onClick={() => {
+                        if (cart.length === 1 && cart[0].allowPartialSale) {
+                          setShowPartialSaleModal(true);
+                        } else {
+                          handleCompleteSale(false);
+                        }
+                      }} 
+                      className="w-full bg-amber-500 text-amber-950 py-5 md:py-7 rounded-2xl md:rounded-[2.5rem] font-black text-xl md:text-2xl hover:bg-amber-400 transition-all shadow-xl active:scale-95 uppercase tracking-widest flex items-center justify-center"
+                    >
+                      ÖDƏ <Wallet className="ml-3 md:ml-4 w-6 h-6 md:w-8 md:h-8" />
+                    </button>
                    <button 
                      onClick={() => setShowCreditModal(true)} 
                      className="w-full bg-white/5 border border-white/10 text-white py-4 md:py-6 rounded-2xl md:rounded-[2.5rem] font-black text-sm md:text-lg hover:bg-white/10 transition-all active:scale-95 uppercase tracking-widest"
@@ -677,6 +799,93 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
                     <button onClick={() => handleCompleteSale(true)} className="w-full bg-stone-900 text-white py-5 md:py-6 rounded-2xl md:rounded-[2rem] font-black text-lg md:text-xl hover:bg-black transition-all shadow-xl uppercase tracking-widest">KREDİTİ TƏSDİQLƏ</button>
                 </div>
             </div>
+        </div>
+      )}
+
+      {showPartialSaleModal && cart.length > 0 && (
+        <div className="fixed inset-0 bg-stone-950/90 backdrop-blur-xl z-[150] flex items-center justify-center p-4 animate-in fade-in duration-300">
+           <div className="bg-stone-900 border border-white/10 rounded-[2.5rem] shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95">
+              <header className="px-8 py-6 border-b border-white/5 flex justify-between items-center bg-white/5">
+                 <h3 className="text-xl font-black text-white uppercase tracking-tighter">SATIŞ SEÇİMİ</h3>
+                 <button onClick={() => setShowPartialSaleModal(false)} className="p-2 text-stone-400 hover:text-white transition-colors"><X size={24} /></button>
+              </header>
+              <main className="p-8 space-y-8">
+                 <div className="flex flex-col space-y-4">
+                    <button 
+                      onClick={() => handleCompleteSale(false)}
+                      className="w-full py-6 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl text-white font-black uppercase tracking-widest transition-all flex flex-col items-center"
+                    >
+                      <span className="text-lg">HAMISINI SAT</span>
+                      <span className="text-[10px] text-stone-400 mt-1">{cart[0].weight} gr • {cart[0].price} ₼</span>
+                    </button>
+                    
+                    <div className="relative py-4 flex items-center">
+                       <div className="flex-grow border-t border-white/5"></div>
+                       <span className="flex-shrink mx-4 text-[10px] font-black text-stone-500 uppercase tracking-widest">VƏ YA</span>
+                       <div className="flex-grow border-t border-white/5"></div>
+                    </div>
+
+                    <div className="space-y-4 bg-white/5 p-6 rounded-3xl border border-white/10">
+                       <h4 className="text-xs font-black text-amber-500 uppercase tracking-widest text-center">HİSSƏLİ SATIŞ</h4>
+                       <div className="space-y-4">
+                          <div className="space-y-1">
+                             <label className="text-[9px] font-black text-stone-400 uppercase ml-2">Hissənin Adı</label>
+                             <input 
+                               type="text" 
+                               value={partialSaleInfo.name} 
+                               onChange={(e) => setPartialSaleInfo({...partialSaleInfo, name: e.target.value})}
+                               placeholder="Məs: Üzük 1, Qızıl parça"
+                               className="w-full bg-stone-950 border border-white/10 rounded-xl py-3 px-4 text-white font-bold outline-none focus:border-amber-500 transition-all"
+                             />
+                          </div>
+                          <div className="space-y-1">
+                             <label className="text-[9px] font-black text-stone-400 uppercase ml-2">Çəki (gr)</label>
+                             <div className="relative">
+                                <Scale className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-500 w-4 h-4" />
+                                <input 
+                                  type="number" 
+                                  step="0.01"
+                                  value={partialSaleInfo.weight} 
+                                  onChange={(e) => setPartialSaleInfo({...partialSaleInfo, weight: e.target.value})}
+                                  placeholder="0.00"
+                                  className="w-full bg-stone-950 border border-white/10 rounded-xl py-3 pl-12 pr-4 text-white font-black text-xl outline-none focus:border-amber-500 transition-all"
+                                />
+                             </div>
+                             <p className="text-[9px] font-bold text-stone-500 uppercase mt-1 ml-2">Mövcud: {(Number(cart[0].weight) - (cart[0].soldWeight || 0)).toFixed(2)} gr</p>
+                          </div>
+                          <button 
+                            onClick={() => handleCompleteSale(false, true)}
+                            className="w-full py-4 bg-amber-500 text-stone-950 rounded-xl font-black uppercase tracking-widest text-xs hover:bg-amber-400 transition-all shadow-lg"
+                          >
+                            HİSSƏLİ SATIŞI TƏSDİQLƏ
+                          </button>
+                       </div>
+                    </div>
+                 </div>
+              </main>
+           </div>
+        </div>
+      )}
+
+      {zoomedImage && (
+        <div 
+          className="fixed inset-0 bg-stone-950/90 backdrop-blur-xl z-[200] flex items-center justify-center p-4 md:p-12 animate-in fade-in duration-300"
+          onClick={() => setZoomedImage(null)}
+        >
+          <button 
+            onClick={() => setZoomedImage(null)}
+            className="absolute top-6 right-6 p-4 bg-white/10 text-white hover:bg-white/20 rounded-full transition-all z-20"
+          >
+            <X size={32} />
+          </button>
+          <div className="relative w-full h-full flex items-center justify-center">
+            <img 
+              src={zoomedImage} 
+              className="max-w-full max-h-full object-contain rounded-2xl shadow-2xl animate-in zoom-in-95 duration-500" 
+              referrerPolicy="no-referrer"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
         </div>
       )}
     </div>

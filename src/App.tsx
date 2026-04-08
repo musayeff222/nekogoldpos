@@ -30,12 +30,15 @@ import LogsModule from '@/modules/Logs';
 import Login from '@/modules/Login';
 import { LogOut } from 'lucide-react';
 
+import { LabelPrint } from '@/components/LabelPrint';
+
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState<{ username: string } | null>(null);
   const [currentPage, setCurrentPage] = useState<Page>(Page.Sales);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [isBackgroundLoading, setIsBackgroundLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -46,6 +49,8 @@ const App: React.FC = () => {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [logs, setLogs] = useState<SystemLog[]>([]);
   const [cart, setCart] = useState<Product[]>([]);
+  const [remotePrintQueue, setRemotePrintQueue] = useState<any[]>([]);
+  const [currentRemoteJob, setCurrentRemoteJob] = useState<any | null>(null);
 
   // Refs to track last synced data to avoid redundant syncs
   const lastSyncedProducts = React.useRef<string>('');
@@ -95,7 +100,9 @@ const App: React.FC = () => {
     receiptPrinterPath: '',
     labelPrinterPath: '',
     receiptFontWeight: '600',
-    labelFontWeight: '600'
+    labelFontWeight: '600',
+    isPrintStation: false,
+    remotePrintEnabled: false
   });
 
   useEffect(() => {
@@ -110,14 +117,29 @@ const App: React.FC = () => {
 
     const fetchData = async (retries = 3) => {
       try {
-        const fetchWithType = async (type: string, params: Record<string, string> = {}) => {
-          const query = new URLSearchParams(params).toString();
-          const res = await fetch(`/api/data/${type}${query ? `?${query}` : ''}`);
-          if (!res.ok) {
-            const errorData = await res.json().catch(() => ({}));
-            throw new Error(errorData.details || errorData.error || `Failed to fetch ${type}`);
+        const fetchWithType = async (type: string, params: Record<string, string> = {}, timeout = 30000) => {
+          const controller = new AbortController();
+          const id = setTimeout(() => controller.abort(), timeout);
+          
+          try {
+            const query = new URLSearchParams(params).toString();
+            const res = await fetch(`/api/data/${type}${query ? `?${query}` : ''}`, {
+              signal: controller.signal
+            });
+            clearTimeout(id);
+            
+            if (!res.ok) {
+              const errorData = await res.json().catch(() => ({}));
+              throw new Error(errorData.details || errorData.error || `Failed to fetch ${type}`);
+            }
+            return res.json();
+          } catch (err: any) {
+            clearTimeout(id);
+            if (err.name === 'AbortError') {
+              throw new Error(`Fetch ${type} timed out after ${timeout}ms`);
+            }
+            throw err;
           }
-          return res.json();
         };
  
         // Fetch in parallel for better performance
@@ -212,7 +234,9 @@ const App: React.FC = () => {
             receiptPrinterPath: '',
             labelPrinterPath: '',
             receiptFontWeight: '600',
-            labelFontWeight: '600'
+            labelFontWeight: '600',
+            isPrintStation: false,
+            remotePrintEnabled: false
           };
           setSettings(defaultSettings);
           lastSyncedSettings.current = JSON.stringify(defaultSettings);
@@ -222,34 +246,49 @@ const App: React.FC = () => {
         console.log('Initial lightweight data load complete');
 
         // Background fetch for full product data (including images and logs)
-        setTimeout(async () => {
+        const fetchFullProducts = async (attempt = 1) => {
           try {
-            console.log('Starting background fetch for full product data...');
-            const fullProducts = await fetchWithType('products');
+            setIsBackgroundLoading(true);
+            console.log(`Starting background fetch for full product data (Attempt ${attempt})...`);
+            const fullProducts = await fetchWithType('products', {}, 60000); // 60s timeout for full products
             if (Array.isArray(fullProducts)) {
               setProducts(fullProducts);
               lastSyncedProducts.current = JSON.stringify(fullProducts);
               console.log('Full product data loaded in background');
             }
           } catch (err) {
-            console.error('Background product fetch failed:', err);
+            console.error(`Background product fetch failed (Attempt ${attempt}):`, err);
+            if (attempt < 3) {
+              const delay = attempt * 5000;
+              console.log(`Retrying full product fetch in ${delay/1000}s...`);
+              setTimeout(() => fetchFullProducts(attempt + 1), delay);
+            }
+          } finally {
+            setIsBackgroundLoading(false);
           }
-        }, 1000);
+        };
+        setTimeout(fetchFullProducts, 5000);
 
         // Background fetch for more logs
-        setTimeout(async () => {
+        const fetchExtendedLogs = async (attempt = 1) => {
           try {
-            console.log('Starting background fetch for more logs...');
-            const fullLogs = await fetchWithType('logs', { limit: '1000' });
+            console.log(`Starting background fetch for more logs (Attempt ${attempt})...`);
+            const fullLogs = await fetchWithType('logs', { limit: '1000' }, 30000);
             if (Array.isArray(fullLogs)) {
               setLogs(fullLogs);
               lastSyncedLogs.current = JSON.stringify(fullLogs);
               console.log('Extended logs loaded in background');
             }
           } catch (err) {
-            console.error('Background logs fetch failed:', err);
+            console.error(`Background logs fetch failed (Attempt ${attempt}):`, err);
+            if (attempt < 3) {
+              const delay = attempt * 5000;
+              console.log(`Retrying extended logs fetch in ${delay/1000}s...`);
+              setTimeout(() => fetchExtendedLogs(attempt + 1), delay);
+            }
           }
-        }, 3000);
+        };
+        setTimeout(fetchExtendedLogs, 10000);
       } catch (error: any) {
         console.error(`Failed to fetch data (retries left: ${retries}):`, error);
         if (retries > 0) {
@@ -276,6 +315,48 @@ const App: React.FC = () => {
     setIsAuthenticated(false);
     setUser(null);
   };
+
+  // Remote Print Queue Polling
+  useEffect(() => {
+    if (!settings.isPrintStation || !isAuthenticated) return;
+
+    const pollQueue = async () => {
+      try {
+        const res = await fetch('/api/print-queue/pending');
+        if (res.ok) {
+          const jobs = await res.json();
+          if (jobs.length > 0) {
+            // Process jobs one by one
+            for (const job of jobs) {
+              const productData = JSON.parse(job.product_data);
+              setCurrentRemoteJob({ ...job, product: productData });
+              
+              // Wait for print to trigger
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              
+              // Mark as complete
+              await fetch(`/api/print-queue/complete/${job.id}`, { method: 'POST' });
+              setCurrentRemoteJob(null);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Failed to poll print queue:', err);
+      }
+    };
+
+    const interval = setInterval(pollQueue, 5000);
+    return () => clearInterval(interval);
+  }, [settings.isPrintStation, isAuthenticated]);
+
+  // Trigger print when currentRemoteJob is set
+  useEffect(() => {
+    if (currentRemoteJob) {
+      setTimeout(() => {
+        window.print();
+      }, 500);
+    }
+  }, [currentRemoteJob]);
 
   // Sync data to backend on changes - ONLY after initial load is complete
   // NOTE: Products are now handled individually in modules (Stock, Sales, Returns) 
@@ -395,10 +476,10 @@ const App: React.FC = () => {
     }
 
     switch (currentPage) {
-      case Page.Sales: return <SalesModule products={products} setProducts={setProducts} sales={sales} setSales={setSales} customers={customers} setCustomers={setCustomers} settings={settings} cart={cart} setCart={setCart} addLog={addLog} />;
-      case Page.Stock: return <StockModule products={products} setProducts={setProducts} settings={settings} sales={sales} cart={cart} setCart={setCart} setCurrentPage={setCurrentPage} addLog={addLog} />;
+      case Page.Sales: return <SalesModule products={products} setProducts={setProducts} sales={sales} setSales={setSales} customers={customers} setCustomers={setCustomers} settings={settings} cart={cart} setCart={setCart} addLog={addLog} user={user} />;
+      case Page.Stock: return <StockModule products={products} setProducts={setProducts} settings={settings} sales={sales} cart={cart} setCart={setCart} setCurrentPage={setCurrentPage} addLog={addLog} user={user} isBackgroundLoading={isBackgroundLoading} />;
       case Page.Customers: return <CustomersModule customers={customers} setCustomers={setCustomers} sales={sales} addLog={addLog} />;
-      case Page.SoldProducts: return <SoldProductsModule sales={sales} />;
+      case Page.SoldProducts: return <SoldProductsModule sales={sales} setSales={setSales} products={products} setProducts={setProducts} addLog={addLog} />;
       case Page.Return: return <ReturnsModule sales={sales} setSales={setSales} products={products} setProducts={setProducts} addLog={addLog} />;
       case Page.Scrap: return <ScrapModule scraps={scraps} setScraps={setScraps} settings={settings} addLog={addLog} />;
       case Page.Expenses: return <ExpensesModule expenses={expenses} setExpenses={setExpenses} sales={sales} addLog={addLog} />;
@@ -418,7 +499,7 @@ const App: React.FC = () => {
         setScraps={setScraps}
         addLog={addLog}
       />;
-      default: return <SalesModule products={products} setProducts={setProducts} sales={sales} setSales={setSales} customers={customers} setCustomers={setCustomers} settings={settings} cart={cart} setCart={setCart} addLog={addLog} />;
+      default: return <SalesModule products={products} setProducts={setProducts} sales={sales} setSales={setSales} customers={customers} setCustomers={setCustomers} settings={settings} cart={cart} setCart={setCart} addLog={addLog} user={user} />;
     }
   };
 
@@ -517,6 +598,20 @@ const App: React.FC = () => {
           {renderModule()}
         </div>
       </main>
+
+      {/* Hidden Remote Print Area */}
+      {currentRemoteJob && (
+        <div className="hidden-print-area fixed inset-0 bg-white z-[9999] flex items-center justify-center">
+          <LabelPrint product={currentRemoteJob.product} settings={settings} />
+          <style dangerouslySetInnerHTML={{ __html: `
+            @media print {
+              body * { visibility: hidden; }
+              .hidden-print-area, .hidden-print-area * { visibility: visible; }
+              .hidden-print-area { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+            }
+          `}} />
+        </div>
+      )}
     </div>
   );
 };
