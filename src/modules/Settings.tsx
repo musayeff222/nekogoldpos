@@ -49,16 +49,28 @@ const SettingsModule: React.FC<SettingsProps> = ({
   const [dbStatus, setDbStatus] = useState<{ status: string; database: string; error?: string } | null>(null);
 
   useEffect(() => {
-    const checkHealth = () => {
-      fetch('/api/health')
-        .then(res => res.json())
-        .then(data => setDbStatus(data))
-        .catch((err) => setDbStatus({ status: 'error', database: 'disconnected', error: err.message }));
+    let active = true;
+    let timeoutId: NodeJS.Timeout;
+
+    const checkHealth = async () => {
+      if (!active) return;
+      try {
+        const res = await fetch('/api/health');
+        const data = await res.json();
+        if (active) setDbStatus(data);
+      } catch (err: any) {
+        if (active) setDbStatus({ status: 'error', database: 'disconnected', error: err.message });
+      }
+      if (active) {
+        timeoutId = setTimeout(checkHealth, 30000);
+      }
     };
     
     checkHealth();
-    const interval = setInterval(checkHealth, 30000); // Check every 30s
-    return () => clearInterval(interval);
+    return () => {
+      active = false;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, []);
 
   const handleSave = () => {
@@ -239,7 +251,7 @@ const SettingsModule: React.FC<SettingsProps> = ({
     setTestProduct(sampleProduct);
     setTimeout(() => {
       window.print();
-      setTimeout(() => setTestProduct(null), 2000);
+      setTimeout(() => setTestProduct(null), 10000);
     }, 1000);
   };
 

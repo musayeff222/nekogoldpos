@@ -451,6 +451,7 @@ async function startServer() {
       return res.status(400).json({ error: 'Invalid data type' });
     }
 
+    let connection: mysql.PoolConnection | undefined;
     try {
       if (type === 'settings') {
         const [rows] = await pool.query(`SELECT content FROM ${type}`);
@@ -467,7 +468,7 @@ async function startServer() {
       const limit = req.query.limit ? parseInt(req.query.limit as string) : null;
 
       // Optimization: Stream the response directly from MySQL to avoid loading everything into memory
-      const connection = await pool.getConnection();
+      connection = await pool.getConnection();
       
       let query = `SELECT content FROM ${type}`;
       if (type === 'logs' && limit) {
@@ -486,7 +487,7 @@ async function startServer() {
       let isReleased = false;
       let hasError = false;
       const releaseConnection = () => {
-        if (!isReleased) {
+        if (!isReleased && connection) {
           connection.release();
           isReleased = true;
         }
@@ -559,11 +560,14 @@ async function startServer() {
         releaseConnection();
       });
     } catch (error) {
+      if (connection) connection.release();
       console.error(`Failed to fetch ${type}:`, error);
-      res.status(500).json({ 
-        error: 'Failed to fetch data', 
-        details: error instanceof Error ? error.message : String(error)
-      });
+      if (!res.headersSent) {
+        res.status(500).json({ 
+          error: 'Failed to fetch data', 
+          details: error instanceof Error ? error.message : String(error)
+        });
+      }
     }
   });
 
@@ -766,14 +770,16 @@ async function startServer() {
 
   // Health check endpoint
   app.get('/api/health', async (req, res) => {
+    let connection: mysql.PoolConnection | undefined;
     try {
-      const connection = await pool.getConnection();
+      connection = await pool.getConnection();
       await connection.ping();
-      connection.release();
       res.json({ status: 'ok', database: 'connected' });
     } catch (err) {
       console.error('Health check failed:', err);
       res.status(500).json({ status: 'error', database: 'disconnected', error: err instanceof Error ? err.message : String(err) });
+    } finally {
+      if (connection) connection.release();
     }
   });
 

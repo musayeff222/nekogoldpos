@@ -247,7 +247,7 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
                 const updatedCustomer = { ...c, cashDebt: c.cashDebt + debtToAdd };
                 
                 // Save to server immediately
-                fetch(`/api/customers/${updatedCustomer.id}`, {
+                fetch(`/api/customers/${encodeURIComponent(updatedCustomer.id)}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ customer: updatedCustomer })
@@ -282,7 +282,7 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
           };
           
           // Save to server immediately
-          fetch(`/api/products/${updatedProduct.id}`, {
+          fetch(`/api/products/${encodeURIComponent(updatedProduct.id)}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ product: updatedProduct })
@@ -300,7 +300,7 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
           const updatedProduct = { ...p, stockCount: 0 };
           
           // Save to server immediately
-          fetch(`/api/products/${updatedProduct.id}`, {
+          fetch(`/api/products/${encodeURIComponent(updatedProduct.id)}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ product: updatedProduct })

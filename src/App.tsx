@@ -30,6 +30,7 @@ import LogsModule from '@/modules/Logs';
 import Login from '@/modules/Login';
 import { LogOut } from 'lucide-react';
 
+import { createPortal } from 'react-dom';
 import { LabelPrint } from '@/components/LabelPrint';
 
 const App: React.FC = () => {
@@ -129,10 +130,22 @@ const App: React.FC = () => {
             clearTimeout(id);
             
             if (!res.ok) {
-              const errorData = await res.json().catch(() => ({}));
-              throw new Error(errorData.details || errorData.error || `Failed to fetch ${type}`);
+              const text = await res.text().catch(() => '');
+              let errorData: any = {};
+              try {
+                errorData = JSON.parse(text);
+              } catch (e) {
+                console.error(`Non-JSON error response for ${type}:`, text.substring(0, 200));
+              }
+              throw new Error(errorData.details || errorData.error || `Failed to fetch ${type} (Status: ${res.status})`);
             }
-            return res.json();
+            const text = await res.text();
+            try {
+              return JSON.parse(text);
+            } catch (e) {
+              console.error(`Failed to parse JSON for ${type}. Response:`, text.substring(0, 200));
+              throw new Error(`Invalid JSON response for ${type}`);
+            }
           } catch (err: any) {
             clearTimeout(id);
             if (err.name === 'AbortError') {
@@ -320,33 +333,53 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!settings.isPrintStation || !isAuthenticated) return;
 
+    let active = true;
+    let timeoutId: NodeJS.Timeout;
+
     const pollQueue = async () => {
+      if (!active) return;
+
       try {
         const res = await fetch('/api/print-queue/pending');
         if (res.ok) {
-          const jobs = await res.json();
-          if (jobs.length > 0) {
-            // Process jobs one by one
-            for (const job of jobs) {
-              const productData = JSON.parse(job.product_data);
-              setCurrentRemoteJob({ ...job, product: productData });
-              
-              // Wait for print to trigger
-              await new Promise(resolve => setTimeout(resolve, 2000));
-              
-              // Mark as complete
-              await fetch(`/api/print-queue/complete/${job.id}`, { method: 'POST' });
-              setCurrentRemoteJob(null);
+          const text = await res.text();
+          try {
+            const jobs = JSON.parse(text);
+            if (jobs.length > 0 && active) {
+              // Process jobs one by one
+              for (const job of jobs) {
+                if (!active) break;
+                const productData = JSON.parse(job.product_data);
+                setCurrentRemoteJob({ ...job, product: productData });
+                
+                // Wait for print to trigger and user to interact
+                await new Promise(resolve => setTimeout(resolve, 10000));
+                
+                // Mark as complete
+                await fetch(`/api/print-queue/complete/${encodeURIComponent(job.id)}`, { method: 'POST' });
+                setCurrentRemoteJob(null);
+              }
             }
+          } catch (parseErr) {
+            console.error('Failed to parse print queue JSON. Response text:', text.substring(0, 200));
           }
+        } else {
+          console.error('Print queue fetch failed with status:', res.status);
         }
       } catch (err) {
         console.error('Failed to poll print queue:', err);
       }
+
+      if (active) {
+        timeoutId = setTimeout(pollQueue, 5000);
+      }
     };
 
-    const interval = setInterval(pollQueue, 5000);
-    return () => clearInterval(interval);
+    pollQueue();
+    return () => {
+      active = false;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, [settings.isPrintStation, isAuthenticated]);
 
   // Trigger print when currentRemoteJob is set
@@ -599,18 +632,14 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      {/* Hidden Remote Print Area */}
-      {currentRemoteJob && (
-        <div className="hidden-print-area fixed inset-0 bg-white z-[9999] flex items-center justify-center">
-          <LabelPrint product={currentRemoteJob.product} settings={settings} />
-          <style dangerouslySetInnerHTML={{ __html: `
-            @media print {
-              body * { visibility: hidden; }
-              .hidden-print-area, .hidden-print-area * { visibility: visible; }
-              .hidden-print-area { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
-            }
-          `}} />
-        </div>
+      {/* Hidden Remote Print Area (Portal to body for CSS visibility) */}
+      {currentRemoteJob && createPortal(
+        <div id="label-print">
+          <div className="label-page-break">
+            <LabelPrint product={currentRemoteJob.product} settings={settings} />
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

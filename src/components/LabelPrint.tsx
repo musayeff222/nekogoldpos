@@ -34,12 +34,12 @@ export const LabelPrint: React.FC<LabelPrintProps> = ({ product, settings }) => 
               fontFamily: 'Arial, sans-serif'
             }}
           >
-            {el.field === 'shopName' ? settings.shopName : 
-             el.field === 'code' ? product.code : 
-             el.field === 'weight' ? `${Number(product.weight).toFixed(2)} gr` : 
+            {el.field === 'shopName' ? (settings.shopName || 'NEKO GOLD') : 
+             el.field === 'code' ? (product.code || '---') : 
+             el.field === 'weight' ? `${Number(product.weight || 0).toFixed(2)} gr` : 
              el.field === 'price' ? `${Math.round(Number(product.price) || 0)}` : 
-             el.field === 'carat' ? `${product.carat}` : 
-             el.field === 'supplier' ? product.supplier : 
+             el.field === 'carat' ? `${product.carat || ''}` : 
+             el.field === 'supplier' ? (product.supplier || '') : 
              el.field === 'brilliant' ? (product.brilliant || '') : 
              el.field === 'currency' ? 'AZN' : ''}
           </div>
