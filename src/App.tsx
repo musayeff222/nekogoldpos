@@ -83,6 +83,8 @@ const App: React.FC = () => {
     suppliers: ['Tədərükçü A', 'Tədərükçü B', 'Atelye X'],
     carats: ['14', '18', '22', '24'],
     pricePerGram: 400,
+    pricePerGram750: 650,
+    pricePerBrilliant: 1000,
     labelConfig: {
       width: 80,
       height: 25,
@@ -187,9 +189,11 @@ const App: React.FC = () => {
         lastSyncedLogs.current = JSON.stringify(Array.isArray(l) ? l : []);
  
         if (st && !st.error) {
-          // Ensure productGroups exists for backward compatibility
+          // Ensure new price fields exist for backward compatibility
           const mergedSettings = {
             ...st,
+            pricePerGram750: st.pricePerGram750 || 650,
+            pricePerBrilliant: st.pricePerBrilliant || 1000,
             productGroups: st.productGroups || [
               { name: 'Bilərzik', prefix: 'BK' },
               { name: 'Üzük', prefix: 'UK' },
@@ -229,6 +233,8 @@ const App: React.FC = () => {
             suppliers: ['Tədərükçü A', 'Tədərükçü B', 'Atelye X'],
             carats: ['14', '18', '22', '24'],
             pricePerGram: 400,
+            pricePerGram750: 650,
+            pricePerBrilliant: 1000,
             labelConfig: {
               width: 80,
               height: 25,

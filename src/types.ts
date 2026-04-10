@@ -127,7 +127,9 @@ export interface AppSettings {
   productTypes: string[]; // Keep for compatibility or simple lists
   suppliers: string[];
   carats: string[];
-  pricePerGram: number; // 1 Qramın qiyməti
+  pricePerGram: number; // 1 Qramın qiyməti (585)
+  pricePerGram750: number; // 1 Qramın qiyməti (750)
+  pricePerBrilliant: number; // 1 Karat Brilliantın qiyməti
   labelConfig: LabelConfig;
   silentPrinting: boolean;
   receiptPrinterPath: string;

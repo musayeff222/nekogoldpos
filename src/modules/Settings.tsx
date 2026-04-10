@@ -460,19 +460,49 @@ const SettingsModule: React.FC<SettingsProps> = ({
           <h3 className="text-xl font-black text-slate-900 tracking-tighter uppercase">Avtomatik Qiymət</h3>
           <p className="text-xs text-slate-400 font-bold mt-2">1 qramın qiymətinə görə avtomatik yuvarlaqlaşdırma.</p>
         </div>
-        <div className="flex-1 p-8 space-y-4">
-          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">1 Qram Qiyməti (₼)</label>
-          <div className="relative group">
-            <Star className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-indigo-500 opacity-30" />
-            <input 
-              type="number" 
-              value={localSettings.pricePerGram}
-              onChange={(e) => setLocalSettings({...localSettings, pricePerGram: Number(e.target.value)})}
-              className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 pl-14 pr-6 font-black text-2xl text-indigo-900 focus:bg-white focus:border-indigo-400 outline-none"
-            />
+        <div className="flex-1 p-8 space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="space-y-2">
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">585 Qram Qiyməti (₼)</label>
+              <div className="relative group">
+                <Star className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-indigo-500 opacity-30" />
+                <input 
+                  type="number" 
+                  value={localSettings.pricePerGram}
+                  onChange={(e) => setLocalSettings({...localSettings, pricePerGram: Number(e.target.value)})}
+                  className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 pl-14 pr-6 font-black text-xl text-indigo-900 focus:bg-white focus:border-indigo-400 outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">750 Qram Qiyməti (₼)</label>
+              <div className="relative group">
+                <Star className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-indigo-500 opacity-30" />
+                <input 
+                  type="number" 
+                  value={localSettings.pricePerGram750}
+                  onChange={(e) => setLocalSettings({...localSettings, pricePerGram750: Number(e.target.value)})}
+                  className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 pl-14 pr-6 font-black text-xl text-indigo-900 focus:bg-white focus:border-indigo-400 outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Brilliant Karat Qiyməti (₼)</label>
+              <div className="relative group">
+                <Star className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-indigo-500 opacity-30" />
+                <input 
+                  type="number" 
+                  value={localSettings.pricePerBrilliant}
+                  onChange={(e) => setLocalSettings({...localSettings, pricePerBrilliant: Number(e.target.value)})}
+                  className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 pl-14 pr-6 font-black text-xl text-indigo-900 focus:bg-white focus:border-indigo-400 outline-none"
+                />
+              </div>
+            </div>
           </div>
           <p className="text-[10px] text-slate-400 font-bold italic ml-4 leading-normal">
-            * Məhsul qiyməti ən yaxın onluğa yuvarlaşdırılacaq (Məs: 408 &rarr; 410).
+            * Məhsul qiyməti daxil edilən parametrlərə görə avtomatik hesablanacaq və yuvarlaşdırılacaq.
           </p>
         </div>
       </div>

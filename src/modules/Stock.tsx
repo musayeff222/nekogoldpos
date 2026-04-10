@@ -259,15 +259,45 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
   const suppliers = Array.from(new Set(activeProducts.map(p => p.supplier).filter(Boolean)));
   const categories = settings.productGroups.map(g => g.name);
 
-  useEffect(() => {
-    if (newProduct.weight !== '' && !isNaN(Number(newProduct.weight))) {
-      const rawPrice = Number(newProduct.weight) * settings.pricePerGram;
-      const roundedPrice = Math.round(rawPrice / 10) * 10; 
-      setNewProduct(prev => ({ ...prev, price: roundedPrice }));
-    } else {
-      setNewProduct(prev => ({ ...prev, price: '' }));
+  const calculatePrice = (weight: number | '', carat: string, brilliant: string) => {
+    if (weight === '' || isNaN(Number(weight))) return '';
+    
+    let gramPrice = settings.pricePerGram;
+    if (carat === '750' || carat === '18') {
+      gramPrice = settings.pricePerGram750 || 650;
     }
-  }, [newProduct.weight, settings.pricePerGram]);
+    
+    let total = Number(weight) * gramPrice;
+    
+    // Parse brilliant carat if present
+    if (brilliant) {
+      const match = brilliant.match(/(\d+(\.\d+)?)/);
+      if (match) {
+        const ct = parseFloat(match[1]);
+        total += ct * (settings.pricePerBrilliant || 1000);
+      }
+    }
+    
+    return Math.round(total / 10) * 10;
+  };
+
+  useEffect(() => {
+    const calculated = calculatePrice(newProduct.weight as number | '', newProduct.carat, newProduct.brilliant);
+    setNewProduct(prev => ({ ...prev, price: calculated }));
+  }, [newProduct.weight, newProduct.carat, newProduct.brilliant, settings.pricePerGram, settings.pricePerGram750, settings.pricePerBrilliant]);
+
+  useEffect(() => {
+    if (Object.keys(editForm).length === 0 || !selectedProduct) return;
+    
+    const weight = editForm.weight !== undefined ? editForm.weight : (selectedProduct.weight as number | '');
+    const carat = editForm.carat !== undefined ? editForm.carat : selectedProduct.carat;
+    const brilliant = editForm.brilliant !== undefined ? editForm.brilliant : (selectedProduct.brilliant || '');
+    
+    const calculated = calculatePrice(weight, carat, brilliant);
+    if (calculated !== '') {
+      setEditForm(prev => ({ ...prev, price: calculated }));
+    }
+  }, [editForm.weight, editForm.carat, editForm.brilliant, settings.pricePerGram, settings.pricePerGram750, settings.pricePerBrilliant]);
 
   useEffect(() => {
     const code = newProduct.code.trim().toLowerCase();
