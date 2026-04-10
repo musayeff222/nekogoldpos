@@ -31,7 +31,6 @@ body {
 
 @media print {
   @page { 
-    size: 80mm auto; 
     margin: 0 !important; 
   }
   html, body { 
@@ -51,6 +50,7 @@ body {
     visibility: visible !important;
     opacity: 1 !important;
     color: #000000 !important;
+    display: block; /* Ensure visibility but allow absolute to override */
   }
 
   #receipt-print, #label-print {
@@ -58,13 +58,16 @@ body {
     background: white !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
-    width: 100% !important;
   }
+
+  #label-print * {
+    display: inline-block; /* Better for absolute positioning inside */
+  }
+
   #receipt-print {
     position: absolute !important;
     left: 0 !important;
     top: 0 !important;
-    display: block !important;
     width: 80mm !important;
     padding: 5mm 2mm !important;
     font-family: 'Courier New', Courier, monospace !important;
@@ -72,7 +75,9 @@ body {
     line-height: 1.2 !important;
   }
   #label-print {
-    display: block !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
     padding: 0 !important;
     margin: 0 !important;
     font-family: Arial, sans-serif !important;

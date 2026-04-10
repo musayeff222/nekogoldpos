@@ -1154,7 +1154,11 @@ const SettingsModule: React.FC<SettingsProps> = ({
       </button>
 
       {testProduct && createPortal(
-        <LabelPrint product={testProduct} settings={localSettings} />,
+        <div id="label-print">
+          <div className="label-page-break">
+            <LabelPrint product={testProduct} settings={localSettings} />
+          </div>
+        </div>,
         document.body
       )}
     </div>

@@ -387,7 +387,7 @@ const App: React.FC = () => {
     if (currentRemoteJob) {
       setTimeout(() => {
         window.print();
-      }, 500);
+      }, 1500);
     }
   }, [currentRemoteJob]);
 
