@@ -26,15 +26,37 @@ async function startServer() {
   const __dirname = path.dirname(__filename);
 
   // Ensure public_html and uploads directories exist
-  const publicHtmlDir = path.resolve(process.cwd(), 'public_html');
-  const uploadDir = path.resolve(process.cwd(), 'uploads');
+  // We check both current directory and parent directory to support various hosting setups (like Hostinger/cPanel)
+  let publicHtmlDir = path.resolve(process.cwd(), 'public_html');
+  let uploadDir = path.resolve(process.cwd(), 'uploads');
+
+  // Check if we are running inside a subfolder (like 'nodejs' or 'dist') and the target folders are in the parent
+  const checkPaths = [
+    { p: path.resolve(process.cwd(), '..', 'public_html'), u: path.resolve(process.cwd(), '..', 'uploads') },
+    { p: path.resolve(process.cwd(), '..', '..', 'public_html'), u: path.resolve(process.cwd(), '..', '..', 'uploads') }
+  ];
+
+  for (const paths of checkPaths) {
+    if (fs.existsSync(paths.p) || fs.existsSync(paths.u)) {
+      publicHtmlDir = paths.p;
+      uploadDir = paths.u;
+      break;
+    }
+  }
   
   if (!fs.existsSync(publicHtmlDir)) {
-    fs.mkdirSync(publicHtmlDir, { recursive: true });
+    try {
+      fs.mkdirSync(publicHtmlDir, { recursive: true });
+    } catch (e) {}
   }
   if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
+    try {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    } catch (e) {}
   }
+
+  console.log('Public HTML directory:', publicHtmlDir);
+  console.log('Uploads directory:', uploadDir);
 
   // Multer Configuration
   const storage = multer.diskStorage({
