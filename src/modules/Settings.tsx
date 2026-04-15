@@ -62,7 +62,8 @@ const SettingsModule: React.FC<SettingsProps> = ({
         if (active) setDbStatus({ status: 'error', database: 'disconnected', error: err.message });
       }
       if (active) {
-        timeoutId = setTimeout(checkHealth, 30000);
+        // Increase health check interval to 60 seconds to reduce server load
+        timeoutId = setTimeout(checkHealth, 60000);
       }
     };
     

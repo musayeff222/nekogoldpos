@@ -377,7 +377,8 @@ const App: React.FC = () => {
       }
 
       if (active) {
-        timeoutId = setTimeout(pollQueue, 5000);
+        // Increase polling interval to 30 seconds to reduce server load
+        timeoutId = setTimeout(pollQueue, 30000);
       }
     };
 

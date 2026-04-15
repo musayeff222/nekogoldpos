@@ -81,13 +81,26 @@ async function startServer() {
     origin: true,
     credentials: true
   }));
-  app.use(express.json({ limit: '500mb' }));
+  
+  // Security middleware to block common bot scans and reduce load
+  app.use((req, res, next) => {
+    const forbiddenPaths = [
+      '/wordpress', '/wp-admin', '/wp-login', '/xmlrpc.php', 
+      '/.env', '/config.php', '/setup-config.php', '/phpmyadmin'
+    ];
+    if (forbiddenPaths.some(path => req.path.toLowerCase().includes(path))) {
+      return res.status(403).end();
+    }
+    next();
+  });
+
+  app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '500mb', extended: true }));
   
   // Serve uploaded files statically
   app.use('/uploads', express.static(uploadDir));
 
-  // MySQL Connection Pool
+  // MySQL Connection Pool - Optimized for shared hosting (Hostinger)
   const pool = mysql.createPool({
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
@@ -95,8 +108,9 @@ async function startServer() {
     database: process.env.DB_NAME,
     port: parseInt(process.env.DB_PORT || '3306'),
     waitForConnections: true,
-    connectionLimit: 20, // Increased connection limit
+    connectionLimit: 10, // Reduced from 20 to be safer on shared hosting
     queueLimit: 0,
+    connectTimeout: 10000, // 10s timeout for initial connection
     enableKeepAlive: true,
     keepAliveInitialDelay: 10000
   });
@@ -191,7 +205,8 @@ async function startServer() {
               id INT AUTO_INCREMENT PRIMARY KEY,
               product_data LONGTEXT,
               status ENUM('pending', 'completed') DEFAULT 'pending',
-              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              INDEX (status, created_at)
             )`
           }
         ];
@@ -207,6 +222,13 @@ async function startServer() {
           const hashedPassword = await bcrypt.hash('123456', 10);
           await connection.execute('INSERT INTO users (username, password) VALUES (?, ?)', ['admin', hashedPassword]);
           console.log('Default admin user created');
+        }
+        
+        // Ensure index exists for print_queue
+        try {
+          await connection.execute('CREATE INDEX IF NOT EXISTS idx_status_created ON print_queue (status, created_at)');
+        } catch (e) {
+          // Ignore if index already exists or syntax not supported
         }
         
         console.log('All database tables initialized successfully');
