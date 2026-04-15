@@ -25,8 +25,13 @@ async function startServer() {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
 
-  // Ensure uploads directory exists - use absolute path from process.cwd() for consistency
+  // Ensure public_html and uploads directories exist
+  const publicHtmlDir = path.resolve(process.cwd(), 'public_html');
   const uploadDir = path.resolve(process.cwd(), 'uploads');
+  
+  if (!fs.existsSync(publicHtmlDir)) {
+    fs.mkdirSync(publicHtmlDir, { recursive: true });
+  }
   if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
   }
@@ -57,27 +62,6 @@ async function startServer() {
   app.use(express.json({ limit: '500mb' }));
   app.use(express.urlencoded({ limit: '500mb', extended: true }));
   
-  // Middleware to ensure files are restored from DB if missing on disk
-  app.use('/uploads/:filename', async (req, res, next) => {
-    const filename = req.params.filename;
-    const filePath = path.join(uploadDir, filename);
-    
-    if (!fs.existsSync(filePath)) {
-      try {
-        const [rows] = await pool.execute('SELECT data FROM uploaded_files WHERE filename = ?', [filename]);
-        const files = rows as any[];
-        if (files.length > 0) {
-          // Restore the file to disk
-          fs.writeFileSync(filePath, files[0].data);
-          console.log(`Restored file from DB: ${filename}`);
-        }
-      } catch (err) {
-        console.error(`Failed to restore file ${filename} from DB:`, err);
-      }
-    }
-    next();
-  });
-
   // Serve uploaded files statically
   app.use('/uploads', express.static(uploadDir));
 
@@ -180,16 +164,6 @@ async function startServer() {
             )`
           },
           {
-            name: 'uploaded_files',
-            sql: `CREATE TABLE IF NOT EXISTS uploaded_files (
-              id INT AUTO_INCREMENT PRIMARY KEY,
-              filename VARCHAR(255) UNIQUE NOT NULL,
-              mimetype VARCHAR(100),
-              data LONGBLOB NOT NULL,
-              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )`
-          },
-          {
             name: 'print_queue',
             sql: `CREATE TABLE IF NOT EXISTS print_queue (
               id INT AUTO_INCREMENT PRIMARY KEY,
@@ -231,27 +205,6 @@ async function startServer() {
   };
   await initDB();
   
-  // Restore all files from DB on startup to ensure they exist on the ephemeral disk
-  const restoreFiles = async () => {
-    try {
-      const [rows] = await pool.execute('SELECT filename, data FROM uploaded_files');
-      const files = rows as any[];
-      if (files.length > 0) {
-        console.log(`Restoring ${files.length} files from database...`);
-        for (const file of files) {
-          const filePath = path.join(uploadDir, file.filename);
-          if (!fs.existsSync(filePath)) {
-            fs.writeFileSync(filePath, file.data);
-          }
-        }
-        console.log('File restoration complete.');
-      }
-    } catch (err) {
-      console.error('Failed to restore files from DB on startup:', err);
-    }
-  };
-  await restoreFiles();
-
   // Initialize Gemini API
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
   const JWT_SECRET = process.env.JWT_SECRET || 'nekogold-secret-key-2024';
@@ -1008,38 +961,20 @@ async function startServer() {
 
   /**
    * @route POST /api/upload-image
-   * @desc Upload a single image using Multer and save to DB for persistence
+   * @desc Upload a single image using Multer
    */
-  app.post('/api/upload-image', upload.single('image'), async (req: Request, res: Response) => {
+  app.post('/api/upload-image', upload.single('image'), (req: Request, res: Response) => {
     if (!req.file) {
       return res.status(400).json({ error: 'Fayl yüklənmədi' });
     }
 
-    try {
-      // Save to database for persistence across restarts/redeployments
-      const fileContent = fs.readFileSync(req.file.path);
-      await pool.execute(
-        'INSERT INTO uploaded_files (filename, mimetype, data) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE data = ?, mimetype = ?',
-        [req.file.filename, req.file.mimetype, fileContent, fileContent, req.file.mimetype]
-      );
-
-      // Return the file path or URL
-      const fileUrl = `/uploads/${req.file.filename}`;
-      res.json({
-        message: 'Şəkil uğurla yükləndi',
-        imageUrl: fileUrl,
-        filename: req.file.filename
-      });
-    } catch (error) {
-      console.error('Upload to DB failed:', error);
-      // Even if DB save fails, we still have it on disk for the current session
-      const fileUrl = `/uploads/${req.file!.filename}`;
-      res.json({
-        message: 'Şəkil yükləndi (lakin verilənlər bazasına yazıla bilmədi)',
-        imageUrl: fileUrl,
-        filename: req.file!.filename
-      });
-    }
+    // Return the file path or URL
+    const fileUrl = `/uploads/${req.file.filename}`;
+    res.json({
+      message: 'Şəkil uğurla yükləndi',
+      imageUrl: fileUrl,
+      filename: req.file.filename
+    });
   });
 
   /**
