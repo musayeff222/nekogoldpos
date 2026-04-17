@@ -117,9 +117,9 @@ async function startServer() {
     database: process.env.DB_NAME,
     port: parseInt(process.env.DB_PORT || '3306'),
     waitForConnections: true,
-    connectionLimit: 10, // Reduced from 20 to be safer on shared hosting
+    connectionLimit: 15, // Slightly increased to handle more concurrent light requests
     queueLimit: 0,
-    connectTimeout: 10000, // 10s timeout for initial connection
+    connectTimeout: 20000, // 20s initial connection timeout
     enableKeepAlive: true,
     keepAliveInitialDelay: 10000
   });
@@ -528,14 +528,19 @@ async function startServer() {
       // Optimization: Stream the response directly from MySQL to avoid loading everything into memory
       connection = await pool.getConnection();
       
+      const getTimestampCol = (type: string) => (type === 'logs' || type === 'print_queue' || type === 'messages') ? 'created_at' : 'updated_at';
+      
       let query = `SELECT content FROM ${type}`;
-      if (type === 'logs' && limit) {
-        query += ` ORDER BY created_at DESC LIMIT ${limit}`;
+      if (limit) {
+        query = `SELECT content FROM ${type} ORDER BY ${getTimestampCol(type)} DESC LIMIT ${limit}`;
+      } else if (type === 'products') {
+        query = `SELECT content FROM products`;
       }
       
-      // Optimization: For light products, remove heavy fields at the SQL level if possible
+      // Optimization: For light products, keep the URL if it's a short path, but remove deep logs
       if (isLight && type === 'products') {
-        query = `SELECT JSON_REMOVE(content, '$.imageUrl', '$.logs') as content FROM products`;
+        // We still remove the heavy stuff to keep the response snappy
+        query = `SELECT JSON_REMOVE(content, '$.logs') as content FROM products`;
       }
       
       // Use the underlying connection for streaming (mysql2/promise doesn't support streaming directly)
@@ -829,24 +834,33 @@ async function startServer() {
   // Consolidated Init Data Endpoint to reduce network requests
   app.get('/api/init-data', async (req: Request, res: Response) => {
     try {
-      const types = ['products', 'sales', 'customers', 'scraps', 'settings', 'expenses', 'logs'];
       const results: any = {};
       
-      await Promise.all(types.map(async (type) => {
-        if (type === 'settings') {
-          const [rows] = await pool.query(`SELECT content FROM settings LIMIT 1`);
+      // Define queries for initial load (Minimal data for fast first paint)
+      const tasks = [
+        { key: 'settings', sql: `SELECT content FROM settings LIMIT 1` },
+        { key: 'logs', sql: `SELECT content FROM logs ORDER BY created_at DESC LIMIT 50` },
+        { key: 'products', sql: `SELECT JSON_REMOVE(content, '$.logs') as content FROM products` },
+        { key: 'sales', sql: `SELECT content FROM sales ORDER BY updated_at DESC LIMIT 100` },
+        { key: 'customers', sql: `SELECT content FROM customers LIMIT 500` },
+        { key: 'scraps', sql: `SELECT content FROM scraps ORDER BY updated_at DESC LIMIT 50` },
+        { key: 'expenses', sql: `SELECT content FROM expenses ORDER BY updated_at DESC LIMIT 50` }
+      ];
+
+      // Run queries in parallel for efficiency
+      await Promise.all(tasks.map(async (task) => {
+        try {
+          const [rows] = await pool.query(task.sql);
           const rowArray = rows as any[];
-          results[type] = rowArray.length > 0 ? JSON.parse(rowArray[0].content) : null;
-        } else if (type === 'logs') {
-          const [rows] = await pool.query(`SELECT content FROM logs ORDER BY created_at DESC LIMIT 100`);
-          results[type] = (rows as any[]).map(r => JSON.parse(r.content));
-        } else if (type === 'products') {
-          // Send light products initially
-          const [rows] = await pool.query(`SELECT JSON_REMOVE(content, '$.imageUrl', '$.logs') as content FROM products`);
-          results[type] = (rows as any[]).map(r => JSON.parse(r.content));
-        } else {
-          const [rows] = await pool.query(`SELECT content FROM ${type}`);
-          results[type] = (rows as any[]).map(r => JSON.parse(r.content));
+          
+          if (task.key === 'settings') {
+            results[task.key] = rowArray.length > 0 ? JSON.parse(rowArray[0].content) : null;
+          } else {
+            results[task.key] = rowArray.map(r => JSON.parse(r.content));
+          }
+        } catch (e) {
+          console.error(`Init query failed for ${task.key}:`, e);
+          results[task.key] = [];
         }
       }));
       
@@ -854,6 +868,49 @@ async function startServer() {
     } catch (error) {
       console.error('Failed to fetch init data:', error);
       res.status(500).json({ error: 'Failed to fetch initial data', details: String(error) });
+    }
+  });
+
+  // Pulse/Heartbeat endpoint for efficient synchronization
+  app.get('/api/pulse', async (req: Request, res: Response) => {
+    try {
+      const lastSync = req.query.lastSync as string || '0';
+      const isPrintStation = req.query.printStation === 'true';
+
+      const results: any = {
+        timestamp: new Date().toISOString(),
+        products: [],
+        sales: [],
+        printQueue: []
+      };
+
+      // 1. Get products updated since last sync (approximate using updated_at)
+      if (lastSync !== '0') {
+        const [pRows] = await pool.execute(
+          'SELECT JSON_REMOVE(content, "$.logs") as content FROM products WHERE updated_at > ?',
+          [new Date(lastSync).toISOString().slice(0, 19).replace('T', ' ')]
+        );
+        results.products = (pRows as any[]).map(r => JSON.parse(r.content));
+
+        const [sRows] = await pool.execute(
+          'SELECT content FROM sales WHERE updated_at > ?',
+          [new Date(lastSync).toISOString().slice(0, 19).replace('T', ' ')]
+        );
+        results.sales = (sRows as any[]).map(r => JSON.parse(r.content));
+      }
+
+      // 2. Get print queue if this is a station
+      if (isPrintStation) {
+        const [qRows] = await pool.execute(
+          'SELECT id, product_data FROM print_queue WHERE status = "pending" ORDER BY created_at ASC'
+        );
+        results.printQueue = qRows;
+      }
+
+      res.json(results);
+    } catch (error) {
+      console.error('Pulse failed:', error);
+      res.status(500).json({ error: 'Pulse failed' });
     }
   });
 

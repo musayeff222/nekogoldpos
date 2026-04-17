@@ -38,7 +38,7 @@ interface SoldProductsProps {
 }
 
 const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales, setSales, products, setProducts, addLog }) => {
-  const [viewMode, setViewMode] = useState<'history' | 'printList'>('history');
+  const [viewMode, setViewMode] = useState<'history' | 'printList' | 'dailyReport'>('history');
   const [searchTerm, setSearchTerm] = useState('');
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
@@ -71,9 +71,12 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales, setSales, prod
     setOrderList(prev => prev.filter(item => item.id !== id));
   };
 
-  const handlePrintOrder = () => {
+  const handlePrint = () => {
     window.print();
   };
+
+  const activeSales = (Array.isArray(sales) ? sales : []).filter(s => s.status === 'completed');
+  const dailySales = activeSales.filter(s => new Date(s.date).toDateString() === new Date().toDateString());
 
   const getFilteredSales = () => {
     let filtered = Array.isArray(sales) ? sales : [];
@@ -97,6 +100,10 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales, setSales, prod
     }
     return filtered;
   };
+
+  const dailyReportData = (Array.isArray(sales) ? sales : [])
+    .filter(s => s.status === 'completed' && new Date(s.date).toDateString() === new Date().toDateString())
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const filteredSales = getFilteredSales();
 
@@ -381,22 +388,78 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales, setSales, prod
           </footer>
       </div>
 
+      {/* GÜNLÜK SATIŞ HESABATI (Yalnız Çap üçün) */}
+      <div id="daily-report-print" className="hidden print:block bg-white text-black p-4">
+          <header className="text-center mb-8 border-b-2 border-black pb-4">
+              <h1 className="brand-font text-3xl font-black mb-1">NEKO GOLD</h1>
+              <h2 className="text-sm font-black tracking-[0.3em] uppercase">GÜNLÜK SATIŞ HESABATI</h2>
+              <p className="text-xs font-bold mt-2 uppercase tracking-widest">{formatDate(new Date().toISOString())}</p>
+          </header>
+
+          <table className="w-full text-[10px] border-collapse mb-8">
+              <thead>
+                  <tr className="border-b-2 border-black bg-stone-50">
+                      <th className="py-2 text-left uppercase">SAAT</th>
+                      <th className="py-2 text-left uppercase">KOD</th>
+                      <th className="py-2 text-left uppercase">MƏHSUL</th>
+                      <th className="py-2 text-left uppercase">MÜŞTƏRİ</th>
+                      <th className="py-2 text-left uppercase">SATICI</th>
+                      <th className="py-2 text-right uppercase">MƏBLƏĞ</th>
+                  </tr>
+              </thead>
+              <tbody className="divide-y border-black">
+                  {dailyReportData.map((s, idx) => (
+                      <tr key={idx} className="border-b border-stone-200">
+                          <td className="py-2 font-bold">{formatTime(s.date)}</td>
+                          <td className="py-2">{s.productCode}</td>
+                          <td className="py-2 font-black italic">{s.productName} ({s.weight}g)</td>
+                          <td className="py-2 uppercase">{s.customerName}</td>
+                          <td className="py-2 font-bold uppercase">{s.sellerName || 'SİSTEM'}</td>
+                          <td className="py-2 text-right font-black">{s.total.toLocaleString()} ₼</td>
+                      </tr>
+                  ))}
+                  <tr className="bg-stone-50 font-black">
+                      <td colSpan={5} className="py-4 text-right uppercase tracking-widest">CƏMİ SATIŞ:</td>
+                      <td className="py-4 text-right border-t-2 border-black underline decoration-double">{dailyReportData.reduce((acc, s) => acc + s.total, 0).toLocaleString()} ₼</td>
+                  </tr>
+              </tbody>
+          </table>
+
+          <div className="grid grid-cols-2 gap-8 text-[9px] uppercase font-bold mt-12 pt-8 border-t border-stone-100">
+              <div className="flex flex-col items-center">
+                  <div className="w-32 border-b border-black mb-1"></div>
+                  <span>ÜMUMİ SATIŞ SAYI: {dailyReportData.length} ƏDƏD</span>
+              </div>
+              <div className="flex flex-col items-center">
+                  <div className="w-32 border-b border-black mb-1"></div>
+                  <span>CƏMİ ÇƏKİ: {dailyReportData.reduce((acc, s) => acc + (s.weight || 0), 0).toFixed(2)} GR</span>
+              </div>
+          </div>
+      </div>
+
       {/* ÜST TABLAR (NO-PRINT) */}
       <div className="flex justify-center no-print">
         <div className="bg-white p-2 rounded-[2rem] shadow-xl border border-stone-200 flex space-x-2">
           <button 
             onClick={() => setViewMode('history')}
-            className={`px-8 md:px-12 py-3 md:py-4 rounded-[1.5rem] font-black text-xs md:text-sm uppercase tracking-widest transition-all flex items-center space-x-3 ${viewMode === 'history' ? 'bg-stone-900 text-amber-500 shadow-lg' : 'text-stone-500 hover:bg-stone-50'}`}
+            className={`px-6 md:px-12 py-3 md:py-4 rounded-[1.5rem] font-black text-xs md:text-sm uppercase tracking-widest transition-all flex items-center space-x-3 ${viewMode === 'history' ? 'bg-stone-900 text-amber-500 shadow-lg' : 'text-stone-500 hover:bg-stone-50'}`}
           >
             <History size={20} />
-            <span>SATIŞ TARİXÇƏSİ</span>
+            <span className="hidden md:inline">SATIŞ TARİXÇƏSİ</span>
+          </button>
+          <button 
+            onClick={() => setViewMode('dailyReport')}
+            className={`px-6 md:px-12 py-3 md:py-4 rounded-[1.5rem] font-black text-xs md:text-sm uppercase tracking-widest transition-all flex items-center space-x-3 ${viewMode === 'dailyReport' ? 'bg-stone-900 text-amber-500 shadow-lg' : 'text-stone-500 hover:bg-stone-50'}`}
+          >
+            <Calendar size={20} />
+            <span className="hidden md:inline">GÜNLÜK HESABAT</span>
           </button>
           <button 
             onClick={() => setViewMode('printList')}
-            className={`px-8 md:px-12 py-3 md:py-4 rounded-[1.5rem] font-black text-xs md:text-sm uppercase tracking-widest transition-all flex items-center space-x-3 ${viewMode === 'printList' ? 'bg-stone-900 text-amber-500 shadow-lg' : 'text-stone-500 hover:bg-stone-50'}`}
+            className={`px-6 md:px-12 py-3 md:py-4 rounded-[1.5rem] font-black text-xs md:text-sm uppercase tracking-widest transition-all flex items-center space-x-3 ${viewMode === 'printList' ? 'bg-stone-900 text-amber-500 shadow-lg' : 'text-stone-500 hover:bg-stone-50'}`}
           >
             <Printer size={20} />
-            <span>SİFARİŞ ÜÇÜN ÇAP</span>
+            <span className="hidden md:inline">SİFARİŞ ÇAPI</span>
           </button>
         </div>
       </div>
@@ -522,6 +585,64 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales, setSales, prod
             </div>
           </div>
         </>
+      ) : viewMode === 'dailyReport' ? (
+        /* GÜNLÜK HESABAT GÖRÜNÜŞÜ (NO-PRINT) */
+        <div className="max-w-6xl mx-auto w-full animate-in slide-in-from-bottom-8 duration-500 no-print space-y-8">
+            <div className="bg-white rounded-[2.5rem] border-2 border-stone-200 shadow-2xl p-6 md:p-10 space-y-8">
+                <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-stone-100 pb-8">
+                   <div className="flex items-center space-x-4">
+                      <div className="w-12 h-12 bg-stone-950 text-amber-500 rounded-2xl flex items-center justify-center shadow-lg"><TrendingUp size={28}/></div>
+                      <div>
+                        <h3 className="text-xl font-black text-stone-900 uppercase tracking-tighter">Bugünkü Satış Hesabatı</h3>
+                        <p className="text-[10px] font-bold text-stone-500 uppercase tracking-widest">{formatDate(new Date().toISOString())} tarixinə olan satışlar</p>
+                      </div>
+                   </div>
+                   <button onClick={handlePrint} className="bg-stone-900 text-amber-500 px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-black transition-all shadow-xl flex items-center justify-center border-b-4 border-stone-800">
+                      <Printer size={20} className="mr-3"/> HESABATI ÇAP ET
+                   </button>
+                </header>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="bg-stone-50 p-6 rounded-3xl border border-stone-100">
+                        <p className="text-[9px] font-black text-stone-400 uppercase tracking-widest mb-1">CƏMİ MƏBLƏĞ</p>
+                        <p className="text-3xl font-black text-stone-900">{dailyReportData.reduce((acc, s) => acc + s.total, 0).toLocaleString()} ₼</p>
+                    </div>
+                    <div className="bg-stone-50 p-6 rounded-3xl border border-stone-100">
+                        <p className="text-[9px] font-black text-stone-400 uppercase tracking-widest mb-1">SATIŞ SAYI</p>
+                        <p className="text-3xl font-black text-stone-900">{dailyReportData.length} ƏDƏD</p>
+                    </div>
+                    <div className="bg-stone-50 p-6 rounded-3xl border border-stone-100">
+                        <p className="text-[9px] font-black text-stone-400 uppercase tracking-widest mb-1">CƏMİ ÇƏKİ</p>
+                        <p className="text-3xl font-black text-stone-900">{dailyReportData.reduce((acc, s) => acc + (s.weight || 0), 0).toFixed(2)} gr</p>
+                    </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                        <thead>
+                            <tr className="bg-stone-50 border-b border-stone-100">
+                                <th className="px-6 py-4 text-[9px] font-black text-stone-500 uppercase tracking-widest">SAAT</th>
+                                <th className="px-6 py-4 text-[9px] font-black text-stone-500 uppercase tracking-widest">KOD</th>
+                                <th className="px-6 py-4 text-[9px] font-black text-stone-500 uppercase tracking-widest">MƏHSUL</th>
+                                <th className="px-6 py-4 text-[9px] font-black text-stone-500 uppercase tracking-widest">SATICI</th>
+                                <th className="px-6 py-4 text-[9px] font-black text-stone-500 uppercase tracking-widest text-right">MƏBLƏĞ</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-stone-50">
+                            {dailyReportData.map((s) => (
+                                <tr key={s.id} className="hover:bg-amber-50/20 transition-all">
+                                    <td className="px-6 py-4 text-xs font-bold text-stone-400">{formatTime(s.date)}</td>
+                                    <td className="px-6 py-4 text-xs font-black text-stone-600 uppercase">{s.productCode}</td>
+                                    <td className="px-6 py-4 font-black text-stone-900 uppercase text-xs">{s.productName} ({s.weight}g)</td>
+                                    <td className="px-6 py-4 text-[10px] font-black text-stone-500 uppercase">{s.sellerName || 'SİSTEM'}</td>
+                                    <td className="px-6 py-4 text-right font-black text-stone-900">{s.total.toLocaleString()} ₼</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
       ) : (
         /* SİFARİŞ ÜÇÜN ÇAP BÖLMƏSİ (NO-PRINT) */
         <div className="max-w-6xl mx-auto w-full animate-in slide-in-from-bottom-8 duration-500 no-print space-y-8">
@@ -534,7 +655,7 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales, setSales, prod
                         <p className="text-[10px] font-bold text-stone-500 uppercase tracking-widest">Tədarükçü və tarixə görə malları seçin</p>
                       </div>
                    </div>
-                   <button onClick={handlePrintOrder} className="bg-stone-900 text-amber-500 px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-black transition-all shadow-xl flex items-center justify-center border-b-4 border-stone-800">
+                   <button onClick={handlePrint} className="bg-stone-900 text-amber-500 px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-black transition-all shadow-xl flex items-center justify-center border-b-4 border-stone-800">
                       <Printer size={20} className="mr-3"/> SİYAHINI ÇAP ET
                    </button>
                 </header>

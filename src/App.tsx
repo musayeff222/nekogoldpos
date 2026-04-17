@@ -52,6 +52,7 @@ const App: React.FC = () => {
   const [cart, setCart] = useState<Product[]>([]);
   const [remotePrintQueue, setRemotePrintQueue] = useState<any[]>([]);
   const [currentRemoteJob, setCurrentRemoteJob] = useState<any | null>(null);
+  const lastSyncTimeRef = React.useRef<string>(new Date().toISOString());
 
   // Refs to track last synced data to avoid redundant syncs
   const lastSyncedProducts = React.useRef<string>('');
@@ -108,42 +109,103 @@ const App: React.FC = () => {
     remotePrintEnabled: false
   });
 
-  // Periodic polling for real-time updates (Products & Sales)
+  // Central Heartbeat / Pulse for real-time updates
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || !isLoaded) return;
 
-    const pollInterval = setInterval(async () => {
+    let active = true;
+    let timeoutId: NodeJS.Timeout;
+
+    const pulse = async () => {
+      if (!active) return;
+
       try {
-        const res = await fetch('/api/data/products?light=true');
-        if (!res.ok) throw new Error('Failed to poll products');
-        const p = await res.json();
+        const query = new URLSearchParams({
+          lastSync: lastSyncTimeRef.current,
+          printStation: settings.isPrintStation ? 'true' : 'false'
+        }).toString();
 
-        if (Array.isArray(p)) {
-          const pStr = JSON.stringify(p);
-          if (pStr !== lastSyncedProducts.current) {
-            setProducts(p);
-            lastSyncedProducts.current = pStr;
+        const res = await fetch(`/api/pulse?${query}`);
+        if (res.ok) {
+          const data = await res.json();
+          
+          // Update last sync time immediately to avoid overlaps
+          lastSyncTimeRef.current = data.timestamp;
+
+          // 1. Update Products
+          if (Array.isArray(data.products) && data.products.length > 0) {
+            setProducts(prev => {
+              const updatedNext = [...prev];
+              data.products.forEach((updatedItem: Product) => {
+                const index = updatedNext.findIndex(p => p.id === updatedItem.id);
+                if (index !== -1) {
+                  // Merge carefully - keep images if they aren't in the pulse (which removed logs)
+                  updatedNext[index] = { ...updatedNext[index], ...updatedItem };
+                } else {
+                  updatedNext.push(updatedItem);
+                }
+              });
+              lastSyncedProducts.current = JSON.stringify(updatedNext);
+              return updatedNext;
+            });
           }
-        }
 
-        const sRes = await fetch('/api/data/sales');
-        if (!sRes.ok) throw new Error('Failed to poll sales');
-        const s = await sRes.json();
+          // 2. Update Sales
+          if (Array.isArray(data.sales) && data.sales.length > 0) {
+            setSales(prev => {
+              const updatedNext = [...prev];
+              data.sales.forEach((updatedItem: Sale) => {
+                const index = updatedNext.findIndex(s => s.id === updatedItem.id);
+                if (index !== -1) {
+                  updatedNext[index] = updatedItem;
+                } else {
+                  updatedNext.push(updatedItem);
+                }
+              });
+              lastSyncedSales.current = JSON.stringify(updatedNext);
+              return updatedNext;
+            });
+          }
 
-        if (Array.isArray(s)) {
-          const sStr = JSON.stringify(s);
-          if (sStr !== lastSyncedSales.current) {
-            setSales(s);
-            lastSyncedSales.current = sStr;
+          // 3. Handle Print Queue
+          if (settings.isPrintStation && Array.isArray(data.printQueue) && data.printQueue.length > 0) {
+            for (const job of data.printQueue) {
+              if (!active) break;
+              try {
+                const productData = JSON.parse(job.product_data);
+                setCurrentRemoteJob({ ...job, product: productData });
+                
+                // Wait for print interaction
+                await new Promise(resolve => setTimeout(resolve, 8000));
+                
+                await fetch(`/api/print-queue/complete/${encodeURIComponent(job.id)}`, { method: 'POST' });
+                setCurrentRemoteJob(null);
+              } catch (e) {
+                console.error('Job processing failed:', e);
+              }
+            }
           }
         }
       } catch (err) {
-        console.error('Polling error:', err);
+        console.error('Heartbeat pulse failed:', err);
       }
-    }, 30000); // Poll every 30 seconds to reduce load
 
-    return () => clearInterval(pollInterval);
-  }, [isAuthenticated]);
+      if (active) {
+        // Add jitter (25-35s) to avoid server thundering herd
+        const jitter = Math.floor(Math.random() * 10000);
+        timeoutId = setTimeout(pulse, 25000 + jitter);
+      }
+    };
+
+    // Initial pulse delay to let background loading finish
+    timeoutId = setTimeout(pulse, 15000);
+
+    return () => {
+      active = false;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [isAuthenticated, isLoaded, settings.isPrintStation]);
+
   // Session check
   useEffect(() => {
     const token = localStorage.getItem('nekogold_token');
@@ -158,7 +220,7 @@ const App: React.FC = () => {
   useEffect(() => {
     const fetchData = async (retries = 3) => {
       try {
-        const fetchWithType = async (type: string, params: Record<string, string> = {}, timeout = 30000) => {
+        const fetchWithType = async (type: string, params: Record<string, string> = {}, timeout = 60000) => {
           const controller = new AbortController();
           const id = setTimeout(() => controller.abort(), timeout);
           
@@ -196,8 +258,20 @@ const App: React.FC = () => {
         };
 
         // Use the new consolidated endpoint to reduce requests
-        const res = await fetch('/api/init-data');
-        if (!res.ok) throw new Error('Initial sync failed');
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout for initial load
+
+        let res;
+        try {
+          res = await fetch('/api/init-data', { signal: controller.signal });
+        } catch (err: any) {
+          if (err.name === 'AbortError') throw new Error('Initial data load timed out');
+          throw err;
+        } finally {
+          clearTimeout(timeoutId);
+        }
+
+        if (!res.ok) throw new Error(`Initial sync failed (Status: ${res.status})`);
         const data = await res.json();
         
         const { products: p, sales: s, customers: c, scraps: sc, settings: st, expenses: ex, logs: l } = data;
@@ -324,7 +398,8 @@ const App: React.FC = () => {
         const fetchExtendedLogs = async (attempt = 1) => {
           try {
             console.log(`Starting background fetch for more logs (Attempt ${attempt})...`);
-            const fullLogs = await fetchWithType('logs', { limit: '1000' }, 30000);
+            // Reduced from 1000 to 300 for stability on shared hosting
+            const fullLogs = await fetchWithType('logs', { limit: '300' }, 45000);
             if (Array.isArray(fullLogs)) {
               setLogs(fullLogs);
               lastSyncedLogs.current = JSON.stringify(fullLogs);
@@ -340,12 +415,90 @@ const App: React.FC = () => {
           }
         };
         setTimeout(fetchExtendedLogs, 10000);
+
+        // Background fetch for more sales
+        const fetchExtendedSales = async (attempt = 1) => {
+          try {
+            console.log(`Starting background fetch for full sales (Attempt ${attempt})...`);
+            const fullSales = await fetchWithType('sales', {}, 60000);
+            if (Array.isArray(fullSales)) {
+              setSales(fullSales);
+              lastSyncedSales.current = JSON.stringify(fullSales);
+              console.log('Full sales loaded in background');
+            }
+          } catch (err) {
+            console.error(`Background sales fetch failed (Attempt ${attempt}):`, err);
+            if (attempt < 3) {
+              const delay = attempt * 5000;
+              setTimeout(() => fetchExtendedSales(attempt + 1), delay);
+            }
+          }
+        };
+        setTimeout(fetchExtendedSales, 15000);
+
+        // Background fetch for more customers
+        const fetchExtendedCustomers = async (attempt = 1) => {
+          try {
+            console.log(`Starting background fetch for full customers (Attempt ${attempt})...`);
+            const fullCustomers = await fetchWithType('customers', {}, 60000);
+            if (Array.isArray(fullCustomers)) {
+              setCustomers(fullCustomers);
+              lastSyncedCustomers.current = JSON.stringify(fullCustomers);
+              console.log('Full customers loaded in background');
+            }
+          } catch (err) {
+            console.error(`Background customers fetch failed (Attempt ${attempt}):`, err);
+            if (attempt < 3) {
+              setTimeout(() => fetchExtendedCustomers(attempt + 1), 10000);
+            }
+          }
+        };
+        setTimeout(fetchExtendedCustomers, 20000);
+
+        // Background fetch for more scraps
+        const fetchExtendedScraps = async (attempt = 1) => {
+          try {
+            console.log(`Starting background fetch for full scraps (Attempt ${attempt})...`);
+            const fullScraps = await fetchWithType('scraps', {}, 60000);
+            if (Array.isArray(fullScraps)) {
+              setScraps(fullScraps);
+              lastSyncedScraps.current = JSON.stringify(fullScraps);
+              console.log('Full scraps loaded in background');
+            }
+          } catch (err) {
+            console.error(`Background scraps fetch failed (Attempt ${attempt}):`, err);
+            if (attempt < 3) setTimeout(() => fetchExtendedScraps(attempt + 1), 10000);
+          }
+        };
+        setTimeout(fetchExtendedScraps, 25000);
+
+        // Background fetch for more expenses
+        const fetchExtendedExpenses = async (attempt = 1) => {
+          try {
+            console.log(`Starting background fetch for full expenses (Attempt ${attempt})...`);
+            const fullExpenses = await fetchWithType('expenses', {}, 60000);
+            if (Array.isArray(fullExpenses)) {
+              setExpenses(fullExpenses);
+              lastSyncedExpenses.current = JSON.stringify(fullExpenses);
+              console.log('Full expenses loaded in background');
+            }
+          } catch (err) {
+            console.error(`Background expenses fetch failed (Attempt ${attempt}):`, err);
+            if (attempt < 3) setTimeout(() => fetchExtendedExpenses(attempt + 1), 10000);
+          }
+        };
+        setTimeout(fetchExtendedExpenses, 30000);
+
       } catch (error: any) {
-        console.error(`Failed to fetch data (retries left: ${retries}):`, error);
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.error(`Failed to fetch data (retries left: ${retries}). Error: ${errorMsg}`);
+        
         if (retries > 0) {
-          setTimeout(() => fetchData(retries - 1), 2000);
+          const backoff = (4 - retries) * 3000;
+          console.log(`Retrying initial fetch in ${backoff/1000}s...`);
+          setTimeout(() => fetchData(retries - 1), backoff);
         } else {
-          setError(error.message || 'Məlumatları yükləmək mümkün olmadı. İnternet bağlantısını və ya server statusunu yoxlayın.');
+          setError(errorMsg || 'Məlumatları yükləmək mümkün olmadı. İnternet bağlantısını və ya server statusunu yoxlayın.');
         }
       }
     };
@@ -367,59 +520,7 @@ const App: React.FC = () => {
     setUser(null);
   };
 
-  // Remote Print Queue Polling
-  useEffect(() => {
-    if (!settings.isPrintStation || !isAuthenticated) return;
-
-    let active = true;
-    let timeoutId: NodeJS.Timeout;
-
-    const pollQueue = async () => {
-      if (!active) return;
-
-      try {
-        const res = await fetch('/api/print-queue/pending');
-        if (res.ok) {
-          const text = await res.text();
-          try {
-            const jobs = JSON.parse(text);
-            if (jobs.length > 0 && active) {
-              // Process jobs one by one
-              for (const job of jobs) {
-                if (!active) break;
-                const productData = JSON.parse(job.product_data);
-                setCurrentRemoteJob({ ...job, product: productData });
-                
-                // Wait for print to trigger and user to interact
-                await new Promise(resolve => setTimeout(resolve, 10000));
-                
-                // Mark as complete
-                await fetch(`/api/print-queue/complete/${encodeURIComponent(job.id)}`, { method: 'POST' });
-                setCurrentRemoteJob(null);
-              }
-            }
-          } catch (parseErr) {
-            console.error('Failed to parse print queue JSON. Response text:', text.substring(0, 200));
-          }
-        } else {
-          console.error('Print queue fetch failed with status:', res.status);
-        }
-      } catch (err) {
-        console.error('Failed to poll print queue:', err);
-      }
-
-      if (active) {
-        // Increase polling interval to 30 seconds to reduce server load
-        timeoutId = setTimeout(pollQueue, 30000);
-      }
-    };
-
-    pollQueue();
-    return () => {
-      active = false;
-      if (timeoutId) clearTimeout(timeoutId);
-    };
-  }, [settings.isPrintStation, isAuthenticated]);
+  // Remote Print Queue Polling (REMOVED - Consolidated into Pulse)
 
   // Trigger print when currentRemoteJob is set
   useEffect(() => {

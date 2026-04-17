@@ -1705,7 +1705,15 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                  </div>
                  
                  <div className="flex-1 space-y-4 overflow-y-auto max-h-[600px] pr-2 scrollbar-hide">
-                    {[...products].sort((a, b) => new Date(b.purchaseDate || 0).getTime() - new Date(a.purchaseDate || 0).getTime()).slice(0, 15).map(p => (
+                    {[...products]
+                      .sort((a, b) => {
+                        // Priority: ID timestamp extraction or string comparison for stability
+                        // Since id starts with Date.now().toString(36), string comparison is mostly chronological for recent items
+                        if (b.id.length !== a.id.length) return b.id.length - a.id.length;
+                        return b.id.localeCompare(a.id);
+                      })
+                      .slice(0, 15)
+                      .map(p => (
                        <div key={p.id} className="bg-stone-50 p-4 rounded-2xl flex items-center justify-between border border-stone-100 group hover:border-amber-300 transition-all">
                           <div className="flex items-center space-x-4 min-w-0 flex-1">
                              <div className="w-16 h-16 rounded-xl bg-white border border-stone-200 flex items-center justify-center overflow-hidden flex-shrink-0">
