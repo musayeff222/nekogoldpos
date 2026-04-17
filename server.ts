@@ -18,6 +18,15 @@ import AdmZip from 'adm-zip';
 // Load environment variables
 dotenv.config({ override: true });
 
+// Global Error Handlers
+process.on('uncaughtException', (err) => {
+  console.error('Critical Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
 async function startServer() {
   const app = express();
   const PORT: number = Number(process.env.PORT) || 3000;
@@ -782,7 +791,7 @@ async function startServer() {
           
           if (data.length > 0) {
             // Prepare bulk insert in chunks to avoid max_allowed_packet issues
-            const chunkSize = 1; // Set to 1 for maximum safety with large base64 images
+            const chunkSize = 50; // Increased chunk size for better performance
             for (let i = 0; i < data.length; i += chunkSize) {
               const chunk = data.slice(i, i + chunkSize);
               const values = chunk.map(item => {
@@ -814,6 +823,37 @@ async function startServer() {
         error: 'Failed to save data', 
         details: error instanceof Error ? error.message : String(error) 
       });
+    }
+  });
+
+  // Consolidated Init Data Endpoint to reduce network requests
+  app.get('/api/init-data', async (req: Request, res: Response) => {
+    try {
+      const types = ['products', 'sales', 'customers', 'scraps', 'settings', 'expenses', 'logs'];
+      const results: any = {};
+      
+      await Promise.all(types.map(async (type) => {
+        if (type === 'settings') {
+          const [rows] = await pool.query(`SELECT content FROM settings LIMIT 1`);
+          const rowArray = rows as any[];
+          results[type] = rowArray.length > 0 ? JSON.parse(rowArray[0].content) : null;
+        } else if (type === 'logs') {
+          const [rows] = await pool.query(`SELECT content FROM logs ORDER BY created_at DESC LIMIT 100`);
+          results[type] = (rows as any[]).map(r => JSON.parse(r.content));
+        } else if (type === 'products') {
+          // Send light products initially
+          const [rows] = await pool.query(`SELECT JSON_REMOVE(content, '$.imageUrl', '$.logs') as content FROM products`);
+          results[type] = (rows as any[]).map(r => JSON.parse(r.content));
+        } else {
+          const [rows] = await pool.query(`SELECT content FROM ${type}`);
+          results[type] = (rows as any[]).map(r => JSON.parse(r.content));
+        }
+      }));
+      
+      res.json(results);
+    } catch (error) {
+      console.error('Failed to fetch init data:', error);
+      res.status(500).json({ error: 'Failed to fetch initial data', details: String(error) });
     }
   });
 

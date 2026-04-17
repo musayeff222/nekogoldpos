@@ -28,9 +28,12 @@ interface ReturnsProps {
 }
 
 const ReturnsModule: React.FC<ReturnsProps> = ({ sales, setSales, products, setProducts, addLog }) => {
-  const [activeTab, setActiveTab] = useState<'process' | 'list'>('process');
+  const [activeTab, setActiveTab] = useState<'customer' | 'warehouse' | 'list'>('customer');
   const [searchTerm, setSearchTerm] = useState('');
+  const [warehouseSearchTerm, setWarehouseSearchTerm] = useState('');
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [vazvratReason, setVazvratReason] = useState('');
   
   // Refund Option States
   const [showRefundOptions, setShowRefundOptions] = useState(false);
@@ -117,6 +120,7 @@ const ReturnsModule: React.FC<ReturnsProps> = ({ sales, setSales, products, setP
       ...product,
       isReturned: false,
       stockCount: 1,
+      returnReason: '',
       logs: [{ date: new Date().toISOString(), action: "İadələr siyahısından əsas stoka qaytarıldı." }, ...(product.logs || [])]
     };
 
@@ -131,18 +135,62 @@ const ReturnsModule: React.FC<ReturnsProps> = ({ sales, setSales, products, setP
     alert("Məhsul əsas stoka qaytarıldı.");
   };
 
-  const returnedProducts = products.filter(p => p.isReturned);
+  const handleWarehouseVazvrat = () => {
+    if (!selectedProduct) return;
+    if (!vazvratReason.trim()) {
+      alert("Zəhmət olmasa vazvrat səbəbini daxil edin.");
+      return;
+    }
+
+    const updatedProduct = {
+      ...selectedProduct,
+      isReturned: true,
+      stockCount: 0,
+      returnReason: vazvratReason,
+      logs: [{ date: new Date().toISOString(), action: `Stokdan vazvrat edildi. Səbəb: ${vazvratReason}` }, ...(selectedProduct.logs || [])]
+    };
+
+    setProducts(prev => prev.map(p => p.id === selectedProduct.id ? updatedProduct : p));
+
+    fetch(`/api/products/${updatedProduct.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product: updatedProduct })
+    }).catch(err => console.error('Failed to vazvrat product:', err));
+
+    addLog(`STOKDAN VAZVRAT: ${selectedProduct.code}`, 'PRODUCT', `Səbəb: ${vazvratReason}`);
+    alert("Məhsul stokdan çıxarıldı və Vazvrat siyahısına əlavə edildi.");
+    setSelectedProduct(null);
+    setVazvratReason('');
+    setWarehouseSearchTerm('');
+  };
+
+  const supplierReturns = products.filter(p => p.isReturned && (Number(p.stockCount) || 0) === 0);
+  const customerReturns = products.filter(p => p.isReturned && (Number(p.stockCount) || 0) > 0);
   const returnedSales = sales.filter(s => s.status === 'returned');
+
+  const warehouseFilteredProducts = products.filter(p => 
+    !p.isReturned && 
+    (Number(p.stockCount) || 0) > 0 &&
+    (p.code.toLowerCase().includes(warehouseSearchTerm.toLowerCase()) || 
+     p.name.toLowerCase().includes(warehouseSearchTerm.toLowerCase()))
+  );
 
   return (
     <div className="flex flex-col space-y-6 pb-24 md:pb-10 animate-in fade-in duration-500">
       {/* TABS */}
       <div className="flex space-x-2 bg-white p-2 rounded-2xl border border-slate-100 shadow-sm self-start">
         <button 
-          onClick={() => setActiveTab('process')}
-          className={`px-6 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${activeTab === 'process' ? 'bg-slate-900 text-indigo-500 shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
+          onClick={() => setActiveTab('customer')}
+          className={`px-6 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${activeTab === 'customer' ? 'bg-slate-900 text-indigo-500 shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
         >
-          İadə Et
+          Müştəri İadəsi
+        </button>
+        <button 
+          onClick={() => setActiveTab('warehouse')}
+          className={`px-6 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${activeTab === 'warehouse' ? 'bg-slate-900 text-indigo-500 shadow-lg' : 'text-slate-400 hover:bg-slate-50'}`}
+        >
+          Stokdan Vazvrat
         </button>
         <button 
           onClick={() => setActiveTab('list')}
@@ -152,7 +200,7 @@ const ReturnsModule: React.FC<ReturnsProps> = ({ sales, setSales, products, setP
         </button>
       </div>
 
-      {activeTab === 'process' ? (
+      {activeTab === 'customer' ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-10 relative">
           {/* SOL TƏRƏF: KODLA AXTARIŞ VƏ SİYAHI */}
           <div className="space-y-4 md:space-y-6 flex flex-col h-full">
@@ -303,6 +351,121 @@ const ReturnsModule: React.FC<ReturnsProps> = ({ sales, setSales, products, setP
             )}
           </div>
         </div>
+      ) : activeTab === 'warehouse' ? (
+        /* STOKDAN VAZVRAT TABI */
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-10 relative">
+          {/* SOL TƏRƏF: STOKDAKI MALLARIN AXTARIŞI */}
+          <div className="space-y-4 md:space-y-6 flex flex-col h-full">
+            <div className="flex items-center justify-between px-2">
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Stokda olan malı axtar</h3>
+                <span className="text-[9px] font-bold text-slate-300 uppercase">{warehouseFilteredProducts.length} Məhsul Tapıldı</span>
+            </div>
+            
+            <div className="relative group">
+              <Barcode className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 w-6 h-6 group-focus-within:text-red-500 transition-colors" />
+              <input 
+                type="text" 
+                placeholder="Malın kodunu və ya adını daxil edin..." 
+                value={warehouseSearchTerm}
+                onChange={(e) => setWarehouseSearchTerm(e.target.value)}
+                className="w-full bg-white border-2 border-slate-100 rounded-2xl md:rounded-[2rem] py-5 md:py-6 pl-16 pr-6 focus:ring-8 focus:ring-red-50 outline-none shadow-xl text-base font-black tracking-tight placeholder:text-slate-300 placeholder:font-medium"
+              />
+              {warehouseSearchTerm && (
+                <button onClick={() => setWarehouseSearchTerm('')} className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition-colors">
+                    <X size={24}/>
+                </button>
+              )}
+            </div>
+
+            <div className="bg-white rounded-3xl md:rounded-[3rem] border border-slate-100 shadow-2xl flex-1 overflow-hidden flex flex-col min-h-[500px]">
+              <div className="divide-y divide-slate-50 overflow-y-auto scrollbar-hide">
+                {warehouseFilteredProducts.map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => setSelectedProduct(p)}
+                    className={`w-full flex items-center justify-between p-6 md:p-8 hover:bg-red-50/50 transition-all text-left border-l-[8px] ${selectedProduct?.id === p.id ? 'bg-red-50 border-red-500' : 'border-transparent'}`}
+                  >
+                    <div className="flex items-center space-x-5">
+                      <div className="w-14 h-14 rounded-2xl flex items-center justify-center border-2 bg-slate-50 border-slate-100 text-slate-300 group-hover:text-red-500 overflow-hidden">
+                        {p.imageUrl ? (
+                          <img src={p.imageUrl} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                        ) : (
+                          <Package size={24} />
+                        )}
+                      </div>
+                      <div>
+                        <div className="flex items-center space-x-2 mb-1.5">
+                          <span className="text-[10px] font-black text-red-600 bg-red-50 px-2 py-0.5 rounded uppercase tracking-widest">{p.code}</span>
+                        </div>
+                        <p className="font-black text-slate-800 uppercase text-sm md:text-lg leading-none">{p.name}</p>
+                        <p className="text-[10px] text-slate-400 font-bold mt-2 uppercase tracking-widest">
+                            {p.weight} gr • {p.carat} əyar
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-black text-slate-900 tracking-tighter text-lg md:text-2xl">{p.price.toLocaleString()} ₼</p>
+                      <p className="text-[10px] text-slate-300 font-bold uppercase mt-1">Stok: {p.stockCount} ədəd</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* SAĞ TƏRƏF: VAZVRAT PANELİ */}
+          <div className="space-y-4 md:space-y-6">
+            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Vazvrat Əməliyyatı</h3>
+            
+            {selectedProduct ? (
+              <div className="bg-white rounded-[2.5rem] md:rounded-[3rem] border border-slate-100 shadow-2xl p-8 md:p-12 space-y-8 animate-in slide-in-from-right duration-300">
+                <div className="bg-red-50 border-2 border-dashed border-red-200 p-8 rounded-[2rem] relative">
+                  <button onClick={() => setSelectedProduct(null)} className="absolute top-6 right-6 p-3 bg-white text-slate-300 hover:text-red-500 rounded-xl shadow-sm transition-all">
+                    <X size={20}/>
+                  </button>
+                  <div className="flex items-center space-x-6">
+                    <div className="w-20 h-20 bg-white rounded-3xl shadow-xl flex items-center justify-center text-red-500 border border-slate-100 overflow-hidden p-2">
+                      {selectedProduct.imageUrl ? (
+                        <img src={selectedProduct.imageUrl} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                      ) : (
+                        <Package size={40} />
+                      )}
+                    </div>
+                    <div>
+                      <h4 className="text-2xl font-black text-slate-900 uppercase tracking-tighter">{selectedProduct.name}</h4>
+                      <p className="text-[11px] font-black text-red-600 uppercase tracking-widest mt-1">{selectedProduct.code}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">VAZVRAT SƏBƏBİ</label>
+                  <textarea 
+                    value={vazvratReason}
+                    onChange={(e) => setVazvratReason(e.target.value)}
+                    placeholder="Niyə vazvrat edilir? (məs: Defektli, Tədarükçüyə geri qaytarma...)"
+                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-3xl p-6 font-bold text-slate-800 outline-none focus:border-red-500 transition-all h-32 resize-none"
+                  />
+                </div>
+
+                <button 
+                  onClick={handleWarehouseVazvrat}
+                  className="w-full py-6 bg-red-500 text-white font-black text-sm uppercase tracking-[0.2em] rounded-[2rem] shadow-2xl shadow-red-200 hover:bg-red-600 active:scale-95 transition-all flex items-center justify-center space-x-3"
+                >
+                  <RotateCcw size={20} />
+                  <span>STOKDAN ÇIXAR (VAZVRAT ET)</span>
+                </button>
+              </div>
+            ) : (
+              <div className="bg-slate-100/30 rounded-[3rem] border-4 border-dashed border-slate-100 h-full min-h-[400px] flex flex-col items-center justify-center text-slate-300 p-12 text-center shadow-inner">
+                <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center mb-8 shadow-xl border border-slate-50">
+                    <Package size={48} className="text-slate-200" />
+                </div>
+                <p className="text-sm font-black uppercase tracking-[0.4em] text-slate-400">Məhsul Seçilməyib</p>
+              </div>
+            )}
+          </div>
+        </div>
       ) : (
         /* İADƏLƏR SİYAHISI TABI */
         <div className="space-y-8">
@@ -314,7 +477,7 @@ const ReturnsModule: React.FC<ReturnsProps> = ({ sales, setSales, products, setP
                 <p className="text-xs text-slate-400 font-bold mt-1 uppercase tracking-widest">Stokdan çıxarılmış və topdançıya geri qaytarılan məhsullar</p>
               </div>
               <div className="bg-red-500 text-white px-6 py-3 rounded-2xl font-black text-lg shadow-lg">
-                {returnedProducts.length} <span className="text-[10px] uppercase tracking-widest ml-1">Məhsul</span>
+                {supplierReturns.length} <span className="text-[10px] uppercase tracking-widest ml-1">Məhsul</span>
               </div>
             </div>
 
@@ -330,7 +493,7 @@ const ReturnsModule: React.FC<ReturnsProps> = ({ sales, setSales, products, setP
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {returnedProducts.length > 0 ? returnedProducts.map(p => (
+                  {supplierReturns.length > 0 ? supplierReturns.map(p => (
                     <tr key={p.id} className="hover:bg-indigo-50/30 transition-colors group">
                       <td className="px-8 py-6">
                         <div className="flex items-center space-x-4">
@@ -376,7 +539,77 @@ const ReturnsModule: React.FC<ReturnsProps> = ({ sales, setSales, products, setP
             </div>
           </div>
 
-          {/* MÜŞTƏRİ İADƏLƏRİ */}
+          {/* MÜŞTƏRİDƏN QAYTARILAN MƏHSULLAR */}
+          <div className="bg-white rounded-[2.5rem] md:rounded-[3rem] border border-slate-100 shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
+            <div className="p-8 md:p-12 border-b border-slate-50 bg-slate-50/30 flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter">Müştəridən Qaytarılan Məhsullar (Geri Qaytarılma)</h3>
+                <p className="text-xs text-slate-400 font-bold mt-1 uppercase tracking-widest">Müştəri tərəfindən qaytarılmış və hələ stoka daxil edilməmiş məhsullar</p>
+              </div>
+              <div className="bg-amber-500 text-white px-6 py-3 rounded-2xl font-black text-lg shadow-lg">
+                {customerReturns.length} <span className="text-[10px] uppercase tracking-widest ml-1">Məhsul</span>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/50">
+                    <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Məhsul</th>
+                    <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Kod</th>
+                    <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Çəki</th>
+                    <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Qeyd</th>
+                    <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Əməliyyat</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {customerReturns.length > 0 ? customerReturns.map(p => (
+                    <tr key={p.id} className="hover:bg-amber-50/30 transition-colors group">
+                      <td className="px-8 py-6">
+                        <div className="flex items-center space-x-4">
+                          <div className="w-12 h-12 bg-slate-50 rounded-xl flex items-center justify-center text-amber-500 border border-slate-100 overflow-hidden">
+                            {p.imageUrl ? (
+                              <img src={p.imageUrl} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                            ) : (
+                              <Gem size={20} />
+                            )}
+                          </div>
+                          <span className="font-black text-slate-800 uppercase text-sm">{p.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-8 py-6">
+                        <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-1 rounded uppercase tracking-widest">{p.code}</span>
+                      </td>
+                      <td className="px-8 py-6 font-bold text-slate-500 text-sm">{p.weight} gr</td>
+                      <td className="px-8 py-6">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase leading-relaxed max-w-xs">{p.returnReason || 'Qeyd yoxdur'}</p>
+                      </td>
+                      <td className="px-8 py-6 text-right">
+                        <button 
+                          onClick={() => handleRestoreToStock(p)}
+                          className="bg-amber-500 text-stone-950 px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-400 transition-all shadow-md flex items-center space-x-2 ml-auto"
+                        >
+                          <RefreshCw size={14} />
+                          <span>Stoka Qaytar</span>
+                        </button>
+                      </td>
+                    </tr>
+                  )) : (
+                    <tr>
+                      <td colSpan={5} className="px-8 py-20 text-center">
+                        <div className="flex flex-col items-center justify-center text-slate-300">
+                          <RotateCcw size={48} className="mb-4 opacity-20" />
+                          <p className="font-black uppercase tracking-[0.3em]">Müştəridən qaytarılmış məhsul yoxdur</p>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* MÜŞTƏRİ İADƏLƏRİ (SATIŞ REKORDLARI) */}
           <div className="bg-white rounded-[2.5rem] md:rounded-[3rem] border border-slate-100 shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 duration-500">
             <div className="p-8 md:p-12 border-b border-slate-50 bg-slate-50/30 flex items-center justify-between">
               <div>

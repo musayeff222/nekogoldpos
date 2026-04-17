@@ -108,8 +108,44 @@ const App: React.FC = () => {
     remotePrintEnabled: false
   });
 
+  // Periodic polling for real-time updates (Products & Sales)
   useEffect(() => {
-    // Check for existing auth session
+    if (!isAuthenticated) return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const res = await fetch('/api/data/products?light=true');
+        if (!res.ok) throw new Error('Failed to poll products');
+        const p = await res.json();
+
+        if (Array.isArray(p)) {
+          const pStr = JSON.stringify(p);
+          if (pStr !== lastSyncedProducts.current) {
+            setProducts(p);
+            lastSyncedProducts.current = pStr;
+          }
+        }
+
+        const sRes = await fetch('/api/data/sales');
+        if (!sRes.ok) throw new Error('Failed to poll sales');
+        const s = await sRes.json();
+
+        if (Array.isArray(s)) {
+          const sStr = JSON.stringify(s);
+          if (sStr !== lastSyncedSales.current) {
+            setSales(s);
+            lastSyncedSales.current = sStr;
+          }
+        }
+      } catch (err) {
+        console.error('Polling error:', err);
+      }
+    }, 30000); // Poll every 30 seconds to reduce load
+
+    return () => clearInterval(pollInterval);
+  }, [isAuthenticated]);
+  // Session check
+  useEffect(() => {
     const token = localStorage.getItem('nekogold_token');
     const username = localStorage.getItem('nekogold_username');
     
@@ -117,7 +153,9 @@ const App: React.FC = () => {
       setIsAuthenticated(true);
       setUser({ username });
     }
+  }, []);
 
+  useEffect(() => {
     const fetchData = async (retries = 3) => {
       try {
         const fetchWithType = async (type: string, params: Record<string, string> = {}, timeout = 30000) => {
@@ -156,35 +194,29 @@ const App: React.FC = () => {
             throw err;
           }
         };
- 
-        // Fetch in parallel for better performance
-        // Optimization: Fetch products without images/logs initially for speed
-        // Optimization: Fetch only last 100 logs
-        const [p, s, c, sc, st, ex, l] = await Promise.all([
-          fetchWithType('products', { light: 'true' }),
-          fetchWithType('sales'),
-          fetchWithType('customers'),
-          fetchWithType('scraps'),
-          fetchWithType('settings'),
-          fetchWithType('expenses'),
-          fetchWithType('logs', { limit: '100' })
-        ]);
- 
+
+        // Use the new consolidated endpoint to reduce requests
+        const res = await fetch('/api/init-data');
+        if (!res.ok) throw new Error('Initial sync failed');
+        const data = await res.json();
+        
+        const { products: p, sales: s, customers: c, scraps: sc, settings: st, expenses: ex, logs: l } = data;
+
         setProducts(Array.isArray(p) ? p : []);
         lastSyncedProducts.current = JSON.stringify(Array.isArray(p) ? p : []);
- 
+
         setSales(Array.isArray(s) ? s : []);
         lastSyncedSales.current = JSON.stringify(Array.isArray(s) ? s : []);
- 
+
         setCustomers(Array.isArray(c) ? c : []);
         lastSyncedCustomers.current = JSON.stringify(Array.isArray(c) ? c : []);
- 
+
         setScraps(Array.isArray(sc) ? sc : []);
         lastSyncedScraps.current = JSON.stringify(Array.isArray(sc) ? sc : []);
- 
+
         setExpenses(Array.isArray(ex) ? ex : []);
         lastSyncedExpenses.current = JSON.stringify(Array.isArray(ex) ? ex : []);
- 
+
         setLogs(Array.isArray(l) ? l : []);
         lastSyncedLogs.current = JSON.stringify(Array.isArray(l) ? l : []);
  

@@ -121,7 +121,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
   const [bulkKaratFilter, setBulkKaratFilter] = useState<string | 'all'>('all');
   const [bulkPrintList, setBulkPrintList] = useState<Product[]>([]);
 
-  const [viewMode, setViewMode] = useState<'folders' | 'printList' | 'returns'>('folders');
+  const [viewMode, setViewMode] = useState<'folders' | 'printList' | 'returns' | 'mobile'>('folders');
   const [stockPrintList, setStockPrintList] = useState<Product[]>([]);
   const [printSupplier, setPrintSupplier] = useState<string>('all');
   const [printCategory, setPrintCategory] = useState<string>('all');
@@ -242,7 +242,30 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
   };
 
   const getNextCode = (prefix: string) => {
-    return prefix || '';
+    if (!prefix) return '';
+    
+    // Scan all products (active, archived, returned) and sales to find the global last number for this prefix
+    const allCodesInProducts = products.map(p => p.code);
+    const allCodesInSales = sales.map(s => s.productCode);
+    const allKnownCodes = Array.from(new Set([...allCodesInProducts, ...allCodesInSales]));
+    
+    let maxNum = 0;
+    
+    allKnownCodes.forEach(code => {
+      if (code && code.startsWith(prefix)) {
+        // Extract numbers from the end of the code
+        const numPart = code.substring(prefix.length).match(/^\d+/);
+        if (numPart) {
+          const num = parseInt(numPart[0], 10);
+          if (num > maxNum) maxNum = num;
+        }
+      }
+    });
+    
+    const nextNum = maxNum + 1;
+    // Format: Prefix + Number (e.g., BK123)
+    // If you want padding: prefix + nextNum.toString().padStart(3, '0')
+    return prefix + nextNum;
   };
 
   useEffect(() => {
@@ -252,8 +275,8 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     }
   }, [newProduct.type, isAddingNew]);
 
-  // Stokda olan məhsulları süzgəcdən keçiririk
-  const activeProducts = products.filter(p => (Number(p.stockCount) || 0) > 0);
+  // Stokda olan məhsulları süzgəcdən keçiririk (Vazvrat edilmişlər bura daxil deyil)
+  const activeProducts = products.filter(p => (Number(p.stockCount) || 0) > 0 && !p.isReturned);
 
   // Unique suppliers and categories for filters
   const suppliers = Array.from(new Set(activeProducts.map(p => p.supplier).filter(Boolean)));
@@ -1121,6 +1144,13 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
             <Printer size={18} />
             <span>ÇAP</span>
           </button>
+          <button 
+            onClick={() => setViewMode('mobile')}
+            className={`px-4 md:px-10 py-2.5 md:py-4 rounded-[1rem] md:rounded-[1.5rem] font-black text-[10px] md:text-xs uppercase tracking-widest transition-all flex items-center space-x-2 md:space-x-3 ${viewMode === 'mobile' ? 'bg-stone-900 text-amber-500 shadow-lg' : 'text-stone-500 hover:bg-stone-50'}`}
+          >
+            <Camera size={18} />
+            <span>TELEFON</span>
+          </button>
         </div>
       </div>
 
@@ -1320,6 +1350,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                       <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest text-center">Çəki</th>
                       <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest text-center">Əyar</th>
                       <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest text-right">Qiymət</th>
+                      <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest text-center">Çap</th>
                       <th className="px-8 py-6 text-[10px] font-black text-stone-400 uppercase tracking-widest text-center">Əməliyyat</th>
                       </tr>
                     </thead>
@@ -1408,6 +1439,21 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                             </div>
                           </td>
                           <td className="px-8 py-5 text-stone-900 font-black text-right text-xl tracking-tighter">{(Number(p.price) || 0).toLocaleString()} ₼</td>
+                          <td className="px-8 py-5 text-center" onClick={(e) => e.stopPropagation()}>
+                            <button 
+                              onClick={() => {
+                                setLastAddedProduct(p);
+                                setTimeout(() => {
+                                  window.print();
+                                  setTimeout(() => setLastAddedProduct(null), 10000);
+                                }, 500);
+                              }}
+                              className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center hover:bg-blue-500 hover:text-white transition-all shadow-sm mx-auto"
+                              title="Etiket Çap Et"
+                            >
+                              <Printer size={16} />
+                            </button>
+                          </td>
                           <td className="px-8 py-5 text-center">
                             <div className="flex items-center justify-center space-x-2">
                               {p.allowPartialSale && (
@@ -1530,7 +1576,14 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                       <td className="px-8 py-4 font-black text-stone-500 text-xs uppercase tracking-widest">{p.code}</td>
                       <td className="px-8 py-4">
                         <div className="flex flex-col">
-                          <p className="font-black text-stone-800 text-sm uppercase leading-none">{p.name}</p>
+                          <div className="flex items-center space-x-2 mb-1">
+                            <p className="font-black text-stone-800 text-sm uppercase leading-none">{p.name}</p>
+                            {(Number(p.stockCount) || 0) === 0 ? (
+                              <span className="bg-red-100 text-red-600 text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-widest border border-red-200">VAZVİRAT</span>
+                            ) : (
+                              <span className="bg-amber-100 text-amber-600 text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-widest border border-amber-200">GERİ QAYTARILMA</span>
+                            )}
+                          </div>
                           <p className="text-[9px] font-bold text-red-400 uppercase mt-1 italic">Səbəb: {p.returnReason || 'Qeyd olunmayıb'}</p>
                         </div>
                       </td>
@@ -1572,7 +1625,16 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-start">
-                      <p className="font-black text-stone-900 text-sm truncate uppercase leading-tight">{p.name}</p>
+                      <div className="flex flex-col">
+                        <p className="font-black text-stone-900 text-sm truncate uppercase leading-tight">{p.name}</p>
+                        <div className="mt-1">
+                          {(Number(p.stockCount) || 0) === 0 ? (
+                            <span className="bg-red-100 text-red-600 text-[7px] font-black px-1 py-0.5 rounded uppercase tracking-widest border border-red-200">VAZVİRAT</span>
+                          ) : (
+                            <span className="bg-amber-100 text-amber-600 text-[7px] font-black px-1 py-0.5 rounded uppercase tracking-widest border border-amber-200">GERİ QAYTARILMA</span>
+                          )}
+                        </div>
+                      </div>
                       <p className="font-black text-red-600 text-sm ml-2 whitespace-nowrap">{(Number(p.price) || 0).toLocaleString()} ₼</p>
                     </div>
                     <p className="text-[9px] font-bold text-red-400 uppercase mt-1 italic truncate">Səbəb: {p.returnReason || 'Qeyd olunmayıb'}</p>
@@ -1611,6 +1673,124 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
               </div>
             )}
           </div>
+        </div>
+      ) : viewMode === 'mobile' ? (
+        /* MOBİL REJİM / TELEFON BÖLMƏSİ (Şəkil çək və Çap et) */
+        <div className="space-y-6 animate-in fade-in duration-500 pb-20 no-print">
+           <div className="bg-stone-900 rounded-[2.5rem] p-8 md:p-12 shadow-2xl border border-stone-800 relative overflow-hidden">
+               <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/10 rounded-full -mr-32 -mt-32 blur-3xl"></div>
+               <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
+                  <div className="space-y-2">
+                     <h2 className="text-3xl md:text-5xl font-black text-white uppercase tracking-tighter leading-none">MOBİL <span className="text-amber-500">ÇAP STANSİYASI</span></h2>
+                     <p className="text-stone-400 font-bold uppercase tracking-[0.3em] text-[10px] md:text-xs">Sürətli məhsul əlavə et və etiket çap et</p>
+                  </div>
+                  <button 
+                    onClick={() => { setDuplicateInStock(null); setDuplicateInSales(null); setIsAddingNew(true); }}
+                    className="bg-amber-500 text-stone-950 px-10 py-6 rounded-3xl font-black text-sm uppercase tracking-widest shadow-2xl shadow-amber-500/20 active:scale-95 transition-all flex items-center justify-center space-x-4"
+                  >
+                    <div className="bg-stone-950/10 p-2 rounded-xl"><Plus size={24} /></div>
+                    <span>YENİ MƏHSUL ƏLAVƏ ET</span>
+                  </button>
+               </div>
+           </div>
+
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* SON ƏLAVƏ EDİLƏNLƏR */}
+              <div className="bg-white rounded-[2.5rem] border border-stone-100 shadow-xl p-6 md:p-10 space-y-6 flex flex-col h-full">
+                 <div className="flex items-center justify-between border-b border-stone-100 pb-4">
+                    <h3 className="text-sm font-black text-stone-900 uppercase tracking-widest flex items-center">
+                       <Clock size={18} className="mr-2 text-amber-500" /> SON ƏLAVƏLƏR
+                    </h3>
+                    <span className="bg-stone-100 text-stone-400 text-[8px] px-2 py-1 rounded-full font-black uppercase tracking-widest">REAL-TIME</span>
+                 </div>
+                 
+                 <div className="flex-1 space-y-4 overflow-y-auto max-h-[600px] pr-2 scrollbar-hide">
+                    {[...products].sort((a, b) => new Date(b.purchaseDate || 0).getTime() - new Date(a.purchaseDate || 0).getTime()).slice(0, 15).map(p => (
+                       <div key={p.id} className="bg-stone-50 p-4 rounded-2xl flex items-center justify-between border border-stone-100 group hover:border-amber-300 transition-all">
+                          <div className="flex items-center space-x-4 min-w-0 flex-1">
+                             <div className="w-16 h-16 rounded-xl bg-white border border-stone-200 flex items-center justify-center overflow-hidden flex-shrink-0">
+                                {p.imageUrl ? (
+                                   <img src={p.imageUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" loading="lazy" />
+                                ) : (
+                                   <ImageIcon size={20} className="text-stone-200" />
+                                )}
+                             </div>
+                             <div className="min-w-0">
+                                <p className="font-black text-stone-900 text-sm uppercase leading-none truncate">{p.name}</p>
+                                <p className="text-[10px] font-black text-amber-600 uppercase mt-1.5 tracking-widest">{p.code}</p>
+                                <p className="text-[9px] font-bold text-stone-400 uppercase mt-1 truncate">{p.weight} gr • {p.carat} əyar</p>
+                             </div>
+                          </div>
+                          <button 
+                             onClick={() => {
+                                setLastAddedProduct(p);
+                                setTimeout(() => {
+                                  window.print();
+                                  setTimeout(() => setLastAddedProduct(null), 10000);
+                                }, 500);
+                             }}
+                             className="w-12 h-12 bg-white text-stone-900 rounded-xl flex items-center justify-center shadow-md border border-stone-100 hover:bg-stone-900 hover:text-amber-500 active:scale-95 transition-all flex-shrink-0 ml-4"
+                             title="Çap Et"
+                          >
+                             <Printer size={20} />
+                          </button>
+                       </div>
+                    ))}
+                 </div>
+              </div>
+
+              {/* SÜRƏTLİ AXTARIŞ VƏ ÇAP */}
+              <div className="bg-amber-500 rounded-[2.5rem] shadow-2xl shadow-amber-200 p-6 md:p-10 space-y-6 flex flex-col h-full relative overflow-hidden group">
+                 <div className="absolute bottom-0 right-0 w-48 h-48 bg-white/10 rounded-full -mb-24 -mr-24 blur-3xl group-hover:scale-150 transition-transform duration-1000"></div>
+                 <h3 className="text-sm font-black text-stone-950 uppercase tracking-widest flex items-center">
+                    <Search size={18} className="mr-2" /> SÜRƏTLİ ÇAP AXTARIŞI
+                 </h3>
+                 
+                 <div className="relative group/input">
+                    <Box size={24} className="absolute left-5 top-1/2 -translate-y-1/2 text-stone-500 group-focus-within/input:text-stone-900 transition-colors" />
+                    <input 
+                       type="text" 
+                       placeholder="Kod daxil edin..." 
+                       value={searchTerm}
+                       onChange={(e) => setSearchTerm(e.target.value)}
+                       className="w-full bg-white border-none rounded-3xl py-6 pl-16 pr-6 font-black text-xl text-stone-900 shadow-xl focus:ring-8 focus:ring-amber-400 outline-none placeholder:text-stone-300"
+                    />
+                 </div>
+
+                 <div className="flex-1 space-y-4 overflow-y-auto max-h-[500px] pr-2 scrollbar-hide pt-2">
+                    {searchTerm && products.filter(p => !p.isReturned && !p.isArchived && p.code.toLowerCase().includes(searchTerm.toLowerCase())).map(p => (
+                       <button 
+                          key={p.id}
+                          onClick={() => {
+                             setLastAddedProduct(p);
+                             setTimeout(() => {
+                               window.print();
+                               setTimeout(() => setLastAddedProduct(null), 10000);
+                             }, 500);
+                          }}
+                          className="w-full bg-white/20 backdrop-blur-md p-5 rounded-3xl flex items-center justify-between border border-white/30 hover:bg-white/40 transition-all text-left group/item"
+                       >
+                          <div className="flex items-center space-x-4">
+                             <div className="w-12 h-12 rounded-xl bg-white/50 backdrop-blur-md flex items-center justify-center font-black text-stone-950 text-xs">
+                                {p.code.substring(0, 2)}
+                             </div>
+                             <div>
+                                <p className="font-black text-stone-950 text-sm uppercase leading-none">{p.name}</p>
+                                <p className="text-[10px] font-bold text-stone-800 uppercase mt-1">{p.code}</p>
+                             </div>
+                          </div>
+                          <Printer size={24} className="text-stone-950 group-hover/item:scale-125 transition-transform" />
+                       </button>
+                    ))}
+                    {!searchTerm && (
+                       <div className="flex flex-col items-center justify-center h-full py-20 opacity-30 text-stone-950">
+                          <Printer size={80} strokeWidth={1} />
+                          <p className="font-black uppercase tracking-[0.2em] text-[10px] mt-6 bg-stone-950 text-white px-4 py-2 rounded-full">Birbaşa çap üçün kod axtarın</p>
+                       </div>
+                    )}
+                 </div>
+              </div>
+           </div>
         </div>
       ) : (
         /* SİFARİŞ ÜÇÜN ÇAP BÖLMƏSİ (NO-PRINT) */
@@ -1841,11 +2021,11 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                                onChange={(e) => setEditForm({...editForm, isReturned: e.target.checked})} 
                                className="w-5 h-5 accent-red-500 rounded cursor-pointer"
                              />
-                             <label htmlFor="isReturned" className="text-xs font-black text-red-600 uppercase cursor-pointer select-none">Məhsul Geri Qaytarılıb (Vazvirat)</label>
+                             <label htmlFor="isReturned" className="text-xs font-black text-red-600 uppercase cursor-pointer select-none">Topdançıya Qaytar (Vazvrat)</label>
                           </div>
                           {editForm.isReturned && (
                             <div className="space-y-1.5 animate-in slide-in-from-top-2">
-                              <label className="text-[9px] font-black text-red-400 uppercase ml-2">Qaytarılma Səbəbi</label>
+                              <label className="text-[9px] font-black text-red-400 uppercase ml-2">Vazvrat Səbəbi</label>
                               <textarea 
                                 value={editForm.returnReason || ''} 
                                 onChange={(e) => setEditForm({...editForm, returnReason: e.target.value})} 
