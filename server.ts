@@ -147,7 +147,8 @@ async function startServer() {
             sql: `CREATE TABLE IF NOT EXISTS products (
               id VARCHAR(100) PRIMARY KEY,
               content LONGTEXT,
-              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+              updated_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+              INDEX (updated_at)
             )`
           },
           {
@@ -155,7 +156,8 @@ async function startServer() {
             sql: `CREATE TABLE IF NOT EXISTS sales (
               id VARCHAR(100) PRIMARY KEY,
               content LONGTEXT,
-              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+              updated_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+              INDEX (updated_at)
             )`
           },
           {
@@ -238,6 +240,31 @@ async function startServer() {
           await connection.execute('CREATE INDEX IF NOT EXISTS idx_status_created ON print_queue (status, created_at)');
         } catch (e) {
           // Ignore if index already exists or syntax not supported
+        }
+        
+        // Ensure indices exist for performance
+        const indices = [
+          { table: 'products', col: 'updated_at' },
+          { table: 'sales', col: 'updated_at' },
+          { table: 'customers', col: 'updated_at' },
+          { table: 'expenses', col: 'updated_at' }
+        ];
+
+        for (const idx of indices) {
+          try {
+            await connection.execute(`CREATE INDEX IF NOT EXISTS idx_${idx.table}_${idx.col} ON ${idx.table} (${idx.col})`);
+          } catch (e) {
+            // Silently ignore if already exists or not supported
+          }
+        }
+
+        // Migration: Upgrade to millisecond precision for reliable sync
+        try {
+          await connection.execute('ALTER TABLE products MODIFY updated_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)');
+          await connection.execute('ALTER TABLE sales MODIFY updated_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)');
+          console.log('Timestamp precision upgraded to ms');
+        } catch (e) {
+          // Silently ignore if already set or error
         }
         
         console.log('All database tables initialized successfully');
@@ -886,31 +913,58 @@ async function startServer() {
 
       // 1. Get products updated since last sync (approximate using updated_at)
       if (lastSync !== '0') {
-        const [pRows] = await pool.execute(
-          'SELECT JSON_REMOVE(content, "$.logs") as content FROM products WHERE updated_at > ?',
-          [new Date(lastSync).toISOString().slice(0, 19).replace('T', ' ')]
-        );
-        results.products = (pRows as any[]).map(r => JSON.parse(r.content));
+        let lastSyncDate: Date;
+        try {
+          lastSyncDate = new Date(lastSync);
+          if (isNaN(lastSyncDate.getTime())) {
+            throw new Error('Invalid date');
+          }
+        } catch (e) {
+          // If date is invalid, just use a very old date to get everything or return empty
+          lastSyncDate = new Date(0);
+        }
 
-        const [sRows] = await pool.execute(
-          'SELECT content FROM sales WHERE updated_at > ?',
-          [new Date(lastSync).toISOString().slice(0, 19).replace('T', ' ')]
-        );
-        results.sales = (sRows as any[]).map(r => JSON.parse(r.content));
+        // Optimization: For products updated since last sync, we use >= to avoid missing items 
+        // that happened in the same millisecond, client handles deduplication by ID.
+        const mysqlTimestamp = lastSyncDate.toISOString().slice(0, 23).replace('T', ' ');
+
+        try {
+          const [pRows] = await pool.execute(
+            'SELECT JSON_REMOVE(content, "$.logs") as content FROM products WHERE updated_at >= ?',
+            [mysqlTimestamp]
+          );
+          results.products = (pRows as any[]).map(r => JSON.parse(r.content));
+        } catch (e) {
+          console.error('Pulse products check failed:', e);
+        }
+
+        try {
+          const [sRows] = await pool.execute(
+            'SELECT content FROM sales WHERE updated_at >= ?',
+            [mysqlTimestamp]
+          );
+          results.sales = (sRows as any[]).map(r => JSON.parse(r.content));
+        } catch (e) {
+          console.error('Pulse sales check failed:', e);
+        }
       }
 
       // 2. Get print queue if this is a station
       if (isPrintStation) {
-        const [qRows] = await pool.execute(
-          'SELECT id, product_data FROM print_queue WHERE status = "pending" ORDER BY created_at ASC'
-        );
-        results.printQueue = qRows;
+        try {
+          const [qRows] = await pool.execute(
+            'SELECT id, product_data FROM print_queue WHERE status = "pending" ORDER BY created_at ASC'
+          );
+          results.printQueue = qRows;
+        } catch (e) {
+          console.error('Pulse print queue check failed:', e);
+        }
       }
 
       res.json(results);
     } catch (error) {
-      console.error('Pulse failed:', error);
-      res.status(500).json({ error: 'Pulse failed' });
+      console.error('Pulse overall failure:', error);
+      res.status(500).json({ error: 'Pulse failed', details: error instanceof Error ? error.message : String(error) });
     }
   });
 

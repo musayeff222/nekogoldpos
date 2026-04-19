@@ -125,80 +125,108 @@ const App: React.FC = () => {
           printStation: settings.isPrintStation ? 'true' : 'false'
         }).toString();
 
-        const res = await fetch(`/api/pulse?${query}`);
-        if (res.ok) {
-          const data = await res.json();
-          
-          // Update last sync time immediately to avoid overlaps
-          lastSyncTimeRef.current = data.timestamp;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout for pulse
 
-          // 1. Update Products
-          if (Array.isArray(data.products) && data.products.length > 0) {
-            setProducts(prev => {
-              const updatedNext = [...prev];
-              data.products.forEach((updatedItem: Product) => {
-                const index = updatedNext.findIndex(p => p.id === updatedItem.id);
-                if (index !== -1) {
-                  // Merge carefully - keep images if they aren't in the pulse (which removed logs)
-                  updatedNext[index] = { ...updatedNext[index], ...updatedItem };
-                } else {
-                  updatedNext.push(updatedItem);
-                }
-              });
-              lastSyncedProducts.current = JSON.stringify(updatedNext);
-              return updatedNext;
-            });
-          }
+        let res;
+        try {
+          res = await fetch(`/api/pulse?${query}`, { signal: controller.signal });
+        } finally {
+          clearTimeout(timeoutId);
+        }
 
-          // 2. Update Sales
-          if (Array.isArray(data.sales) && data.sales.length > 0) {
-            setSales(prev => {
-              const updatedNext = [...prev];
-              data.sales.forEach((updatedItem: Sale) => {
-                const index = updatedNext.findIndex(s => s.id === updatedItem.id);
-                if (index !== -1) {
-                  updatedNext[index] = updatedItem;
-                } else {
-                  updatedNext.push(updatedItem);
-                }
-              });
-              lastSyncedSales.current = JSON.stringify(updatedNext);
-              return updatedNext;
-            });
-          }
+        if (!res.ok) {
+          const text = await res.text();
+          console.warn(`Heartbeat pulse returned non-OK status (${res.status}):`, text.substring(0, 100));
+          return;
+        }
 
-          // 3. Handle Print Queue
-          if (settings.isPrintStation && Array.isArray(data.printQueue) && data.printQueue.length > 0) {
-            for (const job of data.printQueue) {
-              if (!active) break;
-              try {
-                const productData = JSON.parse(job.product_data);
-                setCurrentRemoteJob({ ...job, product: productData });
-                
-                // Wait for print interaction
-                await new Promise(resolve => setTimeout(resolve, 8000));
-                
-                await fetch(`/api/print-queue/complete/${encodeURIComponent(job.id)}`, { method: 'POST' });
-                setCurrentRemoteJob(null);
-              } catch (e) {
-                console.error('Job processing failed:', e);
+        const contentType = res.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          const text = await res.text();
+          console.warn(`Heartbeat pulse returned non-JSON response:`, text.substring(0, 100));
+          return;
+        }
+
+        const data = await res.json();
+        
+        // Update last sync time immediately to avoid overlaps
+        lastSyncTimeRef.current = data.timestamp;
+
+        // 1. Update Products
+        if (Array.isArray(data.products) && data.products.length > 0) {
+          setProducts(prev => {
+            const updatedNext = [...prev];
+            data.products.forEach((updatedItem: Product) => {
+              const index = updatedNext.findIndex(p => p.id === updatedItem.id);
+              if (index !== -1) {
+                // Merge carefully - keep images if they aren't in the pulse (which removed logs)
+                updatedNext[index] = { ...updatedNext[index], ...updatedItem };
+              } else {
+                updatedNext.push(updatedItem);
               }
+            });
+            lastSyncedProducts.current = JSON.stringify(updatedNext);
+            return updatedNext;
+          });
+        }
+
+        // 2. Update Sales
+        if (Array.isArray(data.sales) && data.sales.length > 0) {
+          setSales(prev => {
+            const updatedNext = [...prev];
+            data.sales.forEach((updatedItem: Sale) => {
+              const index = updatedNext.findIndex(s => s.id === updatedItem.id);
+              if (index !== -1) {
+                updatedNext[index] = updatedItem;
+              } else {
+                updatedNext.push(updatedItem);
+              }
+            });
+            lastSyncedSales.current = JSON.stringify(updatedNext);
+            return updatedNext;
+          });
+        }
+
+        // 3. Handle Print Queue
+        if (settings.isPrintStation && Array.isArray(data.printQueue) && data.printQueue.length > 0) {
+          for (const job of data.printQueue) {
+            if (!active) break;
+            try {
+              const productData = JSON.parse(job.product_data);
+              setCurrentRemoteJob({ ...job, product: productData });
+              
+              // Wait for print interaction
+              await new Promise(resolve => setTimeout(resolve, 8000));
+              
+              await fetch(`/api/print-queue/complete/${encodeURIComponent(job.id)}`, { method: 'POST' });
+              setCurrentRemoteJob(null);
+            } catch (e) {
+              console.error('Job processing failed:', e);
             }
           }
         }
-      } catch (err) {
-        console.error('Heartbeat pulse failed:', err);
+      } catch (err: any) {
+        if (!active) return;
+        if (err.name === 'AbortError') {
+          console.warn('Heartbeat pulse timed out (15s). This can happen during heavy server load.');
+        } else if (err.message === 'Failed to fetch') {
+          // Normal during dev server restarts or transient network issues
+          console.debug('Heartbeat pulse connection lost (server may be restarting). Retrying...');
+        } else {
+          console.warn('Heartbeat pulse connection issue:', err.message || err);
+        }
       }
 
       if (active) {
-        // Add jitter (25-35s) to avoid server thundering herd
-        const jitter = Math.floor(Math.random() * 10000);
-        timeoutId = setTimeout(pulse, 25000 + jitter);
+        // Add jitter (5-10s) for more responsive real-time feel
+        const jitter = Math.floor(Math.random() * 5000);
+        timeoutId = setTimeout(pulse, 5000 + jitter);
       }
     };
 
-    // Initial pulse delay to let background loading finish
-    timeoutId = setTimeout(pulse, 15000);
+    // Initial pulse delay reduced for faster startup update
+    timeoutId = setTimeout(pulse, 3000);
 
     return () => {
       active = false;
@@ -525,9 +553,14 @@ const App: React.FC = () => {
   // Trigger print when currentRemoteJob is set
   useEffect(() => {
     if (currentRemoteJob) {
-      setTimeout(() => {
+      document.body.classList.add('printing');
+      const timer = setTimeout(() => {
         window.print();
+        setTimeout(() => {
+          document.body.classList.remove('printing');
+        }, 1000);
       }, 1500);
+      return () => clearTimeout(timer);
     }
   }, [currentRemoteJob]);
 
@@ -652,7 +685,7 @@ const App: React.FC = () => {
       case Page.Sales: return <SalesModule products={products} setProducts={setProducts} sales={sales} setSales={setSales} customers={customers} setCustomers={setCustomers} settings={settings} cart={cart} setCart={setCart} addLog={addLog} user={user} />;
       case Page.Stock: return <StockModule products={products} setProducts={setProducts} settings={settings} sales={sales} cart={cart} setCart={setCart} setCurrentPage={setCurrentPage} addLog={addLog} user={user} isBackgroundLoading={isBackgroundLoading} />;
       case Page.Customers: return <CustomersModule customers={customers} setCustomers={setCustomers} sales={sales} addLog={addLog} />;
-      case Page.SoldProducts: return <SoldProductsModule sales={sales} setSales={setSales} products={products} setProducts={setProducts} addLog={addLog} />;
+      case Page.SoldProducts: return <SoldProductsModule sales={sales} setSales={setSales} products={products} setProducts={setProducts} addLog={addLog} settings={settings} />;
       case Page.Return: return <ReturnsModule sales={sales} setSales={setSales} products={products} setProducts={setProducts} addLog={addLog} />;
       case Page.Scrap: return <ScrapModule scraps={scraps} setScraps={setScraps} settings={settings} addLog={addLog} />;
       case Page.Expenses: return <ExpensesModule expenses={expenses} setExpenses={setExpenses} sales={sales} addLog={addLog} />;

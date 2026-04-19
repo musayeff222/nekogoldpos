@@ -158,9 +158,13 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
   };
 
   const handlePrintStockList = () => {
+    document.body.classList.add('printing');
     window.focus();
     setTimeout(() => {
       window.print();
+      setTimeout(() => {
+        document.body.classList.remove('printing');
+      }, 500);
     }, 250);
   };
 

@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Search, 
   Calendar, 
@@ -27,7 +28,7 @@ import {
   ChevronRight,
   Maximize2
 } from 'lucide-react';
-import { Sale, Product, SystemLog } from '@/types';
+import { Sale, Product, SystemLog, AppSettings } from '@/types';
 
 interface SoldProductsProps {
   sales: Sale[];
@@ -35,9 +36,10 @@ interface SoldProductsProps {
   products: Product[];
   setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
   addLog: (action: string, category: SystemLog['category'], details?: string) => void;
+  settings: AppSettings;
 }
 
-const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales, setSales, products, setProducts, addLog }) => {
+const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales, setSales, products, setProducts, addLog, settings }) => {
   const [viewMode, setViewMode] = useState<'history' | 'printList' | 'dailyReport'>('history');
   const [searchTerm, setSearchTerm] = useState('');
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
@@ -46,6 +48,7 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales, setSales, prod
 
   // Print List States
   const [printDate, setPrintDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [reportDate, setReportDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [printSupplier, setPrintSupplier] = useState<string>('all');
   const [orderList, setOrderList] = useState<Sale[]>([]);
 
@@ -72,7 +75,14 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales, setSales, prod
   };
 
   const handlePrint = () => {
-    window.print();
+    document.body.classList.add('printing');
+    window.focus();
+    setTimeout(() => {
+        window.print();
+        setTimeout(() => {
+            document.body.classList.remove('printing');
+        }, 500);
+    }, 250);
   };
 
   const activeSales = (Array.isArray(sales) ? sales : []).filter(s => s.status === 'completed');
@@ -102,7 +112,7 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales, setSales, prod
   };
 
   const dailyReportData = (Array.isArray(sales) ? sales : [])
-    .filter(s => s.status === 'completed' && new Date(s.date).toDateString() === new Date().toDateString())
+    .filter(s => s.status === 'completed' && new Date(s.date).toISOString().split('T')[0] === reportDate)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const filteredSales = getFilteredSales();
@@ -318,7 +328,7 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales, setSales, prod
     <div className="space-y-6 md:space-y-8 pb-24 md:pb-10 animate-in fade-in duration-500">
       
       {/* ÇAP KONTEYNERİ (Yeni Qəbz Dizaynı) */}
-      <div id="receipt-print" className="hidden print:block bg-white text-black">
+      <div id="receipt-print" className={`hidden ${viewMode === 'printList' ? 'print:block' : ''} bg-white text-black`}>
           <header className="text-center mb-6">
               <h1 className="brand-font text-3xl font-black mb-1">NEKO GOLD</h1>
               <h2 className="text-sm font-bold tracking-widest mb-4">YENİDƏN SİFARİŞ SİYAHISI</h2>
@@ -388,54 +398,55 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales, setSales, prod
           </footer>
       </div>
 
-      {/* GÜNLÜK SATIŞ HESABATI (Yalnız Çap üçün) */}
-      <div id="daily-report-print" className="hidden print:block bg-white text-black p-4">
-          <header className="text-center mb-8 border-b-2 border-black pb-4">
-              <h1 className="brand-font text-3xl font-black mb-1">NEKO GOLD</h1>
-              <h2 className="text-sm font-black tracking-[0.3em] uppercase">GÜNLÜK SATIŞ HESABATI</h2>
-              <p className="text-xs font-bold mt-2 uppercase tracking-widest">{formatDate(new Date().toISOString())}</p>
-          </header>
+      {/* GÜNLÜK SATIŞ HESABATI (Yalnız Çap üçün) - PORTAL */}
+      {viewMode === 'dailyReport' && createPortal(
+        <div id="daily-report-print">
+            <header className="text-center mb-4 border-b-2 border-black pb-2">
+                <h1 className="brand-font text-2xl font-black mb-1">{settings.shopName || 'NEKO GOLD'}</h1>
+                <h2 className="text-[11px] font-black tracking-[0.2em] uppercase">GÜNLÜK SATIŞ HESABATI</h2>
+                <p className="text-[10px] font-black mt-1 uppercase tracking-widest">{formatDate(reportDate)}</p>
+            </header>
 
-          <table className="w-full text-[10px] border-collapse mb-8">
-              <thead>
-                  <tr className="border-b-2 border-black bg-stone-50">
-                      <th className="py-2 text-left uppercase">SAAT</th>
-                      <th className="py-2 text-left uppercase">KOD</th>
-                      <th className="py-2 text-left uppercase">MƏHSUL</th>
-                      <th className="py-2 text-left uppercase">MÜŞTƏRİ</th>
-                      <th className="py-2 text-left uppercase">SATICI</th>
-                      <th className="py-2 text-right uppercase">MƏBLƏĞ</th>
-                  </tr>
-              </thead>
-              <tbody className="divide-y border-black">
-                  {dailyReportData.map((s, idx) => (
-                      <tr key={idx} className="border-b border-stone-200">
-                          <td className="py-2 font-bold">{formatTime(s.date)}</td>
-                          <td className="py-2">{s.productCode}</td>
-                          <td className="py-2 font-black italic">{s.productName} ({s.weight}g)</td>
-                          <td className="py-2 uppercase">{s.customerName}</td>
-                          <td className="py-2 font-bold uppercase">{s.sellerName || 'SİSTEM'}</td>
-                          <td className="py-2 text-right font-black">{s.total.toLocaleString()} ₼</td>
-                      </tr>
-                  ))}
-                  <tr className="bg-stone-50 font-black">
-                      <td colSpan={5} className="py-4 text-right uppercase tracking-widest">CƏMİ SATIŞ:</td>
-                      <td className="py-4 text-right border-t-2 border-black underline decoration-double">{dailyReportData.reduce((acc, s) => acc + s.total, 0).toLocaleString()} ₼</td>
-                  </tr>
-              </tbody>
-          </table>
+            <table className="receipt-table mb-8">
+                <thead>
+                    <tr>
+                        <th style={{ width: '22%', fontWeight: '900' }}>KOD</th>
+                        <th style={{ width: '48%', textAlign: 'left', fontWeight: '900' }}>MƏHSUL ADI</th>
+                        <th style={{ width: '30%', textAlign: 'left', fontWeight: '900' }}>ALICI ADI</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {dailyReportData.map((s, idx) => (
+                        <tr key={idx}>
+                            <td style={{ fontWeight: '900', fontSize: '14px' }}>{s.productCode}</td>
+                            <td style={{ textAlign: 'left', fontWeight: '900', textTransform: 'uppercase', fontSize: '11px' }}>
+                                {s.productName} ({s.weight}g)
+                            </td>
+                            <td style={{ textAlign: 'left', fontWeight: '900', fontStyle: 'italic', fontSize: '12px' }}>
+                                {s.customerName}
+                            </td>
+                        </tr>
+                    ))}
+                    <tr style={{ fontWeight: '900' }}>
+                        <td colSpan={2} style={{ textAlign: 'left', padding: '8px 5px', fontSize: '12px' }}>CƏMİ SATIŞ SAYI:</td>
+                        <td style={{ textAlign: 'right', padding: '8px 5px', textDecoration: 'underline double', fontSize: '14px' }}>{dailyReportData.length} ƏDƏD</td>
+                    </tr>
+                </tbody>
+            </table>
 
-          <div className="grid grid-cols-2 gap-8 text-[9px] uppercase font-bold mt-12 pt-8 border-t border-stone-100">
-              <div className="flex flex-col items-center">
-                  <div className="w-32 border-b border-black mb-1"></div>
-                  <span>ÜMUMİ SATIŞ SAYI: {dailyReportData.length} ƏDƏD</span>
-              </div>
-              <div className="flex flex-col items-center">
-                  <div className="w-32 border-b border-black mb-1"></div>
-                  <span>CƏMİ ÇƏKİ: {dailyReportData.reduce((acc, s) => acc + (s.weight || 0), 0).toFixed(2)} GR</span>
-              </div>
-          </div>
-      </div>
+            <div className="grid grid-cols-2 gap-8 text-[9px] uppercase font-bold mt-12 pt-8 border-t border-stone-100">
+                <div className="flex flex-col items-center text-center">
+                    <div className="w-48 border-b border-black mb-1"></div>
+                    <span>CƏMİ SATIŞ SAYI: {dailyReportData.length} ƏDƏD</span>
+                </div>
+                <div className="flex flex-col items-center text-center">
+                    <div className="w-48 border-b border-black mb-1"></div>
+                    <span>CƏMİ ÇƏKİ: {dailyReportData.reduce((acc, s) => acc + (s.weight || 0), 0).toFixed(2)} GR</span>
+                </div>
+            </div>
+        </div>,
+        document.body
+      )}
 
       {/* ÜST TABLAR (NO-PRINT) */}
       <div className="flex justify-center no-print">
@@ -593,8 +604,16 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales, setSales, prod
                    <div className="flex items-center space-x-4">
                       <div className="w-12 h-12 bg-stone-950 text-amber-500 rounded-2xl flex items-center justify-center shadow-lg"><TrendingUp size={28}/></div>
                       <div>
-                        <h3 className="text-xl font-black text-stone-900 uppercase tracking-tighter">Bugünkü Satış Hesabatı</h3>
-                        <p className="text-[10px] font-bold text-stone-500 uppercase tracking-widest">{formatDate(new Date().toISOString())} tarixinə olan satışlar</p>
+                        <h3 className="text-xl font-black text-stone-900 uppercase tracking-tighter">Satış Hesabatı</h3>
+                        <div className="flex items-center space-x-2 mt-1">
+                          <p className="text-[10px] font-bold text-stone-500 uppercase tracking-widest">Tarix seçin:</p>
+                          <input 
+                            type="date" 
+                            value={reportDate} 
+                            onChange={(e) => setReportDate(e.target.value)}
+                            className="text-[10px] font-black text-amber-600 bg-stone-100 px-2 py-1 rounded-md outline-none border border-stone-200"
+                          />
+                        </div>
                       </div>
                    </div>
                    <button onClick={handlePrint} className="bg-stone-900 text-amber-500 px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-black transition-all shadow-xl flex items-center justify-center border-b-4 border-stone-800">
@@ -624,6 +643,7 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales, setSales, prod
                                 <th className="px-6 py-4 text-[9px] font-black text-stone-500 uppercase tracking-widest">SAAT</th>
                                 <th className="px-6 py-4 text-[9px] font-black text-stone-500 uppercase tracking-widest">KOD</th>
                                 <th className="px-6 py-4 text-[9px] font-black text-stone-500 uppercase tracking-widest">MƏHSUL</th>
+                                <th className="px-6 py-4 text-[9px] font-black text-stone-500 uppercase tracking-widest">ALICI</th>
                                 <th className="px-6 py-4 text-[9px] font-black text-stone-500 uppercase tracking-widest">SATICI</th>
                                 <th className="px-6 py-4 text-[9px] font-black text-stone-500 uppercase tracking-widest text-right">MƏBLƏĞ</th>
                             </tr>
@@ -634,6 +654,7 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales, setSales, prod
                                     <td className="px-6 py-4 text-xs font-bold text-stone-400">{formatTime(s.date)}</td>
                                     <td className="px-6 py-4 text-xs font-black text-stone-600 uppercase">{s.productCode}</td>
                                     <td className="px-6 py-4 font-black text-stone-900 uppercase text-xs">{s.productName} ({s.weight}g)</td>
+                                    <td className="px-6 py-4 text-[10px] font-black text-stone-800 uppercase">{s.customerName}</td>
                                     <td className="px-6 py-4 text-[10px] font-black text-stone-500 uppercase">{s.sellerName || 'SİSTEM'}</td>
                                     <td className="px-6 py-4 text-right font-black text-stone-900">{s.total.toLocaleString()} ₼</td>
                                 </tr>

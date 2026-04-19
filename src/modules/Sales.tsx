@@ -357,6 +357,14 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
     };
 
     setCustomers(prev => [...prev, newC]);
+    
+    // Save to server immediately to prevent loss on refresh
+    fetch('/api/data/customers/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item: newC })
+    }).catch(err => console.error('Failed to save new customer to database:', err));
+
     setCustomerInfo({
       id: newC.id,
       fullName: newC.fullName,
@@ -372,9 +380,13 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
 
   const handlePrint = () => {
     if (!lastTransaction) return;
+    document.body.classList.add('printing');
     window.focus();
     setTimeout(() => {
         window.print();
+        setTimeout(() => {
+            document.body.classList.remove('printing');
+        }, 500);
     }, 250);
   };
 
@@ -391,51 +403,64 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
       
       {/* ÇAP KONTEYNERİ (PORTAL) */}
       {lastTransaction && createPortal(
-        <div id="receipt-print">
+        <div id="receipt-print" style={{ fontFamily: 'Inter, sans-serif' }}>
             <div className="receipt-content" style={{ background: 'white', color: 'black', fontWeight: settings.receiptFontWeight }}>
-                <div style={{ textAlign: 'center', marginBottom: '15px' }}>
-                    <h1 style={{ fontSize: '22px', fontWeight: 'bold', margin: '0' }}>NEKO GOLD</h1>
-                    <p style={{ margin: '2px 0', fontSize: '10px', textTransform: 'uppercase' }}>Zərgərlik Satış Mərkəzi</p>
-                    <p style={{ margin: '0', fontSize: '9px' }}>{new Date(lastTransaction.date).toLocaleString('az-AZ')}</p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '30px', borderBottom: '3px solid black', paddingBottom: '20px' }}>
+                    <div>
+                        <h1 style={{ fontSize: '32px', fontWeight: '900', margin: '0', letterSpacing: '2px', color: '#000' }}>NEKO GOLD</h1>
+                        <p style={{ margin: '4px 0', fontSize: '14px', textTransform: 'uppercase', fontWeight: 'bold', color: '#666' }}>Zərgərlik Satış Mərkəzi</p>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                        <h2 style={{ fontSize: '18px', fontWeight: '900', margin: '0', textTransform: 'uppercase' }}>MƏHSUL TƏSVİRİ</h2>
+                        <p style={{ fontSize: '12px', color: '#777', marginTop: '5px' }}>Sənəd No: {Math.random().toString(36).substr(2, 6).toUpperCase()}</p>
+                    </div>
                 </div>
                 
-                <div style={{ borderBottom: '1px dashed black', margin: '10px 0' }}></div>
-                
-                <div style={{ marginBottom: '10px', fontSize: '11px' }}>
-                    <p style={{ margin: '2px 0' }}><strong>Müştəri:</strong> {lastTransaction.customer.fullName || 'Anonim'}</p>
-                    <p style={{ margin: '2px 0' }}><strong>Tel:</strong> {lastTransaction.customer.phone || '-'}</p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px', marginBottom: '40px' }}>
+                    <div style={{ background: '#f9f9f9', padding: '20px', borderRadius: '15px', border: '1px solid #eee' }}>
+                        <p style={{ fontSize: '11px', fontWeight: '900', color: '#999', textTransform: 'uppercase', marginBottom: '10px', borderBottom: '1px solid #ddd', paddingBottom: '5px' }}>ALICI MƏLUMATLARI</p>
+                        <p style={{ margin: '5px 0', fontSize: '16px', fontWeight: '900' }}>{lastTransaction.customer.fullName || 'Anonim Müştəri'}</p>
+                        <p style={{ margin: '5px 0', fontSize: '14px', fontWeight: 'bold', color: '#555' }}>Tel: {lastTransaction.customer.phone || '-'}</p>
+                    </div>
+                    <div style={{ background: '#f9f9f9', padding: '20px', borderRadius: '15px', border: '1px solid #eee' }}>
+                        <p style={{ fontSize: '11px', fontWeight: '900', color: '#999', textTransform: 'uppercase', marginBottom: '10px', borderBottom: '1px solid #ddd', paddingBottom: '5px' }}>SATIŞ QEYDİ</p>
+                        <p style={{ margin: '5px 0', fontSize: '14px', fontWeight: 'bold' }}>Mağaza: NEKO GOLD</p>
+                        <p style={{ margin: '5px 0', fontSize: '12px', color: '#555' }}>Bu sənəd müştəriyə təqdim olunan malın texniki göstəricilərini təsdiq edir.</p>
+                    </div>
                 </div>
 
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '40px' }}>
                     <thead>
-                        <tr style={{ borderBottom: '1px solid black' }}>
-                            <th style={{ textAlign: 'left', padding: '4px 0' }}>Məhsul</th>
-                            <th style={{ textAlign: 'right', padding: '4px 0' }}>Qiymət</th>
+                        <tr style={{ background: '#000', color: '#fff' }}>
+                            <th style={{ textAlign: 'left', padding: '15px 20px', fontSize: '12px', textTransform: 'uppercase' }}>Məhsul Kodu</th>
+                            <th style={{ textAlign: 'left', padding: '15px 20px', fontSize: '12px', textTransform: 'uppercase' }}>Məhsulun Adı</th>
+                            <th style={{ textAlign: 'right', padding: '15px 20px', fontSize: '12px', textTransform: 'uppercase' }}>Çəki (gr)</th>
                         </tr>
                     </thead>
                     <tbody>
                         {lastTransaction.sales.map((item, i) => (
                             <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
-                                <td style={{ padding: '6px 0' }}>
-                                    <div style={{ fontWeight: 'bold' }}>{item.productName}</div>
-                                    <div style={{ fontSize: '9px' }}>{item.productCode} | {item.weight} gr</div>
-                                </td>
-                                <td style={{ textAlign: 'right', padding: '6px 0', fontWeight: 'bold' }}>
-                                    {item.total.toLocaleString()} ₼
-                                </td>
+                                <td style={{ padding: '20px', fontSize: '14px', fontWeight: 'bold' }}>{item.productCode}</td>
+                                <td style={{ padding: '20px', fontSize: '14px', fontWeight: '900', textTransform: 'uppercase' }}>{item.productName}</td>
+                                <td style={{ padding: '20px', fontSize: '14px', fontWeight: 'bold', textAlign: 'right' }}>{item.weight} gr</td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
 
-                <div style={{ marginTop: '10px', textAlign: 'right', borderTop: '1px solid black', paddingTop: '8px' }}>
-                    <p style={{ fontSize: '10px', margin: '2px 0' }}>Cəmi: {lastTransaction.subtotal.toLocaleString()} ₼</p>
-                    <p style={{ fontSize: '10px', margin: '2px 0' }}>Endirim: -{lastTransaction.discount.toLocaleString()} ₼</p>
-                    <h2 style={{ fontSize: '18px', fontWeight: 'bold', margin: '5px 0' }}>YEKUN: {lastTransaction.total.toLocaleString()} ₼</h2>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '60px', marginTop: '100px', borderTop: '1px solid #eee', paddingTop: '40px' }}>
+                    <div style={{ textAlign: 'center' }}>
+                        <div style={{ borderBottom: '2px solid black', width: '200px', margin: '0 auto 10px' }}></div>
+                        <p style={{ fontSize: '12px', fontWeight: '900', textTransform: 'uppercase' }}>TƏHVİL VERDİ (MAĞAZA)</p>
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                        <div style={{ borderBottom: '2px solid black', width: '200px', margin: '0 auto 10px' }}></div>
+                        <p style={{ fontSize: '12px', fontWeight: '900', textTransform: 'uppercase' }}>TƏHVİL ALDI (ALICI)</p>
+                    </div>
                 </div>
 
-                <div style={{ textAlign: 'center', marginTop: '25px', fontSize: '9px' }}>
-                    <p style={{ fontWeight: 'bold' }}>Təşəkkür edirik!</p>
+                <div style={{ textAlign: 'center', marginTop: '60px', opacity: '0.4' }}>
+                    <p style={{ fontSize: '10px' }}>NEKO GOLD Zərgərlik Satış Mərkəzi © {new Date().getFullYear()}</p>
                 </div>
             </div>
         </div>,
