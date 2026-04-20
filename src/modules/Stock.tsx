@@ -65,6 +65,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
   const [lastAddedProduct, setLastAddedProduct] = useState<Product | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [showMoveToArchiveModal, setShowMoveToArchiveModal] = useState(false);
+  const [archiveSearchTerm, setArchiveSearchTerm] = useState('');
   const [showPartialLogModal, setShowPartialLogModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [idToDelete, setIdToDelete] = useState<string | null>(null);
@@ -716,6 +717,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     
     setSelectedForArchive([]);
     setShowMoveToArchiveModal(false);
+    setArchiveSearchTerm('');
     alert(`${selectedForArchive.length} məhsul arxivə daşındı.`);
   };
 
@@ -2081,13 +2083,26 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                 <h3 className="text-xl font-black text-stone-900 uppercase tracking-tighter">Arxivə Daşı</h3>
                 <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mt-1">"{activeFolder}" kateqoriyasındakı aktiv məhsullar</p>
               </div>
-              <button onClick={() => { setShowMoveToArchiveModal(false); setSelectedForArchive([]); }} className="p-2 text-stone-300 hover:text-stone-900 transition-colors"><X size={24} /></button>
+              <button onClick={() => { setShowMoveToArchiveModal(false); setSelectedForArchive([]); setArchiveSearchTerm(''); }} className="p-2 text-stone-300 hover:text-stone-900 transition-colors"><X size={24} /></button>
             </header>
+            
+            <div className="px-8 py-4 border-b border-stone-50 bg-white">
+              <div className="relative group">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 w-4 h-4 group-focus-within:text-amber-500 transition-colors" />
+                <input 
+                  type="text" 
+                  placeholder="Kod ilə axtar..." 
+                  value={archiveSearchTerm}
+                  onChange={(e) => setArchiveSearchTerm(e.target.value)}
+                  className="w-full bg-stone-50 border-stone-200 border rounded-xl py-3 pl-10 pr-4 focus:ring-4 focus:ring-amber-100 outline-none shadow-sm text-sm font-bold uppercase transition-all"
+                />
+              </div>
+            </div>
             
             <main className="flex-1 overflow-y-auto p-6 scrollbar-hide">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {activeProducts
-                  .filter(p => p.type === activeFolder && !p.isArchived)
+                  .filter(p => p.type === activeFolder && !p.isArchived && (p.code.toLowerCase().includes(archiveSearchTerm.toLowerCase()) || p.name.toLowerCase().includes(archiveSearchTerm.toLowerCase())))
                   .map(p => (
                     <div 
                       key={p.id} 
@@ -2121,7 +2136,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
             <footer className="px-8 py-6 border-t border-stone-100 bg-stone-50/50 flex items-center justify-between">
               <p className="text-xs font-black text-stone-500 uppercase tracking-widest">Seçilib: <span className="text-amber-600">{selectedForArchive.length}</span> məhsul</p>
               <div className="flex space-x-4">
-                <button onClick={() => { setShowMoveToArchiveModal(false); setSelectedForArchive([]); }} className="px-8 py-4 rounded-xl font-black text-stone-400 uppercase tracking-widest text-[11px] border border-stone-200 hover:bg-white transition-all">Ləğv Et</button>
+                <button onClick={() => { setShowMoveToArchiveModal(false); setSelectedForArchive([]); setArchiveSearchTerm(''); }} className="px-8 py-4 rounded-xl font-black text-stone-400 uppercase tracking-widest text-[11px] border border-stone-200 hover:bg-white transition-all">Ləğv Et</button>
                 <button 
                   onClick={handleMoveToArchive}
                   disabled={selectedForArchive.length === 0}
