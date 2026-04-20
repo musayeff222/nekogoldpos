@@ -158,14 +158,6 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     setStockPrintList(prev => prev.filter(item => item.id !== id));
   };
 
-  const handleQuickPrint = (product: Product) => {
-    setLastAddedProduct(product);
-    setTimeout(() => {
-      window.print();
-      setTimeout(() => setLastAddedProduct(null), 10000);
-    }, 500);
-  };
-
   const handlePrintStockList = () => {
     document.body.classList.add('printing');
     window.focus();
@@ -1201,78 +1193,6 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
             <input type="text" placeholder="Kod və ya çəki ilə axtarış..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-white border-2 border-stone-100 rounded-2xl md:rounded-[2.5rem] py-5 md:py-6 pl-16 pr-6 focus:ring-8 focus:ring-amber-50 outline-none shadow-xl text-sm font-bold" />
           </div>
 
-          {/* DESKTOP SON ƏLAVƏLƏR (Recently Added) */}
-          {!searchTerm && !activeFolder && (
-            <div className="bg-white rounded-[2.5rem] p-8 shadow-2xl border border-stone-100 flex flex-col no-print animate-in slide-in-from-top-4">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center space-x-3">
-                  <div className="p-3 bg-amber-50 rounded-2xl text-amber-500 relative">
-                    <History size={24} />
-                    <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
-                    </span>
-                  </div>
-                  <div>
-                    <h4 className="font-black text-stone-800 uppercase tracking-tighter text-xl">SON ƏLAVƏ EDİLƏNLƏR</h4>
-                    <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mt-1">Real-Vaxt Rejimində Yenilənir</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex space-x-4 overflow-x-auto pb-4 scrollbar-hide">
-                {[...products]
-                  .sort((a, b) => {
-                    const aDate = a.id.length >= 8 ? parseInt(a.id.substring(0, 8), 36) : 0;
-                    const bDate = b.id.length >= 8 ? parseInt(b.id.substring(0, 8), 36) : 0;
-                    if (bDate !== aDate) return bDate - aDate;
-                    return b.id.localeCompare(a.id);
-                  })
-                  .slice(0, 10)
-                  .map(p => (
-                    <div 
-                      key={p.id} 
-                      onClick={() => openDetailModal(p)}
-                      className="flex-shrink-0 w-64 bg-stone-50 rounded-[2rem] p-4 border border-stone-100 hover:border-amber-300 hover:shadow-xl transition-all cursor-pointer group"
-                    >
-                      <div className="relative h-40 bg-white rounded-2xl overflow-hidden mb-4 border border-stone-100">
-                        {p.imageUrl ? (
-                          <img src={p.imageUrl} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-stone-100">
-                            <Gem size={48} />
-                          </div>
-                        )}
-                        <div className="absolute top-2 right-2 flex space-x-1">
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleQuickPrint(p);
-                            }}
-                            className="bg-white/90 backdrop-blur-sm p-2 rounded-lg text-amber-600 shadow-md hover:bg-amber-500 hover:text-white transition-all transform hover:scale-110"
-                          >
-                            <Printer size={16} />
-                          </button>
-                        </div>
-                      </div>
-                      <div>
-                        <h5 className="font-black text-stone-800 uppercase text-sm truncate">{p.name}</h5>
-                        <div className="flex items-center justify-between mt-2">
-                           <p className="text-[9px] font-black text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full uppercase">{p.code}</p>
-                           <p className="text-[10px] font-black text-stone-500 uppercase tracking-widest">{p.weight} gr | {p.carat}</p>
-                        </div>
-                        <div className="mt-3 pt-3 border-t border-stone-200/50 flex justify-between items-center">
-                           <p className="text-lg font-black text-stone-900 tracking-tighter">{Number(p.price).toLocaleString()} ₼</p>
-                           <ChevronRight className="text-stone-300 group-hover:translate-x-1 transition-transform" size={16} />
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                }
-              </div>
-            </div>
-          )}
-
           {!activeFolder && !searchTerm ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-6 no-print">
               {(settings.productGroups || []).map((group) => {
@@ -1793,9 +1713,9 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                  <div className="flex-1 space-y-4 overflow-y-auto max-h-[600px] pr-2 scrollbar-hide">
                     {[...products]
                       .sort((a, b) => {
-                        const aDate = a.id.length >= 8 ? parseInt(a.id.substring(0, 8), 36) : 0;
-                        const bDate = b.id.length >= 8 ? parseInt(b.id.substring(0, 8), 36) : 0;
-                        if (bDate !== aDate) return bDate - aDate;
+                        // Priority: ID timestamp extraction or string comparison for stability
+                        // Since id starts with Date.now().toString(36), string comparison is mostly chronological for recent items
+                        if (b.id.length !== a.id.length) return b.id.length - a.id.length;
                         return b.id.localeCompare(a.id);
                       })
                       .slice(0, 15)

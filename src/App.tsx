@@ -122,8 +122,7 @@ const App: React.FC = () => {
       try {
         const query = new URLSearchParams({
           lastSync: lastSyncTimeRef.current,
-          printStation: settings.isPrintStation ? 'true' : 'false',
-          _t: Date.now().toString()
+          printStation: settings.isPrintStation ? 'true' : 'false'
         }).toString();
 
         const controller = new AbortController();
@@ -189,57 +188,6 @@ const App: React.FC = () => {
           });
         }
 
-        // 2.1 Update Customers
-        if (Array.isArray(data.customers) && data.customers.length > 0) {
-          setCustomers(prev => {
-            const updatedNext = [...prev];
-            data.customers.forEach((updatedItem: Customer) => {
-              const index = updatedNext.findIndex(c => c.id === updatedItem.id);
-              if (index !== -1) {
-                updatedNext[index] = updatedItem;
-              } else {
-                updatedNext.push(updatedItem);
-              }
-            });
-            lastSyncedCustomers.current = JSON.stringify(updatedNext);
-            return updatedNext;
-          });
-        }
-
-        // 2.2 Update Scraps
-        if (Array.isArray(data.scraps) && data.scraps.length > 0) {
-          setScraps(prev => {
-            const updatedNext = [...prev];
-            data.scraps.forEach((updatedItem: any) => {
-              const index = updatedNext.findIndex((s: any) => s.id === updatedItem.id);
-              if (index !== -1) {
-                updatedNext[index] = updatedItem;
-              } else {
-                updatedNext.push(updatedItem);
-              }
-            });
-            lastSyncedScraps.current = JSON.stringify(updatedNext);
-            return updatedNext;
-          });
-        }
-
-        // 2.3 Update Expenses
-        if (Array.isArray(data.expenses) && data.expenses.length > 0) {
-          setExpenses(prev => {
-            const updatedNext = [...prev];
-            data.expenses.forEach((updatedItem: any) => {
-              const index = updatedNext.findIndex((e: any) => e.id === updatedItem.id);
-              if (index !== -1) {
-                updatedNext[index] = updatedItem;
-              } else {
-                updatedNext.push(updatedItem);
-              }
-            });
-            lastSyncedExpenses.current = JSON.stringify(updatedNext);
-            return updatedNext;
-          });
-        }
-
         // 3. Handle Print Queue
         if (settings.isPrintStation && Array.isArray(data.printQueue) && data.printQueue.length > 0) {
           for (const job of data.printQueue) {
@@ -298,16 +246,14 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const fetchData = async (retries = 10) => {
+    const fetchData = async (retries = 3) => {
       try {
         const fetchWithType = async (type: string, params: Record<string, string> = {}, timeout = 60000) => {
           const controller = new AbortController();
           const id = setTimeout(() => controller.abort(), timeout);
           
           try {
-            const queryParams = new URLSearchParams(params);
-            queryParams.append('_t', Date.now().toString());
-            const query = queryParams.toString();
+            const query = new URLSearchParams(params).toString();
             const res = await fetch(`/api/data/${type}${query ? `?${query}` : ''}`, {
               signal: controller.signal
             });
@@ -345,7 +291,7 @@ const App: React.FC = () => {
 
         let res;
         try {
-          res = await fetch(`/api/init-data?_t=${Date.now()}`, { signal: controller.signal });
+          res = await fetch('/api/init-data', { signal: controller.signal });
         } catch (err: any) {
           if (err.name === 'AbortError') throw new Error('Initial data load timed out');
           throw err;
@@ -722,7 +668,7 @@ const App: React.FC = () => {
               <span className="text-amber-500 font-black text-xl tracking-tighter">NG</span>
             </div>
           </div>
-          <div className="mt-8 text-center px-6">
+          <div className="mt-8 text-center">
             <h2 className="text-white font-black text-2xl tracking-tighter uppercase mb-2">NEKO GOLD</h2>
             <div className="flex items-center justify-center space-x-2">
               <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
@@ -730,19 +676,6 @@ const App: React.FC = () => {
               <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-bounce"></div>
             </div>
             <p className="text-stone-500 text-[10px] font-black uppercase tracking-[0.3em] mt-4">Sistem Yüklənir</p>
-            
-            {/* Yükləmə çox çəkərsə bərpa düyməsi */}
-            <div className="mt-12 animate-in fade-in duration-1000 [animation-delay:15s]">
-              <button 
-                onClick={() => window.location.reload()}
-                className="text-[11px] font-black text-amber-500/50 hover:text-amber-500 uppercase tracking-widest border border-amber-500/20 px-6 py-3 rounded-xl transition-all"
-              >
-                Gözləmə vaxtı aşılıb? Yenidən Yüklə
-              </button>
-              <p className="text-stone-600 text-[9px] mt-4 uppercase tracking-widest max-w-[200px] mx-auto italic">
-                Shared hosting (Hostinger) istifadə edirsinizsə ilk yükləmə bir az vaxt ala bilər.
-              </p>
-            </div>
           </div>
         </div>
       );
