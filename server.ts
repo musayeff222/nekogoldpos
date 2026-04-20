@@ -68,10 +68,20 @@ async function startServer() {
     limits: { fileSize: 10 * 1024 * 1024 }
   });
 
+  // Ensure path resolution works regardless of execution context
+  const staticPath = path.resolve(__dirname, process.env.NODE_ENV === 'production' ? '.' : 'dist');
+  
   app.use(compression());
   app.use(cors({ origin: true, credentials: true }));
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+  // Iframe and security headers for AI Studio compatibility
+  app.use((req, res, next) => {
+    res.setHeader('Content-Security-Policy', "frame-ancestors 'self' https://*.google.com https://*.ai.studio https://*.run.app https://ais-*.run.app;");
+    res.setHeader('X-Frame-Options', 'ALLOW-FROM https://ai.studio/');
+    next();
+  });
 
   app.use((req, res, next) => {
     const forbiddenPaths = ['/wordpress', '/wp-admin', '/wp-login', '/xmlrpc.php', '/.env', '/config.php'];
@@ -431,13 +441,27 @@ async function startServer() {
     const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
     app.use(vite.middlewares);
   } else {
-    const staticPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(staticPath));
+    // Check multiple possible locations for dist folder due to environment variations
+    const possiblePaths = [
+      staticPath,
+      path.join(process.cwd(), 'dist'),
+      path.join(__dirname, 'dist')
+    ];
+    let finalStaticPath = staticPath;
+    for (const p of possiblePaths) {
+      if (fs.existsSync(path.join(p, 'index.html'))) {
+        finalStaticPath = p;
+        break;
+      }
+    }
+
+    app.use(express.static(finalStaticPath));
+    console.log(`Serving static files from: ${finalStaticPath}`);
     app.get('*', (req, res, next) => {
       if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) {
         return next();
       }
-      res.sendFile(path.join(staticPath, 'index.html'));
+      res.sendFile(path.join(finalStaticPath, 'index.html'));
     });
   }
 
