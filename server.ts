@@ -566,8 +566,8 @@ async function startServer() {
       
       // Optimization: For light products, keep the URL if it's a short path, but remove deep logs
       if (isLight && type === 'products') {
-        // We still remove the heavy stuff to keep the response snappy
-        query = `SELECT JSON_REMOVE(content, '$.logs') as content FROM products`;
+        // Handled below in the stream logic more generically or we can just leave the query as is
+        query = `SELECT content FROM products`;
       }
       
       // Use the underlying connection for streaming (mysql2/promise doesn't support streaming directly)
@@ -600,11 +600,15 @@ async function startServer() {
         let content = row.content;
         if (!content) return;
 
-        // If it's a light fetch but not optimized by SQL (e.g. logs), do it here
-        if (isLight && type === 'logs') {
+        // If it's a light fetch, cleanup the content JSON
+        if (isLight) {
           try {
             const item = JSON.parse(content);
-            // Logs don't have specific heavy fields to remove yet, but we could add some
+            if (type === 'products') {
+              delete item.logs;
+              delete item.imageUrl;
+              delete item.image;
+            }
             content = JSON.stringify(item);
           } catch (e) {
             console.warn(`Failed to parse content for ${type}:`, e);
@@ -867,7 +871,7 @@ async function startServer() {
       const tasks = [
         { key: 'settings', sql: `SELECT content FROM settings LIMIT 1` },
         { key: 'logs', sql: `SELECT content FROM logs ORDER BY created_at DESC LIMIT 50` },
-        { key: 'products', sql: `SELECT JSON_REMOVE(content, '$.logs') as content FROM products` },
+        { key: 'products', sql: `SELECT content FROM products` },
         { key: 'sales', sql: `SELECT content FROM sales ORDER BY updated_at DESC LIMIT 100` },
         { key: 'customers', sql: `SELECT content FROM customers LIMIT 500` },
         { key: 'scraps', sql: `SELECT content FROM scraps ORDER BY updated_at DESC LIMIT 50` },
@@ -883,7 +887,19 @@ async function startServer() {
           if (task.key === 'settings') {
             results[task.key] = rowArray.length > 0 ? JSON.parse(rowArray[0].content) : null;
           } else {
-            results[task.key] = rowArray.map(r => JSON.parse(r.content));
+            results[task.key] = rowArray.map(r => {
+              try {
+                const item = JSON.parse(r.content);
+                if (task.key === 'products') {
+                  delete item.logs;
+                  delete item.imageUrl;
+                  delete item.image; // Just in case
+                }
+                return item;
+              } catch (e) {
+                return null;
+              }
+            }).filter(Boolean);
           }
         } catch (e) {
           console.error(`Init query failed for ${task.key}:`, e);
@@ -930,10 +946,20 @@ async function startServer() {
 
         try {
           const [pRows] = await pool.execute(
-            'SELECT JSON_REMOVE(content, "$.logs") as content FROM products WHERE updated_at >= ?',
+            'SELECT content FROM products WHERE updated_at >= ?',
             [mysqlTimestamp]
           );
-          results.products = (pRows as any[]).map(r => JSON.parse(r.content));
+          results.products = (pRows as any[]).map(r => {
+            try {
+              const item = JSON.parse(r.content);
+              delete item.logs;
+              delete item.imageUrl;
+              delete item.image;
+              return item;
+            } catch (e) {
+              return null;
+            }
+          }).filter(Boolean);
         } catch (e) {
           console.error('Pulse products check failed:', e);
         }
