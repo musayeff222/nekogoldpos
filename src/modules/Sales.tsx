@@ -73,7 +73,12 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
   } | null>(null);
 
   const [showPartialSaleModal, setShowPartialSaleModal] = useState(false);
-  const [partialSaleInfo, setPartialSaleInfo] = useState({ name: '', weight: '' as string | number });
+  const [partialSaleInfo, setPartialSaleInfo] = useState({ 
+    name: '', 
+    weight: '' as string | number,
+    isZeroStock: false,
+    customRemainingWeight: '' as string | number
+  });
 
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
 
@@ -94,7 +99,7 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
         setPreviouslySoldItem(null);
         return;
       }
-      if (found.stockCount === 1) {
+      if (found.stockCount > 0) {
         setCurrentProduct(found);
         setPreviouslySoldItem(null);
       } else {
@@ -154,10 +159,33 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
     setCart(cart.filter(item => item.id !== id));
   };
 
+  const sendTelegramNotification = async (saleRecords: Sale[], total: number, customerName: string) => {
+    try {
+      const itemsText = saleRecords.map(s => `• ${s.productName} (${s.productCode}) - ${s.total} AZN`).join('\n');
+      const message = `<b>💰 YENİ SATIŞ!</b>\n\n` +
+                      `<b>Müştəri:</b> ${customerName}\n` +
+                      `<b>Məhsullar:</b>\n${itemsText}\n\n` +
+                      `<b>Ümumi:</b> ${total} AZN\n` +
+                      `<b>Satıcı:</b> ${user?.username || 'Sistem'}\n` +
+                      `<b>Tarix:</b> ${new Date().toLocaleString('az-AZ')}`;
+
+      await fetch('/api/notify/telegram', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          message,
+          chatIds: settings.telegramChatIds || []
+        })
+      });
+    } catch (error) {
+      console.error('Failed to send telegram notification:', error);
+    }
+  };
+
   const handleCompleteSale = (isCredit: boolean = false, isPartial: boolean = false) => {
     if (cart.length === 0) return;
     
-    // If partial sale, we only support one item in cart for simplicity or we handle the first one
+    // ... existing validation logic ...
     const product = cart[0];
     
     if (isPartial) {
@@ -231,6 +259,9 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
       sellerName: user?.username || 'Sistem'
     }));
 
+    // Send Telegram Notification
+    sendTelegramNotification(newSalesRecords, finalTotalValue, customerInfo.fullName || 'Anonim Müştəri');
+
     setLastTransaction({
       sales: newSalesRecords,
       customer: customerInfo,
@@ -273,12 +304,32 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
     if (isPartial) {
       setProducts(prevProducts => prevProducts.map(p => {
         if (p.id === product.id) {
-          const newSoldWeight = (p.soldWeight || 0) + Number(partialSaleInfo.weight);
-          const remainingWeight = Number(p.weight) - newSoldWeight;
+          const currentSoldWeight = Number(partialSaleInfo.weight);
+          const newSoldWeight = (p.soldWeight || 0) + currentSoldWeight;
+          
+          let finalTotalWeight = Number(p.weight);
+          let finalStockCount = 1;
+
+          // If custom remaining weight is provided, update the total weight of the product
+          if (partialSaleInfo.customRemainingWeight !== '') {
+            const newRemaining = Number(partialSaleInfo.customRemainingWeight);
+            finalTotalWeight = newSoldWeight + newRemaining;
+            if (newRemaining <= 0.001) finalStockCount = 0;
+          } else {
+            const remainingWeight = finalTotalWeight - newSoldWeight;
+            if (remainingWeight <= 0.001) finalStockCount = 0;
+          }
+
+          // If user explicitly chose to zero out stock
+          if (partialSaleInfo.isZeroStock) {
+            finalStockCount = 0;
+          }
+
           const updatedProduct = { 
             ...p, 
+            weight: finalTotalWeight,
             soldWeight: newSoldWeight,
-            stockCount: remainingWeight <= 0.001 ? 0 : 1 // Mark as out of stock if weight is negligible
+            stockCount: finalStockCount
           };
           
           // Save to server immediately
@@ -292,12 +343,21 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
         }
         return p;
       }));
-      addLog(`Hissəli satış edildi: ${product.name} (${product.code})`, 'SALE', `${partialSaleInfo.name}, ${partialSaleInfo.weight}gr`);
+      addLog(`Hissəli satış edildi: ${product.name} (${product.code})`, 'SALE', `${partialSaleInfo.name}, ${partialSaleInfo.weight}gr${partialSaleInfo.isZeroStock ? ' (Məhsul bitdi)' : ''}`);
     } else {
       const cartIds = cart.map(p => p.id);
       setProducts(prevProducts => prevProducts.map(p => {
         if (cartIds.includes(p.id)) {
-          const updatedProduct = { ...p, stockCount: 0 };
+          let updatedProduct: Product;
+          
+          if (p.saleType === 'count') {
+            const newCount = Math.max(0, (p.stockCount || 1) - 1);
+            updatedProduct = { ...p, stockCount: newCount };
+            addLog(`Sayı ilə məhsul satıldı: ${p.name} (${p.code})`, 'SALE', `Qalan say: ${newCount}`);
+          } else {
+            updatedProduct = { ...p, stockCount: 0 };
+            addLog(`Məhsul satıldı (çəki ilə): ${p.name} (${p.code})`, 'SALE', `${p.weight}gr, ${finalTotalValue} ₼`);
+          }
           
           // Save to server immediately
           fetch(`/api/products/${encodeURIComponent(updatedProduct.id)}`, {
@@ -310,12 +370,11 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
         }
         return p;
       }));
-      addLog(`Məhsul satıldı: ${cart.map(p => p.code).join(', ')}`, 'SALE', `${finalTotalValue} ₼`);
     }
 
     setShowCreditModal(false);
     setShowPartialSaleModal(false);
-    setPartialSaleInfo({ name: '', weight: '' });
+    setPartialSaleInfo({ name: '', weight: '', isZeroStock: false, customRemainingWeight: '' });
     setStep(4);
   };
 
@@ -860,24 +919,69 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
                                value={partialSaleInfo.name} 
                                onChange={(e) => setPartialSaleInfo({...partialSaleInfo, name: e.target.value})}
                                placeholder="Məs: Üzük 1, Qızıl parça"
-                               className="w-full bg-stone-950 border border-white/10 rounded-xl py-3 px-4 text-white font-bold outline-none focus:border-amber-500 transition-all"
+                               className="w-full bg-stone-950 border border-white/10 rounded-xl py-3 px-4 text-white font-bold outline-none focus:border-amber-500 transition-all font-mono text-xs"
                              />
                           </div>
-                          <div className="space-y-1">
-                             <label className="text-[9px] font-black text-stone-400 uppercase ml-2">Çəki (gr)</label>
-                             <div className="relative">
-                                <Scale className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-500 w-4 h-4" />
-                                <input 
-                                  type="number" 
-                                  step="0.01"
-                                  value={partialSaleInfo.weight} 
-                                  onChange={(e) => setPartialSaleInfo({...partialSaleInfo, weight: e.target.value})}
-                                  placeholder="0.00"
-                                  className="w-full bg-stone-950 border border-white/10 rounded-xl py-3 pl-12 pr-4 text-white font-black text-xl outline-none focus:border-amber-500 transition-all"
-                                />
-                             </div>
-                             <p className="text-[9px] font-bold text-stone-500 uppercase mt-1 ml-2">Mövcud: {(Number(cart[0].weight) - (cart[0].soldWeight || 0)).toFixed(2)} gr</p>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                               <label className="text-[9px] font-black text-stone-400 uppercase ml-2">Satılan Çəki (gr)</label>
+                               <div className="relative">
+                                  <Scale className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-500 w-4 h-4" />
+                                  <input 
+                                    type="number" 
+                                    step="0.01"
+                                    value={partialSaleInfo.weight} 
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        const sold = Number(val) || 0;
+                                        const currentRemaining = (Number(cart[0].weight) - (cart[0].soldWeight || 0)) - sold;
+                                        setPartialSaleInfo({
+                                            ...partialSaleInfo, 
+                                            weight: val,
+                                            customRemainingWeight: currentRemaining > 0 ? currentRemaining.toFixed(2) : '0'
+                                        });
+                                    }}
+                                    placeholder="0.00"
+                                    className="w-full bg-stone-950 border border-white/10 rounded-xl py-3 pl-12 pr-4 text-white font-black text-lg outline-none focus:border-amber-500 transition-all"
+                                  />
+                               </div>
+                            </div>
+                            <div className="space-y-1">
+                               <label className="text-[9px] font-black text-stone-400 uppercase ml-2">Yeni Qalıq Çəki (gr)</label>
+                               <div className="relative">
+                                  <Scale className="absolute left-4 top-1/2 -translate-y-1/2 text-amber-500/50 w-4 h-4" />
+                                  <input 
+                                    type="number" 
+                                    step="0.01"
+                                    value={partialSaleInfo.customRemainingWeight} 
+                                    onChange={(e) => setPartialSaleInfo({...partialSaleInfo, customRemainingWeight: e.target.value})}
+                                    placeholder="0.00"
+                                    className="w-full bg-stone-950 border border-amber-500/30 rounded-xl py-3 pl-12 pr-4 text-amber-500 font-black text-lg outline-none focus:border-amber-500 transition-all"
+                                  />
+                               </div>
+                            </div>
                           </div>
+                          
+                          <div className="flex items-center space-x-3 p-3 bg-white/5 rounded-xl border border-white/5">
+                             <input 
+                                type="checkbox" 
+                                id="zeroStock"
+                                checked={partialSaleInfo.isZeroStock}
+                                onChange={(e) => setPartialSaleInfo({...partialSaleInfo, isZeroStock: e.target.checked})}
+                                className="w-5 h-5 accent-amber-500 rounded cursor-pointer"
+                             />
+                             <label htmlFor="zeroStock" className="text-[10px] font-black text-stone-300 uppercase cursor-pointer select-none">
+                                Qalıq stoku sıfırla (Məhsul bitdi)
+                             </label>
+                          </div>
+
+                          <div className="text-[9px] font-bold text-stone-500 uppercase flex justify-between px-2">
+                             <span>Mövcud: {(Number(cart[0].weight) - (cart[0].soldWeight || 0)).toFixed(2)} gr</span>
+                             {partialSaleInfo.weight && (
+                                <span className="text-amber-500">Qalacaq: {partialSaleInfo.customRemainingWeight} gr</span>
+                             )}
+                          </div>
+
                           <button 
                             onClick={() => handleCompleteSale(false, true)}
                             className="w-full py-4 bg-amber-500 text-stone-950 rounded-xl font-black uppercase tracking-widest text-xs hover:bg-amber-400 transition-all shadow-lg"

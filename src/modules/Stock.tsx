@@ -35,7 +35,9 @@ import {
   User,
   Truck,
   Archive,
-  ArrowDownToLine
+  ArrowDownToLine,
+  Package,
+  Check
 } from 'lucide-react';
 import { Product, ProductType, AppSettings, ProductLog, Sale, SystemLog } from '@/types';
 import { LabelPrint } from '@/components/LabelPrint';
@@ -74,7 +76,10 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
   const [logDateFilter, setLogDateFilter] = useState('');
   const [selectedForArchive, setSelectedForArchive] = useState<string[]>([]);
   const [selectedForRestore, setSelectedForRestore] = useState<string[]>([]);
-  const [notification, setNotification] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
+  const [showAddWeightModal, setShowAddWeightModal] = useState(false);
+  const [selectedProductForAddWeight, setSelectedProductForAddWeight] = useState<Product | null>(null);
+  const [addWeightForm, setAddWeightForm] = useState({ name: '', weight: '' as string | number, isReplacement: true });
+  const [notification, setNotification] = useState<{ message: string, type: 'success' | 'all' | 'error' } | null>(null);
   
   // Təkrarlanan kod üçün xəta halları
   const [duplicateInStock, setDuplicateInStock] = useState<Product | null>(null);
@@ -112,7 +117,9 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     price: '' as string | number,
     imageUrl: '',
     purchaseDate: new Date().toISOString().split('T')[0],
-    allowPartialSale: false
+    allowPartialSale: false,
+    saleType: undefined as 'weight' | 'count' | undefined,
+    stockCount: 1
   });
 
   const [autoPrint, setAutoPrint] = useState(true);
@@ -278,7 +285,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
       const prefix = getPrefix(newProduct.type);
       setNewProduct(prev => ({ ...prev, code: getNextCode(prefix) }));
     }
-  }, [newProduct.type, isAddingNew]);
+  }, [newProduct.type, isAddingNew, newProduct.code, products, sales]);
 
   // Stokda olan məhsulları süzgəcdən keçiririk (Vazvrat edilmişlər bura daxil deyil)
   const activeProducts = products.filter(p => (Number(p.stockCount) || 0) > 0 && !p.isReturned);
@@ -372,11 +379,12 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
       price: newProduct.price === '' ? 0 : Number(newProduct.price),
       imageUrl: newProduct.imageUrl,
       supplierPrice: 0, 
-      stockCount: 1, 
+      stockCount: newProduct.saleType === 'count' ? (Number(newProduct.stockCount) || 1) : 1, 
       purchaseDate: newProduct.purchaseDate,
       logs: [{ date: new Date().toISOString(), action: 'Sistemə əlavə edildi' }],
-      allowPartialSale: newProduct.allowPartialSale,
-      soldWeight: 0
+      allowPartialSale: newProduct.allowPartialSale || newProduct.saleType === 'weight',
+      soldWeight: 0,
+      saleType: newProduct.saleType || 'weight'
     };
 
     // Save to server immediately
@@ -406,7 +414,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     saveProduct();
 
     setProducts((prev: Product[]) => [productToAdd, ...prev]);
-    addLog(`Yeni məhsul əlavə edildi: ${productToAdd.code}`, 'PRODUCT', `${productToAdd.name}, ${productToAdd.weight}gr, ${productToAdd.carat} əyar`);
+    addLog(`Yeni məhsul əlavə edildi: ${productToAdd.code}`, 'PRODUCT', `${productToAdd.name}, ${productToAdd.weight}${productToAdd.saleType === 'weight' ? 'gr' : ' ədəd'}, ${productToAdd.carat} əyar`);
     setLastAddedProduct(productToAdd);
     
     // Trigger print if autoPrint is enabled
@@ -419,29 +427,27 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     }
 
     setIsAddingNew(false);
-    resetForm();
+    
+    // Update local state first then reset form to ensure getNextCode sees the new product
+    setTimeout(() => {
+      resetFormWithNewProducts([productToAdd, ...products]);
+    }, 100);
     setActiveFolder(productToAdd.type);
   };
 
-  const resetForm = () => {
+  const resetFormWithNewProducts = (_currentProducts: Product[]) => {
     setNewProduct(prev => {
-      const currentGroup = settings.productGroups.find(g => g.name === prev.type) || settings.productGroups[0];
-      const prefix = currentGroup?.prefix || '';
-      
       return {
         ...prev,
-        code: getNextCode(prefix),
+        code: '', // Clear code so useEffect recalculates it when modal re-opens
         name: '',
-        // Keep the previous selections
-        carat: prev.carat,
-        type: prev.type,
-        supplier: prev.supplier,
         brilliant: '',
         weight: '',
         price: '',
         imageUrl: '',
         purchaseDate: new Date().toISOString().split('T')[0],
-        allowPartialSale: false
+        allowPartialSale: prev.saleType === 'weight',
+        stockCount: 1
       };
     });
     setDuplicateInStock(null);
@@ -470,6 +476,10 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     if (stream) stream.getTracks().forEach(track => track.stop());
     setStream(null);
     setIsCameraOpen(false);
+  };
+
+  const resetForm = () => {
+    resetFormWithNewProducts(products);
   };
 
   const resizeImage = (base64Str: string, maxWidth = 800, maxHeight = 800): Promise<string> => {
@@ -666,10 +676,36 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     e.preventDefault();
     if (!selectedProduct || !editForm.code || !editForm.name) return;
 
+    // Detect stock changes for logging
+    const newWeight = editForm.weight !== undefined ? Number(editForm.weight) : Number(selectedProduct.weight);
+    const oldWeight = Number(selectedProduct.weight);
+    const newCount = editForm.stockCount !== undefined ? Number(editForm.stockCount) : Number(selectedProduct.stockCount);
+    const oldCount = Number(selectedProduct.stockCount);
+    
+    const productLogs = [...(selectedProduct.logs || [])];
+    
+    if (newWeight !== oldWeight) {
+      const diff = newWeight - oldWeight;
+      productLogs.push({
+        date: new Date().toISOString(),
+        action: diff > 0 ? `Stok Çəkisi Artırıldı` : `Stok Çəkisi Dəyişdirildi`,
+        details: `${diff > 0 ? '+' : ''}${diff.toFixed(2)}gr (Son çəki: ${newWeight}gr)`
+      });
+    }
+    if (newCount !== oldCount) {
+      const diffCount = newCount - oldCount;
+      productLogs.push({
+        date: new Date().toISOString(),
+        action: diffCount > 0 ? `Stok Sayı Artırıldı` : `Stok Sayı Dəyişdirildi`,
+        details: `${diffCount > 0 ? '+' : ''}${diffCount}ədəd (Son say: ${newCount}ədəd)`
+      });
+    }
+
     const updatedProduct: Product = { 
       ...selectedProduct, 
       ...editForm,
-      stockCount: editForm.isReturned ? 0 : (editForm.stockCount ?? selectedProduct.stockCount)
+      stockCount: editForm.isReturned ? 0 : (editForm.stockCount !== undefined ? Number(editForm.stockCount) : selectedProduct.stockCount),
+      logs: productLogs
     } as Product;
     
     // Save to server immediately
@@ -693,6 +729,72 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     addLog(`Məhsul redaktə edildi: ${updatedProduct.code}`, 'PRODUCT', `Yeni məlumatlar: ${updatedProduct.name}, ${updatedProduct.weight}gr, ${updatedProduct.carat} əyar`);
     setSelectedProduct(updatedProduct);
     showNotification("Məhsul məlumatları uğurla yeniləndi.");
+  };
+
+  const handleAddWeight = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedProductForAddWeight || !addWeightForm.weight) return;
+
+    const addedWeight = Number(addWeightForm.weight);
+    const addedName = addWeightForm.name || 'Əlavə material';
+    
+    const updatedProducts = products.map(p => {
+      if (p.id === selectedProductForAddWeight.id) {
+        let newWeight = Number(p.weight);
+        let newSoldWeight = p.soldWeight || 0;
+        let actionType = 'Çəki Əlavə Edildi';
+
+        if (addWeightForm.isReplacement) {
+          actionType = 'Yerine qoyulma';
+          // Reduction from sold weight logic
+          const currentSold = p.soldWeight || 0;
+          const reduction = Math.min(currentSold, addedWeight);
+          const excess = Math.max(0, addedWeight - reduction);
+          
+          newSoldWeight = currentSold - reduction;
+          newWeight = Number(p.weight) + excess;
+        } else {
+          newWeight = Number(p.weight) + addedWeight;
+        }
+
+        const newLogs = [
+          ...(p.logs || []),
+          { 
+            date: new Date().toISOString(), 
+            action: actionType, 
+            details: `${addedName}: +${addedWeight}gr (Yeni Ümumi: ${newWeight}gr, Satılmış: ${newSoldWeight}gr)`,
+            isAddition: true 
+          }
+        ];
+
+        const updated = { 
+          ...p, 
+          weight: newWeight,
+          soldWeight: newSoldWeight,
+          logs: newLogs,
+          stockCount: 1 
+        };
+
+        // Save to server
+        fetch(`/api/products/${updated.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ product: updated })
+        }).catch(err => console.error('Failed to update product during weight addition:', err));
+
+        return updated;
+      }
+      return p;
+    });
+
+    setProducts(updatedProducts);
+    const totalAdditionalWeight = addWeightForm.isReplacement ? Math.max(0, Number(addWeightForm.weight) - (selectedProductForAddWeight.soldWeight || 0)) : Number(addWeightForm.weight);
+    addLog(`Məhsulun çəkisi artırıldı/yerinə qoyuldu: ${selectedProductForAddWeight.code}`, 'PRODUCT', `Əlavə: ${addedWeight}gr, Yeni ümumi: ${Number(selectedProductForAddWeight.weight) + totalAdditionalWeight}gr`);
+    
+    setShowAddWeightModal(false);
+    setAddWeightForm({ name: '', weight: '', isReplacement: true });
+    setSelectedProductForAddWeight(null);
+    showNotification('Məhsulun çəkisi uğurla artırıldı.');
   };
 
   const handleMoveToArchive = () => {
@@ -950,6 +1052,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                   </div>
                 )}
 
+
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   <div className="space-y-1"><label className="text-[9px] font-black text-stone-400 uppercase ml-2">Məhsul Kodu</label><input type="text" required value={newProduct.code} onChange={(e) => setNewProduct({...newProduct, code: e.target.value})} className={`w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 font-bold text-base text-stone-800 focus:border-amber-400 outline-none ${(duplicateInStock || duplicateInSales) ? 'border-red-300 bg-red-50' : ''}`} placeholder="YZ-101" /></div>
                   <div className="space-y-1"><label className="text-[9px] font-black text-stone-400 uppercase ml-2">Məhsul Adı</label><input type="text" required value={newProduct.name} onChange={(e) => setNewProduct({...newProduct, name: e.target.value})} className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 font-bold text-base text-stone-800 focus:border-amber-400 outline-none" placeholder="Üzük" /></div>
@@ -967,10 +1070,60 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                        ))}
                     </div>
                   </div>
+                  <div className="space-y-1 md:col-span-3">
+                    <label className="text-[9px] font-black text-stone-400 uppercase ml-2">SATIŞ NÖVÜ (Seçilməsə köhnə qayda ilə işləyəcək)</label>
+                    <div className="flex bg-stone-50 rounded-2xl p-1.5 border border-stone-100 shadow-inner h-[64px]">
+                      <button 
+                        type="button" 
+                        onClick={() => setNewProduct(prev => ({...prev, saleType: prev.saleType === 'weight' ? undefined : 'weight', allowPartialSale: prev.saleType === 'weight' ? false : true}))} 
+                        className={`flex-1 rounded-xl text-[10px] font-black transition-all ${newProduct.saleType === 'weight' ? 'bg-amber-500 text-stone-950 shadow-md scale-[1.02]' : 'text-stone-400 hover:bg-white/50'}`}
+                      >
+                        ÇƏKİ İLƏ SATIŞ
+                      </button>
+                      <button 
+                        type="button" 
+                        onClick={() => setNewProduct(prev => ({...prev, saleType: prev.saleType === 'count' ? undefined : 'count', allowPartialSale: false}))} 
+                        className={`flex-1 rounded-xl text-[10px] font-black transition-all ${newProduct.saleType === 'count' ? 'bg-amber-500 text-stone-950 shadow-md scale-[1.02]' : 'text-stone-400 hover:bg-white/50'}`}
+                      >
+                        SAY İLƏ SATIŞ
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1"><label className="text-[9px] font-black text-amber-600 uppercase ml-2">Çəki (gr)</label><div className="relative"><Scale className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 w-5 h-5" /><input type="number" step="0.001" required value={newProduct.weight} onChange={(e) => setNewProduct({...newProduct, weight: e.target.value})} className="w-full bg-stone-900 border-none rounded-2xl py-4 pl-12 pr-4 font-black text-2xl text-white outline-none" placeholder="0.00" /></div></div>
+                  {newProduct.saleType === 'count' ? (
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-amber-600 uppercase ml-2">Məhsul Sayı (Stok)</label>
+                      <div className="relative">
+                        <Package className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 w-5 h-5" />
+                        <input 
+                          type="number" 
+                          required 
+                          value={newProduct.stockCount} 
+                          onChange={(e) => setNewProduct({...newProduct, stockCount: Number(e.target.value)})} 
+                          className="w-full bg-stone-900 border-none rounded-2xl py-4 pl-12 pr-4 font-black text-2xl text-white outline-none" 
+                          placeholder="1" 
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-amber-600 uppercase ml-2">Çəki (gr)</label>
+                      <div className="relative">
+                        <Scale className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 w-5 h-5" />
+                        <input 
+                          type="number" 
+                          step="0.001" 
+                          required 
+                          value={newProduct.weight} 
+                          onChange={(e) => setNewProduct({...newProduct, weight: e.target.value})} 
+                          className="w-full bg-stone-900 border-none rounded-2xl py-4 pl-12 pr-4 font-black text-2xl text-white outline-none" 
+                          placeholder="0.00" 
+                        />
+                      </div>
+                    </div>
+                  )}
                   <div className="space-y-1"><label className="text-[9px] font-black text-amber-600 uppercase ml-2">Daş</label><div className="relative"><Sparkles className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 w-5 h-5" /><input type="text" value={newProduct.brilliant} onChange={(e) => setNewProduct({...newProduct, brilliant: e.target.value})} className="w-full bg-stone-900 border-none rounded-2xl py-4 pl-12 pr-4 font-black text-lg text-white outline-none" placeholder="ct VS" /></div></div>
                 </div>
 
@@ -1019,9 +1172,10 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                         price: newProduct.price === '' ? 0 : Number(newProduct.price),
                         imageUrl: newProduct.imageUrl,
                         supplierPrice: 0,
-                        stockCount: 1,
+                        stockCount: newProduct.saleType === 'count' ? (Number(newProduct.stockCount) || 1) : 1,
                         purchaseDate: newProduct.purchaseDate,
-                        logs: []
+                        logs: [],
+                        saleType: newProduct.saleType || 'weight'
                       };
                       setLastAddedProduct(tempProduct);
                       setTimeout(() => {
@@ -1463,13 +1617,22 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                           <td className="px-8 py-5 text-center">
                             <div className="flex items-center justify-center space-x-2">
                               {p.allowPartialSale && (
-                                <button 
-                                  onClick={(e) => { e.stopPropagation(); setSelectedProductForLog(p); setShowPartialLogModal(true); }} 
-                                  className="p-4 bg-stone-100 text-stone-600 hover:bg-stone-200 rounded-2xl transition-all shadow-sm"
-                                  title="Satış Logları"
-                                >
-                                  <History size={20} />
-                                </button>
+                                <>
+                                  <button 
+                                    onClick={(e) => { e.stopPropagation(); setSelectedProductForLog(p); setShowPartialLogModal(true); }} 
+                                    className="p-4 bg-stone-100 text-stone-600 hover:bg-stone-200 rounded-2xl transition-all shadow-sm"
+                                    title="Satış Logları"
+                                  >
+                                    <History size={20} />
+                                  </button>
+                                  <button 
+                                    onClick={(e) => { e.stopPropagation(); setSelectedProductForAddWeight(p); setAddWeightForm({ name: '', weight: '', isReplacement: true }); setShowAddWeightModal(true); }} 
+                                    className="p-4 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-2xl transition-all shadow-sm"
+                                    title="Çəki Əlavə Et"
+                                  >
+                                    <Plus size={20} />
+                                  </button>
+                                </>
                               )}
                               <button onClick={(e) => { e.stopPropagation(); openDetailModal(p); }} className="p-4 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded-2xl transition-all shadow-sm"><Edit2 size={20} /></button>
                               <button onClick={(e) => { e.stopPropagation(); handleDeleteProduct(p.id); }} className="p-4 bg-red-50 text-red-600 hover:bg-red-100 rounded-2xl transition-all shadow-sm"><Trash2 size={20} /></button>
@@ -1520,7 +1683,21 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                             <span className="text-[10px] font-bold text-stone-300">•</span>
                             <span className="text-[10px] font-black text-amber-500 uppercase">{p.carat}</span>
                             {p.allowPartialSale && (
-                              <span className="bg-amber-100 text-amber-700 text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-widest">HİSSƏLİ</span>
+                              <div className="flex items-center space-x-2">
+                                <span className="bg-amber-100 text-amber-700 text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-widest">HİSSƏLİ</span>
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); setSelectedProductForLog(p); setShowPartialLogModal(true); }}
+                                  className="p-1.5 bg-stone-100 text-stone-600 rounded-md"
+                                >
+                                  <History size={12} />
+                                </button>
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); setSelectedProductForAddWeight(p); setAddWeightForm({ name: '', weight: '', isReplacement: true }); setShowAddWeightModal(true); }}
+                                  className="p-1.5 bg-emerald-100 text-emerald-600 rounded-md"
+                                >
+                                  <Plus size={12} />
+                                </button>
+                              </div>
                             )}
                             {p.isReturned && (
                               <span className="bg-red-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-widest">VAZVİRAT</span>
@@ -1906,6 +2083,32 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                 </header>
             <main className="flex-1 overflow-y-auto p-8 scrollbar-hide">
                <form id="fullEditForm" onSubmit={handleUpdateProduct} className="space-y-8">
+                  {/* LOGLAR / TARIXÇƏ */}
+                  <div className="bg-stone-50 rounded-3xl p-6 border border-stone-100 space-y-4">
+                     <div className="flex items-center justify-between">
+                       <h4 className="text-[10px] font-black text-stone-400 uppercase tracking-widest flex items-center">
+                         <Clock size={14} className="mr-2" /> Əməliyyat Tarixçəsi
+                       </h4>
+                       <span className="text-[9px] font-black text-amber-600 uppercase bg-amber-100 px-2 py-0.5 rounded-md">Son 10 əməliyyat</span>
+                     </div>
+                     <div className="space-y-4 max-h-[250px] overflow-y-auto pr-2 scrollbar-hide">
+                        {([...((selectedProduct as any)?.logs || [])].reverse()).slice(0, 10).map((log, lidx) => (
+                          <div key={lidx} className="flex space-x-3 items-start group">
+                             <div className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${log.action.includes('Artırıldı') || log.action.includes('Əlavə edildi') ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-stone-200 group-hover:bg-amber-400'} transition-colors`}></div>
+                             <div className="flex-1">
+                                <div className="flex items-center justify-between">
+                                   <p className={`text-[10px] font-black uppercase leading-none ${log.action.includes('Artırıldı') || log.action.includes('Əlavə edildi') ? 'text-green-600' : 'text-stone-900'}`}>{log.action}</p>
+                                   <span className="text-[8px] font-bold text-stone-300 uppercase">{new Date(log.date).toLocaleDateString()} {new Date(log.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                </div>
+                                <p className={`text-[9px] font-bold mt-1 uppercase tracking-wider ${log.action.includes('Artırıldı') || log.action.includes('Əlavə edildi') ? 'text-green-500/70' : 'text-stone-400'}`}>{log.details}</p>
+                             </div>
+                          </div>
+                        ))}
+                        {(!(selectedProduct as any)?.logs || (selectedProduct as any).logs.length === 0) && (
+                          <p className="text-center py-6 text-[9px] font-black text-stone-300 uppercase tracking-[0.2em]">Heç bir əməliyyat qeydə alınmayıb</p>
+                        )}
+                     </div>
+                  </div>
                   <div className="flex flex-col items-center space-y-4">
                     <div 
                       onClick={() => {
@@ -1960,6 +2163,98 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-stone-400 uppercase ml-2">SATIŞ NÖVÜ</label>
+                          <div className="flex bg-stone-50 rounded-xl p-1 border-2 border-stone-100 h-[58px]">
+                            <button 
+                              type="button" 
+                              onClick={() => setEditForm({...editForm, saleType: 'weight', allowPartialSale: true})} 
+                              className={`flex-1 rounded-lg text-[10px] font-black transition-all ${ (editForm.saleType || selectedProduct.saleType) === 'weight' ? 'bg-amber-500 text-stone-950 shadow-md' : 'text-stone-400 hover:bg-white'}`}
+                            >
+                              ÇƏKİ İLƏ
+                            </button>
+                            <button 
+                              type="button" 
+                              onClick={() => setEditForm({...editForm, saleType: 'count', allowPartialSale: false})} 
+                              className={`flex-1 rounded-lg text-[10px] font-black transition-all ${ (editForm.saleType || selectedProduct.saleType) === 'count' ? 'bg-amber-500 text-stone-950 shadow-md' : 'text-stone-400 hover:bg-white'}`}
+                            >
+                              SAY İLƏ
+                            </button>
+                          </div>
+                       </div>
+                       <div className="space-y-1.5"><label className="text-[10px] font-black text-stone-400 uppercase ml-2">Məhsul Kodu</label><input type="text" value={editForm.code !== undefined ? editForm.code : selectedProduct.code} onChange={(e) => setEditForm({...editForm, code: e.target.value})} className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-4 px-5 font-black text-stone-800 outline-none" /></div>
+                  </div>
+
+                  {(editForm.saleType || selectedProduct.saleType) === 'count' ? (
+                    <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 space-y-3">
+                      <label className="text-[10px] font-black text-amber-600 uppercase block ml-2">STOCK SƏVİYYƏSİ (ƏDƏD)</label>
+                      <div className="flex items-center space-x-4">
+                          <button 
+                            type="button" 
+                            onClick={() => {
+                              const current = Number(editForm.stockCount !== undefined ? editForm.stockCount : selectedProduct.stockCount) || 0;
+                              if (current > 0) {
+                                const newVal = current - 1;
+                                setEditForm({...editForm, stockCount: newVal});
+                              }
+                            }}
+                            className="w-12 h-12 bg-white border border-amber-200 rounded-xl flex items-center justify-center text-amber-600 shadow-sm active:scale-95"
+                          >
+                            <Plus size={20} className="rotate-45" />
+                          </button>
+                          <div className="flex-1 bg-white border-2 border-amber-200 rounded-xl py-2 font-black text-2xl text-center text-amber-900 shadow-inner">
+                            {editForm.stockCount !== undefined ? editForm.stockCount : selectedProduct.stockCount}
+                          </div>
+                          <button 
+                            type="button" 
+                            onClick={() => {
+                              const current = Number(editForm.stockCount !== undefined ? editForm.stockCount : selectedProduct.stockCount) || 0;
+                              const newVal = current + 1;
+                              setEditForm({...editForm, stockCount: newVal});
+                            }}
+                            className="w-12 h-12 bg-white border border-amber-200 rounded-xl flex items-center justify-center text-amber-600 shadow-sm active:scale-95"
+                          >
+                            <Plus size={20} />
+                          </button>
+                      </div>
+                      <p className="text-[9px] font-bold text-amber-400 uppercase text-center mt-2 italic">Dəyişikliklər "Yadda Saxla" düyməsinə basdıqdan sonra aktiv olur</p>
+                    </div>
+                  ) : (
+                    <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 space-y-3">
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="text-[10px] font-black text-amber-600 uppercase block ml-2">STOK SƏVİYYƏSİ (ÇƏKİ)</label>
+                        <button 
+                          type="button"
+                          onClick={() => {
+                             const add = prompt("Əlavə ediləcək çəkini qeyd edin (gr):");
+                             if (add && !isNaN(Number(add))) {
+                                const weightAdd = Number(add);
+                                const currentWeight = Number(editForm.weight !== undefined ? editForm.weight : selectedProduct.weight) || 0;
+                                setEditForm({...editForm, weight: currentWeight + weightAdd});
+                                // Addition note will be handled in handleUpdateProduct logs
+                             }
+                          }}
+                          className="bg-amber-500 text-stone-950 p-1.5 rounded-lg flex items-center space-x-1.5 shadow-sm active:scale-95"
+                        >
+                          <History size={12} />
+                          <span className="text-[8px] font-black uppercase">ÇƏKİ ƏLAVƏ ET</span>
+                        </button>
+                      </div>
+                      <div className="flex items-center space-x-4">
+                          <input 
+                            type="number"
+                            step="0.01"
+                            value={editForm.weight !== undefined ? editForm.weight : selectedProduct.weight}
+                            onChange={(e) => setEditForm({...editForm, weight: Number(e.target.value)})}
+                            className="flex-1 bg-white border-2 border-amber-200 rounded-xl py-3 px-4 font-black text-xl text-center text-amber-900 shadow-inner outline-none"
+                          />
+                          <span className="font-black text-amber-400 text-sm uppercase">GRAM</span>
+                      </div>
+                      <p className="text-[9px] font-bold text-amber-400 uppercase text-center mt-2 italic">Cəmi satılan: {(selectedProduct.soldWeight || 0).toFixed(2)} gr</p>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                       <div className="space-y-1.5">
                          <label className="text-[10px] font-black text-stone-400 uppercase ml-2">Kateqoriya (Qovluq)</label>
                          <select 
                            value={editForm.type || selectedProduct.type} 
@@ -1985,10 +2280,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                            {settings.productGroups.map(g => <option key={g.name} value={g.name}>{g.name}</option>)}
                          </select>
                        </div>
-                       <div className="space-y-1.5"><label className="text-[10px] font-black text-stone-400 uppercase ml-2">Məhsul Kodu</label><input type="text" value={editForm.code || ''} onChange={(e) => setEditForm({...editForm, code: e.target.value})} className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-4 px-5 font-black text-stone-800 outline-none" /></div>
                        <div className="space-y-1.5"><label className="text-[10px] font-black text-stone-400 uppercase ml-2">Ad</label><input type="text" value={editForm.name || ''} onChange={(e) => setEditForm({...editForm, name: e.target.value})} className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-4 px-5 font-black text-stone-800 outline-none" /></div>
-                       <div className="space-y-1.5"><label className="text-[10px] font-black text-stone-400 uppercase ml-2">Çəki (gr)</label><input type="number" step="0.001" value={editForm.weight || ''} onChange={(e) => setEditForm({...editForm, weight: Number(e.target.value)})} className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-4 px-5 font-black text-stone-800 outline-none" /></div>
-                       <div className="space-y-1.5"><label className="text-[10px] font-black text-stone-400 uppercase ml-2">Daş (Brilliant)</label><input type="text" value={editForm.brilliant || ''} onChange={(e) => setEditForm({...editForm, brilliant: e.target.value})} className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-4 px-5 font-black text-stone-800 outline-none" /></div>
                        <div className="space-y-1.5"><label className="text-[10px] font-black text-stone-400 uppercase ml-2">Tədarükçü</label><select value={editForm.supplier || ''} onChange={(e) => setEditForm({...editForm, supplier: e.target.value})} className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-4 px-5 font-black text-stone-800 outline-none cursor-pointer">{settings.suppliers.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
                        <div className="space-y-1.5">
                          <label className="text-[10px] font-black text-stone-400 uppercase ml-2">Əyar</label>
@@ -2188,6 +2480,112 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
         </div>
       )}
 
+      {showAddWeightModal && selectedProductForAddWeight && (
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm z-[150] flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col p-8 border border-stone-100 animate-in zoom-in-95">
+            <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center space-x-4">
+                <div className="w-12 h-12 bg-emerald-500 text-white rounded-2xl flex items-center justify-center shadow-lg">
+                  <Plus size={24} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-stone-900 uppercase tracking-tighter">Çəki Əlavə Et</h3>
+                  <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">{selectedProductForAddWeight.code}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => { setShowAddWeightModal(false); setSelectedProductForAddWeight(null); }}
+                className="p-3 hover:bg-stone-100 rounded-2xl text-stone-400 transition-all"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddWeight} className="space-y-6">
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-stone-400 uppercase ml-2">Material / Parça Adı</label>
+                <input 
+                  type="text" 
+                  value={addWeightForm.name} 
+                  onChange={(e) => setAddWeightForm({...addWeightForm, name: e.target.value})}
+                  placeholder="Məs: Qızıl kırıntı, Əlavə halqa"
+                  className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-3 px-4 text-stone-800 font-bold outline-none focus:border-emerald-500 transition-all text-sm"
+                  required
+                />
+              </div>
+
+              {(selectedProductForAddWeight.soldWeight || 0) > 0 && (
+                <div className="flex items-center space-x-3 p-4 bg-emerald-50 rounded-2xl border border-emerald-100 cursor-pointer select-none transition-all active:scale-95" onClick={() => setAddWeightForm({...addWeightForm, isReplacement: !addWeightForm.isReplacement})}>
+                  <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${addWeightForm.isReplacement ? 'bg-emerald-500 border-emerald-500' : 'bg-white border-emerald-200'}`}>
+                    {addWeightForm.isReplacement && <Check size={14} className="text-white" />}
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-black text-emerald-900 uppercase">Satılmış hissənin yerinə qoyulsun?</p>
+                    <p className="text-[8px] font-bold text-emerald-600 uppercase">Satılmış çəki ({selectedProductForAddWeight.soldWeight} gr) azalacaq</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-stone-400 uppercase ml-2">Əlavə Edilən Çəki (gr)</label>
+                <div className="relative">
+                  <Scale className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 w-4 h-4" />
+                  <input 
+                    type="number" 
+                    step="0.01"
+                    value={addWeightForm.weight} 
+                    onChange={(e) => setAddWeightForm({...addWeightForm, weight: e.target.value})}
+                    placeholder="0.00"
+                    className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-4 pl-12 pr-4 text-stone-900 font-black text-xl outline-none focus:border-emerald-500 transition-all"
+                    required
+                  />
+                </div>
+                <div className="flex flex-col space-y-1 px-2 mt-2">
+                   <div className="flex justify-between items-center">
+                     <p className="text-[9px] font-bold text-stone-400 uppercase">Mövcud Ümumi: {selectedProductForAddWeight.weight} gr</p>
+                     <p className="text-[9px] font-bold text-stone-400 uppercase">Satılmış: {selectedProductForAddWeight.soldWeight || 0} gr</p>
+                   </div>
+                   {addWeightForm.weight && (
+                     <div className="pt-1 mt-1 border-t border-stone-100 flex justify-between items-center">
+                       {(() => {
+                         const added = Number(addWeightForm.weight);
+                         const sold = selectedProductForAddWeight.soldWeight || 0;
+                         let nextSold = sold;
+                         let nextWeight = Number(selectedProductForAddWeight.weight);
+
+                         if (addWeightForm.isReplacement) {
+                           const reduction = Math.min(sold, added);
+                           const excess = Math.max(0, added - reduction);
+                           nextSold = sold - reduction;
+                           nextWeight = Number(selectedProductForAddWeight.weight) + excess;
+                         } else {
+                           nextWeight = Number(selectedProductForAddWeight.weight) + added;
+                         }
+
+                         return (
+                           <>
+                             <p className="text-[9px] font-black text-emerald-600 uppercase">Yeni Ümumi: {nextWeight.toFixed(2)} gr</p>
+                             <p className="text-[9px] font-black text-blue-600 uppercase">Yeni Satılmış: {nextSold.toFixed(2)} gr</p>
+                           </>
+                         )
+                       })()}
+                     </div>
+                   )}
+                </div>
+              </div>
+
+              <button 
+                type="submit"
+                className="w-full py-4 bg-emerald-500 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-emerald-600 transition-all shadow-xl shadow-emerald-200 active:scale-95 flex items-center justify-center space-x-2"
+              >
+                <Plus size={18} />
+                <span>{addWeightForm.isReplacement ? 'Yerine Qoy' : 'Çəkini Artır'}</span>
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
       {showPartialLogModal && selectedProductForLog && (
         <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
           <div className="bg-white w-full max-w-4xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
@@ -2243,41 +2641,84 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-100">
-                    {sales
-                      .filter(s => {
-                        const matchesProduct = s.productId === selectedProductForLog.id && s.isPartial;
-                        const matchesSearch = s.partialName?.toLowerCase().includes(logSearchTerm.toLowerCase()) || 
-                                            s.sellerName?.toLowerCase().includes(logSearchTerm.toLowerCase()) ||
-                                            s.customerName?.toLowerCase().includes(logSearchTerm.toLowerCase());
-                        const matchesDate = !logDateFilter || s.date.startsWith(logDateFilter);
-                        return matchesProduct && matchesSearch && matchesDate;
-                      })
-                      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                      .map((s) => (
-                        <tr key={s.id} className="hover:bg-white transition-colors">
+                    {(() => {
+                      const logEntries = sales
+                        .filter(s => {
+                          const matchesProduct = s.productId === selectedProductForLog.id && s.isPartial;
+                          const matchesSearch = s.partialName?.toLowerCase().includes(logSearchTerm.toLowerCase()) || 
+                                              s.sellerName?.toLowerCase().includes(logSearchTerm.toLowerCase()) ||
+                                              s.customerName?.toLowerCase().includes(logSearchTerm.toLowerCase());
+                          const matchesDate = !logDateFilter || s.date.startsWith(logDateFilter);
+                          return matchesProduct && matchesSearch && matchesDate;
+                        })
+                        .map(s => ({
+                          id: s.id,
+                          name: s.partialName,
+                          weight: s.soldWeight,
+                          date: s.date,
+                          user: s.sellerName || 'Sistem',
+                          customer: s.customerName,
+                          type: 'sale' as const
+                        }));
+
+                      const additionEntries = (selectedProductForLog.logs || [])
+                        .filter(l => l.isAddition)
+                        .filter(l => {
+                          const matchesSearch = l.action.toLowerCase().includes(logSearchTerm.toLowerCase()) || 
+                                              l.details?.toLowerCase().includes(logSearchTerm.toLowerCase());
+                          const matchesDate = !logDateFilter || l.date.startsWith(logDateFilter);
+                          return matchesSearch && matchesDate;
+                        })
+                        .map((l, idx) => {
+                          // Extract name and weight from details if possible
+                          // Format: "Name: +Xgr (Yeni Ümumi: Ygr)"
+                          const weightMatch = l.details?.match(/\+(\d+(\.\d+)?)/);
+                          const nameMatch = l.details?.match(/^([^:]+):/);
+                          return {
+                            id: `log-${idx}`,
+                            name: nameMatch ? nameMatch[1] : 'Məhsul Əlavəsi',
+                            weight: weightMatch ? Number(weightMatch[1]) : 0,
+                            date: l.date,
+                            user: 'Sistem',
+                            customer: '-',
+                            type: 'addition' as const
+                          };
+                        });
+
+                      const allEntries = [...logEntries, ...additionEntries].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+                      return allEntries.map((entry) => (
+                        <tr key={entry.id} className={`hover:bg-white transition-colors ${entry.type === 'addition' ? 'bg-emerald-50/30' : ''}`}>
                           <td className="px-6 py-4">
-                            <p className="font-black text-stone-900 text-sm uppercase">{s.partialName}</p>
+                            <div className="flex items-center">
+                              {entry.type === 'addition' && <Plus size={12} className="text-emerald-500 mr-2" />}
+                              <p className={`font-black text-sm uppercase ${entry.type === 'addition' ? 'text-emerald-700' : 'text-stone-900'}`}>{entry.name}</p>
+                            </div>
                           </td>
-                          <td className="px-6 py-4 text-center font-black text-amber-600 text-sm">{s.soldWeight} gr</td>
+                          <td className={`px-6 py-4 text-center font-black text-sm ${entry.type === 'addition' ? 'text-emerald-600' : 'text-amber-600'}`}>
+                            {entry.type === 'addition' ? '+' : ''}{entry.weight} gr
+                          </td>
                           <td className="px-6 py-4 text-center">
                             <div className="flex flex-col items-center">
-                              <span className="text-[11px] font-black text-stone-900">{new Date(s.date).toLocaleDateString('az-AZ')}</span>
-                              <span className="text-[9px] font-bold text-stone-400">{new Date(s.date).toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit' })}</span>
+                              <span className="text-[11px] font-black text-stone-900">{new Date(entry.date).toLocaleDateString('az-AZ')}</span>
+                              <span className="text-[9px] font-bold text-stone-400">{new Date(entry.date).toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit' })}</span>
                             </div>
                           </td>
                           <td className="px-6 py-4 text-center">
-                            <span className="text-[10px] font-black text-stone-600 uppercase bg-stone-100 px-2 py-1 rounded-lg">{s.sellerName || 'Sistem'}</span>
+                            <span className="text-[10px] font-black text-stone-600 uppercase bg-stone-100 px-2 py-1 rounded-lg">{entry.user}</span>
                           </td>
                           <td className="px-6 py-4 text-center">
-                            <span className="text-[10px] font-black text-stone-600 uppercase">{s.customerName}</span>
+                            <span className="text-[10px] font-black text-stone-600 uppercase">{entry.customer}</span>
                           </td>
                         </tr>
-                      ))}
-                    {sales.filter(s => s.productId === selectedProductForLog.id && s.isPartial).length === 0 && (
+                      ));
+                    })()}
+                    {sales.filter(s => s.productId === selectedProductForLog.id && s.isPartial).length === 0 && 
+                     (selectedProductForLog.logs || []).filter(l => l.isAddition).length === 0 && (
                       <tr>
                         <td colSpan={5} className="px-6 py-20 text-center opacity-40">
                           <History size={48} className="mx-auto text-stone-200 mb-4" />
-                          <p className="text-xs font-black text-stone-400 uppercase tracking-widest">Hələ ki, hissəli satış edilməyib</p>
+                          <p className="text-xs font-black text-stone-400 uppercase tracking-widest">Hələ ki, hər hansı tarixçə yoxdur</p>
                         </td>
                       </tr>
                     )}

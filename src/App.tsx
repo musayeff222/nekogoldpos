@@ -10,6 +10,7 @@ import {
   Settings as SettingsIcon, 
   BarChart3,
   Menu,
+  X,
   ChevronLeft,
   LayoutGrid,
   History,
@@ -38,6 +39,7 @@ const App: React.FC = () => {
   const [user, setUser] = useState<{ username: string } | null>(null);
   const [currentPage, setCurrentPage] = useState<Page>(Page.Sales);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isBackgroundLoading, setIsBackgroundLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -106,7 +108,8 @@ const App: React.FC = () => {
     receiptFontWeight: '600',
     labelFontWeight: '600',
     isPrintStation: false,
-    remotePrintEnabled: false
+    remotePrintEnabled: false,
+    telegramChatIds: []
   });
 
   // Central Heartbeat / Pulse for real-time updates
@@ -752,25 +755,63 @@ const App: React.FC = () => {
       </aside>
 
       {/* MOBILE BOTTOM NAV */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-stone-900 border-t border-white/10 z-50 flex justify-around items-center py-2 px-1 no-print">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-stone-900 border-t border-white/10 z-50 flex justify-around items-center py-2 px-1 no-print safe-bottom-padding">
         {navItems.filter(item => [Page.Sales, Page.Stock, Page.Return, Page.Reports].includes(item.id)).map((item) => (
           <button
             key={item.id}
-            onClick={() => setCurrentPage(item.id)}
-            className={`flex flex-col items-center p-2 rounded-xl transition-all ${currentPage === item.id ? 'text-amber-500 bg-white/5' : 'text-stone-50'}`}
+            onClick={() => { setCurrentPage(item.id); setIsMobileMenuOpen(false); }}
+            className={`flex flex-col items-center p-2 rounded-xl transition-all ${currentPage === item.id ? 'text-amber-500 bg-white/5 shadow-inner' : 'text-stone-400'}`}
           >
-            {React.cloneElement(item.icon as any, { size: 20 })}
-            <span className="text-[9px] font-black mt-1 uppercase tracking-tighter">{item.label}</span>
+            {React.cloneElement(item.icon as any, { size: 22 })}
+            <span className="text-[8px] font-black mt-1 uppercase tracking-wider">{item.label}</span>
           </button>
         ))}
         <button
-          onClick={() => setCurrentPage(Page.Settings)}
-          className={`flex flex-col items-center p-2 rounded-xl ${currentPage === Page.Settings ? 'text-amber-500 bg-white/5' : 'text-stone-50'}`}
+          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          className={`flex flex-col items-center p-2 rounded-xl transition-all ${isMobileMenuOpen ? 'text-amber-500 bg-white/5' : 'text-stone-400'}`}
         >
-          <LayoutGrid size={20} />
-          <span className="text-[9px] font-black mt-1 uppercase tracking-tighter">Menyu</span>
+          <LayoutGrid size={22} />
+          <span className="text-[8px] font-black mt-1 uppercase tracking-wider">Menyu</span>
         </button>
       </nav>
+
+      {/* MOBILE MENU DRAWER */}
+      {isMobileMenuOpen && (
+        <div className="fixed inset-0 z-[60] md:hidden">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)}></div>
+          <div className="absolute bottom-20 left-4 right-4 bg-stone-900 rounded-[2.5rem] p-6 shadow-2xl border border-white/10 animate-in slide-in-from-bottom duration-300">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-amber-500 font-black text-xl tracking-tighter">NAVİQASİYA</h2>
+              <button 
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center text-white"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-3 max-h-[60vh] overflow-y-auto scrollbar-hide py-2">
+              {navItems.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => { setCurrentPage(item.id); setIsMobileMenuOpen(false); }}
+                  className={`flex flex-col items-center justify-center p-4 rounded-2xl transition-all border ${currentPage === item.id ? 'bg-amber-500 border-amber-600 text-amber-950' : 'bg-white/5 border-transparent text-stone-400'}`}
+                >
+                  {item.icon}
+                  <span className="text-[9px] font-black mt-2 text-center leading-tight uppercase">{item.label}</span>
+                </button>
+              ))}
+            </div>
+            <div className="mt-6 pt-6 border-t border-white/10">
+              <button
+                onClick={handleLogout}
+                className="w-full bg-red-500/10 text-red-500 py-4 rounded-2xl font-black uppercase text-xs tracking-widest flex items-center justify-center"
+              >
+                <LogOut size={18} className="mr-2" /> Çıxış
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MAIN CONTENT AREA */}
       <main className="flex-1 h-full overflow-y-auto bg-stone-50 scrollbar-hide pb-24 md:pb-0 no-print">

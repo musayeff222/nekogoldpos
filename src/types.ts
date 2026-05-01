@@ -4,6 +4,8 @@ export type ProductType = string;
 export interface ProductLog {
   date: string;
   action: string;
+  details?: string;
+  isAddition?: boolean;
 }
 
 export interface ProductGroup {
@@ -31,6 +33,8 @@ export interface Product {
   logs: ProductLog[]; // Dəyişiklik tarixçəsi
   allowPartialSale?: boolean;
   soldWeight?: number; // Hissəli satışda satılan ümumi çəki
+  saleType?: 'weight' | 'count';
+  soldCount?: number; 
 }
 
 export interface Customer {
@@ -138,6 +142,7 @@ export interface AppSettings {
   labelFontWeight: string;
   isPrintStation?: boolean;
   remotePrintEnabled?: boolean;
+  telegramChatIds?: string[];
 }
 
 export interface SystemLog {

@@ -23,6 +23,10 @@ body {
   scrollbar-width: none;
 }
 
+.safe-bottom-padding {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
 .brand-font {
   font-family: 'Georgia', serif;
   letter-spacing: 0.1em;

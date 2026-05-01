@@ -37,6 +37,7 @@ const SettingsModule: React.FC<SettingsProps> = ({
   const [newGroupPrefix, setNewGroupPrefix] = useState('');
   const [newSupplier, setNewSupplier] = useState('');
   const [newCarat, setNewCarat] = useState('');
+  const [newChatId, setNewChatId] = useState('');
   const [editingGroup, setEditingGroup] = useState<{ index: number, name: string, prefix: string } | null>(null);
   const [editingType, setEditingType] = useState<{ index: number, value: string } | null>(null);
   const [editingSupplier, setEditingSupplier] = useState<{ index: number, value: string } | null>(null);
@@ -247,7 +248,8 @@ const SettingsModule: React.FC<SettingsProps> = ({
       stockCount: 1,
       purchaseDate: new Date().toISOString(),
       logs: [],
-      brilliant: '0.03ct'
+      brilliant: '0.03ct',
+      saleType: 'weight'
     };
     setTestProduct(sampleProduct);
     setTimeout(() => {
@@ -324,12 +326,21 @@ const SettingsModule: React.FC<SettingsProps> = ({
     setLocalSettings({ ...localSettings, carats: [...localSettings.carats, val] });
     setNewCarat('');
   };
+  
+  const addTelegramChatId = () => {
+    const val = newChatId.trim();
+    if (!val) return;
+    const currentIds = localSettings.telegramChatIds || [];
+    if (currentIds.includes(val)) return;
+    setLocalSettings({ ...localSettings, telegramChatIds: [...currentIds, val] });
+    setNewChatId('');
+  };
 
-  const removeItem = (list: 'productTypes' | 'suppliers' | 'carats' | 'productGroups', item: any) => {
+  const removeItem = (list: 'productTypes' | 'suppliers' | 'carats' | 'productGroups' | 'telegramChatIds', item: any) => {
     if (list === 'productGroups') {
       setLocalSettings({ ...localSettings, productGroups: (localSettings.productGroups || []).filter(g => g !== item) });
     } else {
-      setLocalSettings({ ...localSettings, [list]: localSettings[list].filter(i => i !== item) });
+      setLocalSettings({ ...localSettings, [list]: (localSettings[list] as any[] || []).filter(i => i !== item) });
     }
   };
 
@@ -679,6 +690,48 @@ const SettingsModule: React.FC<SettingsProps> = ({
                   )}
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+
+        {/* TELEGRAM BİLDİRİŞLƏRİ */}
+        <div className="bg-white rounded-[2rem] border border-slate-100 shadow-xl overflow-hidden flex flex-col min-h-[300px]">
+          <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+            <h3 className="font-black text-slate-800 text-xs uppercase tracking-widest flex items-center">
+              <Plus size={18} className="mr-2 text-indigo-500"/> TELEGRAM BİLDİRİŞ (ID)
+            </h3>
+            <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
+              {(localSettings.telegramChatIds || []).length}
+            </span>
+          </div>
+          <div className="p-6 space-y-4">
+            <p className="text-[9px] text-slate-400 font-bold leading-tight">
+              Botdan bildiriş almaq istədiyiniz Chat ID-ləri bura əlavə edin.
+            </p>
+            <div className="flex space-x-2">
+              <input 
+                type="text" 
+                placeholder="Chat ID (Məs: 1234567)" 
+                value={newChatId} 
+                onChange={(e) => setNewChatId(e.target.value)} 
+                className="flex-1 bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-2.5 text-xs font-bold" 
+              />
+              <button onClick={addTelegramChatId} className="bg-slate-900 text-indigo-500 p-2.5 rounded-xl">
+                <Plus size={20} />
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {(localSettings.telegramChatIds || []).map((id, idx) => (
+                <div key={id + idx} className="bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-lg text-[10px] font-black border border-emerald-100 flex items-center group">
+                  {id}
+                  <button onClick={() => removeItem('telegramChatIds', id)} className="ml-2 text-emerald-300 hover:text-red-500 transition-colors">
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+              {(localSettings.telegramChatIds || []).length === 0 && (
+                <div className="text-[10px] text-slate-300 italic py-4">Hələ ID əlavə edilməyib.</div>
+              )}
             </div>
           </div>
         </div>

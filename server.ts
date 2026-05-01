@@ -390,6 +390,58 @@ async function startServer() {
     }
   });
 
+  app.post('/api/notify/telegram', async (req: Request, res: Response) => {
+    const { message, chatIds } = req.body;
+    const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+    const DEFAULT_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+
+    if (!BOT_TOKEN) {
+      console.warn('Telegram Bot Token is missing');
+      return res.status(200).json({ status: 'skipped', reason: 'token_not_configured' });
+    }
+
+    if (!message) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+
+    // Determine target chat IDs
+    let targets: string[] = [];
+    if (Array.isArray(chatIds) && chatIds.length > 0) {
+      targets = chatIds;
+    } else if (DEFAULT_CHAT_ID) {
+      targets = [DEFAULT_CHAT_ID];
+    }
+
+    if (targets.length === 0) {
+      return res.status(200).json({ status: 'skipped', reason: 'no_chat_ids_provided' });
+    }
+
+    try {
+      const results = await Promise.all(targets.map(async (id) => {
+        try {
+          const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: id,
+              text: message,
+              parse_mode: 'HTML'
+            })
+          });
+          return await response.json();
+        } catch (e) {
+          console.error(`Failed to send to ${id}:`, e);
+          return { error: true, id };
+        }
+      }));
+
+      res.json({ status: 'success', results });
+    } catch (error) {
+      console.error('Telegram notification error:', error);
+      res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+
   // --- PRODUCT MANAGEMENT ENDPOINTS ---
   app.post('/api/products/add', async (req: Request, res: Response) => {
     const { product } = req.body;
