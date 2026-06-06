@@ -338,59 +338,56 @@ const SettingsModule: React.FC<SettingsProps> = ({
 
   const downloadKioskScript = () => {
     const appUrl = window.location.origin; 
-    const scriptContent = `@echo off
-chcp 65001 > nul
-title NEKO GOLD - Masaüstü Qısayol Yaradıcısı
-echo ====================================================
-echo ✨ NEKO GOLD Kiosk və Səssiz Çap Qısayolu Yaradılır
-echo ====================================================
-echo.
+    const scriptContent = [
+      "@echo off",
+      "chcp 65001 > nul",
+      "title NEKO GOLD - Masaustu Qisayol Yaradicisi",
+      "echo ====================================================",
+      "echo   NEKO GOLD Kiosk ve Sessiz Cap Qisayolu Yaradilir",
+      "echo ====================================================",
+      "echo.",
+      `set "APP_URL=${appUrl}"`,
+      "echo Google Chrome brauzeri axtarilir...",
+      "set \"CHROME_PATH=\"",
+      "",
+      "if exist \"%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe\" (",
+      "    set \"CHROME_PATH=%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe\"",
+      ") else if exist \"%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe\" (",
+      "    set \"CHROME_PATH=%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe\"",
+      ") else if exist \"%LocalAppData%\\Google\\Chrome\\Application\\chrome.exe\" (",
+      "    set \"CHROME_PATH=%LocalAppData%\\Google\\Chrome\\Application\\chrome.exe\"",
+      ") else if exist \"%ProgramFiles%\\Microsoft\\Edge\\Application\\msedge.exe\" (",
+      "    set \"CHROME_PATH=%ProgramFiles%\\Microsoft\\Edge\\Application\\msedge.exe\"",
+      ") else if exist \"%ProgramFiles(x86)%\\Microsoft\\Edge\\Application\\msedge.exe\" (",
+      "    set \"CHROME_PATH=%ProgramFiles(x86)%\\Microsoft\\Edge\\Application\\msedge.exe\"",
+      ")",
+      "",
+      "if \"%CHROME_PATH%\"==\"\" (",
+      "    echo Google Chrome ve ya Microsoft Edge tapilmadi!",
+      "    echo Zehmet olmasa Chrome brauzerini qurasdirin.",
+      "    pause",
+      "    exit /b",
+      ")",
+      "",
+      "echo Tapildi: %CHROME_PATH%",
+      "echo Masaustune qisayol (LNK) elave edilir...",
+      "",
+      "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$ws = New-Object -ComObject WScript.Shell; $desktop = $ws.SpecialFolders.Item('Desktop'); $shortcut = $ws.CreateShortcut($desktop + '\\\\NEKO GOLD Kiosk.lnk'); $shortcut.TargetPath = '%CHROME_PATH%'; $shortcut.Arguments = '--kiosk --kiosk-printing \\\"%APP_URL%\\\"'; $shortcut.WorkingDirectory = [System.IO.Path]::GetDirectoryName('%CHROME_PATH%'); $shortcut.Save()\"",
+      "",
+      "echo.",
+      "echo ====================================================",
+      "echo   UGURLA TAMAMLANDI!",
+      "echo ====================================================",
+      "echo.",
+      "echo Masaustunuzde 'NEKO GOLD Kiosk' adinda qisayol yaradildi.",
+      "echo Sessiz cap (silent printing) ve tam ekran kiosk rejimi ile",
+      "echo baslamaq ucun hemin qisayoldan istifade edin.",
+      "echo.",
+      "pause"
+    ].join("\r\n");
 
-set "APP_URL=${appUrl}"
-
-echo 🔍 Google Chrome brauzeri axtarılır...
-set "CHROME_PATH="
-
-if exist "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe" (
-    set "CHROME_PATH=%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe"
-) else if exist "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe" (
-    set "CHROME_PATH=%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe"
-) else if exist "%LocalAppData%\\Google\\Chrome\\Application\\chrome.exe" (
-    set "CHROME_PATH=%LocalAppData%\\Google\\Chrome\\Application\\chrome.exe"
-) else if exist "%ProgramFiles%\\Microsoft\\Edge\\Application\\msedge.exe" (
-    set "CHROME_PATH=%ProgramFiles%\\Microsoft\\Edge\\Application\\msedge.exe"
-) else if exist "%ProgramFiles(x86)%\\Microsoft\\Edge\\Application\\msedge.exe" (
-    set "CHROME_PATH=%ProgramFiles(x86)%\\Microsoft\\Edge\\Application\\msedge.exe"
-)
-
-if "%CHROME_PATH%"=="" (
-    echo ❌ Google Chrome və ya Microsoft Edge tapılmadı!
-    echo Zəhmət olmasa Chrome brauzerini quraşdırın.
-    pause
-    exit /b
-)
-
-echo 📌 Tapıldı: %CHROME_PATH%
-echo 🚀 Masaüstünə qısayol (LNK) əlavə edilir...
-
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ws = New-Object -ComObject WScript.Shell; $desktop = $ws.SpecialFolders.Item('Desktop'); $shortcut = $ws.CreateShortcut($desktop + '\\NEKO GOLD Kiosk.lnk'); $shortcut.TargetPath = '%CHROME_PATH%'; $shortcut.Arguments = '--kiosk --kiosk-printing \\"%APP_URL%\\"'; $shortcut.WorkingDirectory = Split-Path '%CHROME_PATH%'; $shortcut.Save()"
-
-echo.
-echo ====================================================
-echo 🎉 UĞURLA TAMAMLANDI!
-echo ====================================================
-echo.
-echo Masaüstünüzdə "NEKO GOLD Kiosk" adında qısayol yaradıldı.
-echo Səssiz çap (silent printing) və tam ekran kiosk rejimi ilə 
-echo başlamaq üçün həmin qısayoldan istifadə edin.
-echo.
-pause
-`;
-
-    // Write with UTF-8 BOM to guarantee Windows reads the Azerbaijani characters correctly
-    const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
     const byteCharacters = new TextEncoder().encode(scriptContent);
-    const blob = new Blob([bom, byteCharacters], { type: 'text/plain;charset=utf-8' });
+    const blob = new Blob([byteCharacters], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
