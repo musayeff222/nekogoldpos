@@ -372,7 +372,7 @@ const SettingsModule: React.FC<SettingsProps> = ({
       "echo Tapildi: %CHROME_PATH%",
       "echo Masaustune qisayol (LNK) elave edilir...",
       "",
-      "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$ws = New-Object -ComObject WScript.Shell; $desktop = $ws.SpecialFolders.Item('Desktop'); $shortcut = $ws.CreateShortcut($desktop + '\\\\NEKO GOLD Kiosk.lnk'); $shortcut.TargetPath = '%CHROME_PATH%'; $shortcut.Arguments = '--kiosk --kiosk-printing \\\"%APP_URL%\\\"'; $shortcut.WorkingDirectory = [System.IO.Path]::GetDirectoryName('%CHROME_PATH%'); $shortcut.Save()\"",
+      "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$ws = New-Object -ComObject WScript.Shell; $desktop = $ws.SpecialFolders.Item('Desktop'); $shortcut = $ws.CreateShortcut($desktop + '\\\\NEKO GOLD Kiosk.lnk'); $shortcut.TargetPath = '%CHROME_PATH%'; $shortcut.Arguments = '--kiosk --kiosk-printing --user-data-dir=\\\"$($env:LOCALAPPDATA)\\\\NekoGoldChromeProfile\\\" \\\"%APP_URL%\\\"'; $shortcut.WorkingDirectory = [System.IO.Path]::GetDirectoryName('%CHROME_PATH%'); $shortcut.Save()\"",
       "",
       "echo.",
       "echo ====================================================",
