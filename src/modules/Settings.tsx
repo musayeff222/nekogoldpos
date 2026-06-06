@@ -336,6 +336,74 @@ const SettingsModule: React.FC<SettingsProps> = ({
     setNewChatId('');
   };
 
+  const downloadKioskScript = () => {
+    const appUrl = window.location.origin; 
+    const scriptContent = `@echo off
+chcp 65001 > nul
+title NEKO GOLD - Masaüstü Qısayol Yaradıcısı
+echo ====================================================
+echo ✨ NEKO GOLD Kiosk və Səssiz Çap Qısayolu Yaradılır
+echo ====================================================
+echo.
+
+set "APP_URL=${appUrl}"
+
+echo 🔍 Google Chrome brauzeri axtarılır...
+set "CHROME_PATH="
+
+if exist "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe" (
+    set "CHROME_PATH=%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe"
+) else if exist "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe" (
+    set "CHROME_PATH=%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe"
+) else if exist "%LocalAppData%\\Google\\Chrome\\Application\\chrome.exe" (
+    set "CHROME_PATH=%LocalAppData%\\Google\\Chrome\\Application\\chrome.exe"
+) else if exist "%ProgramFiles%\\Microsoft\\Edge\\Application\\msedge.exe" (
+    set "CHROME_PATH=%ProgramFiles%\\Microsoft\\Edge\\Application\\msedge.exe"
+) else if exist "%ProgramFiles(x86)%\\Microsoft\\Edge\\Application\\msedge.exe" (
+    set "CHROME_PATH=%ProgramFiles(x86)%\\Microsoft\\Edge\\Application\\msedge.exe"
+)
+
+if "%CHROME_PATH%"=="" (
+    echo ❌ Google Chrome və ya Microsoft Edge tapılmadı!
+    echo Zəhmət olmasa Chrome brauzerini quraşdırın.
+    pause
+    exit /b
+)
+
+echo 📌 Tapıldı: %CHROME_PATH%
+echo 🚀 Masaüstünə qısayol (LNK) əlavə edilir...
+
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+    "$ws = New-Object -ComObject WScript.Shell; " ^
+    "$desktop = [System.Environment]::GetFolderPath('Desktop'); " ^
+    "$shortcut = $ws.CreateShortcut(\\"$desktop\\NEKO GOLD Kiosk.lnk\\"); " ^
+    "$shortcut.TargetPath = '%CHROME_PATH%'; " ^
+    "$shortcut.Arguments = '--kiosk --kiosk-printing \\"%APP_URL%\\"'; " ^
+    "$shortcut.WorkingDirectory = [System.IO.Path]::GetDirectoryName('%CHROME_PATH%'); " ^
+    "$shortcut.Save()"
+
+echo.
+echo ====================================================
+echo 🎉 UĞURLA TAMAMLANDI!
+echo ====================================================
+echo.
+echo Masaüstünüzdə "NEKO GOLD Kiosk" adında qısayol yaradıldı.
+echo Səssiz çap (silent printing) və tam ekran kiosk rejimi ilə 
+echo başlamaq üçün həmin qısayoldan istifadə edin.
+echo.
+pause
+`;
+
+    const blob = new Blob([scriptContent], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'NekoGold_Kiosk_Yaratici.bat';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
   const removeItem = (list: 'productTypes' | 'suppliers' | 'carats' | 'productGroups' | 'telegramChatIds', item: any) => {
     if (list === 'productGroups') {
       setLocalSettings({ ...localSettings, productGroups: (localSettings.productGroups || []).filter(g => g !== item) });
@@ -1133,6 +1201,47 @@ const SettingsModule: React.FC<SettingsProps> = ({
             <p className="text-[10px] text-slate-400 font-bold italic ml-4 leading-normal">
               * Diqqət: Səssiz çap üçün Chrome brauzerini xüsusi parametrlərlə başlatmalısınız.
             </p>
+            {/* PWA & Automatic Kiosk Installation and Shortcut Creator */}
+            <div className="mt-4 p-5 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white rounded-[2rem] border border-indigo-500/30 shadow-xl space-y-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center border border-indigo-400/30">
+                  <Download size={20} />
+                </div>
+                <div>
+                  <h4 className="text-xs font-black uppercase tracking-wider text-indigo-300">Tətbiq Kimi Yüklə & Kiosk</h4>
+                  <p className="text-[9px] text-slate-300 font-bold">Avtomatik səssiz çap və tam ekran üçün quraşdırın.</p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="p-4 bg-white/5 rounded-2xl border border-white/10 space-y-2">
+                  <h5 className="text-[10px] font-black uppercase text-indigo-400 tracking-wide flex items-center">
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 mr-2 animate-pulse" /> Windows Avtomatik Quraşdırıcı
+                  </h5>
+                  <p className="text-[9px] text-slate-300 leading-relaxed font-bold">
+                    Aşağıdakı düymədən endirəcəyiniz balaca proqram (skript) masaüstünüzdə xüsusi <strong>"NEKO GOLD Kiosk"</strong> qısayolu yaradacaq. Bu qısayol tətbiqi birbaşa səssiz çap üçün lazım olan <code>--kiosk --kiosk-printing</code> xüsusiyyətləri ilə açır.
+                  </p>
+                  <button 
+                    type="button"
+                    onClick={downloadKioskScript}
+                    className="w-full mt-2 bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white font-black text-[10px] uppercase tracking-widest py-3 px-4 rounded-xl flex items-center justify-center space-x-2 transition-all duration-300 shadow-md transform active:scale-95 cursor-pointer"
+                  >
+                    <Download size={14} />
+                    <span>Masaüstü Kiosk Qısayolu Yüklə (.bat)</span>
+                  </button>
+                </div>
+
+                <div className="p-4 bg-white/5 rounded-2xl border border-white/10 space-y-2">
+                  <h5 className="text-[10px] font-black uppercase text-amber-400 tracking-wide">
+                    📱 Mobil, Planşet & Standart PWA Yüklənməsi
+                  </h5>
+                  <p className="text-[9px] text-slate-300 leading-relaxed font-bold">
+                    Telefon və ya planşetdə bu sistemi növündən asılı olmayaraq normal bir proqram kimi istifadə etmək üçün, brauzerin ünvan bölməsində yerləşən <strong>"Quraşdır / Qısayol əlavə et"</strong> düyməsinə klikləyin.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             <div className="mt-4 p-4 bg-indigo-50 rounded-2xl border border-indigo-100 space-y-3">
               <h4 className="text-[10px] font-black text-indigo-800 uppercase tracking-widest">Səssiz Çapın Qurulması (Addım-addım):</h4>
               <ol className="text-[10px] text-slate-600 font-bold space-y-2 list-decimal ml-4">

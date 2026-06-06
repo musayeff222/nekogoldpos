@@ -161,19 +161,28 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
 
   const sendTelegramNotification = async (saleRecords: Sale[], total: number, customerName: string) => {
     try {
-      const itemsText = saleRecords.map(s => `• ${s.productName} (${s.productCode}) - ${s.total} AZN`).join('\n');
-      const message = `<b>💰 YENİ SATIŞ!</b>\n\n` +
-                      `<b>Müştəri:</b> ${customerName}\n` +
-                      `<b>Məhsullar:</b>\n${itemsText}\n\n` +
-                      `<b>Ümumi:</b> ${total} AZN\n` +
-                      `<b>Satıcı:</b> ${user?.username || 'Sistem'}\n` +
-                      `<b>Tarix:</b> ${new Date().toLocaleString('az-AZ')}`;
+      // Use formatting closer to user's example
+      const itemsText = saleRecords.map(s => `• ${s.productName} (${s.productCode}) (${s.weight} gr) - <b>${s.total} AZN</b>`).join('\n');
+      
+      const now = new Date();
+      const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+
+      const message = `📢 <b>YENİ SATIŞ ANONSU</b> 💰\n\n` +
+                      `👤 <b>Müştəri:</b> ${customerName}\n` +
+                      `📦 <b>Məhsullar:</b>\n${itemsText}\n\n` +
+                      `💵 <b>Ümumi Məbləğ:</b> ${total} AZN\n` +
+                      `👤 <b>Satıcı:</b> ${user?.username || 'Sistem'}\n` +
+                      `🕒 <b>Tarix:</b> ${formattedDate}`;
+
+      // Try to find the first product image from the cart/records
+      const imageUrls = saleRecords.map(s => s.imageUrl).filter(Boolean);
 
       await fetch('/api/notify/telegram', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           message,
+          imageUrl: imageUrls.length > 0 ? imageUrls[0] : null,
           chatIds: settings.telegramChatIds || []
         })
       });

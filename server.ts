@@ -419,16 +419,52 @@ async function startServer() {
     try {
       const results = await Promise.all(targets.map(async (id) => {
         try {
-          const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              chat_id: id,
-              text: message,
-              parse_mode: 'HTML'
-            })
-          });
-          return await response.json();
+          if (req.body.imageUrl) {
+            // Use sendPhoto
+            const photoUrl = req.body.imageUrl.startsWith('http') 
+              ? req.body.imageUrl 
+              : `${req.protocol}://${req.get('host')}${req.body.imageUrl.startsWith('/') ? '' : '/'}${req.body.imageUrl}`;
+
+            const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                chat_id: id,
+                photo: photoUrl,
+                caption: message,
+                parse_mode: 'HTML'
+              })
+            });
+            const data = await response.json();
+            
+            // If sendPhoto fails (e.g. image too big or invalid), fallback to sendMessage
+            if (!data.ok) {
+              console.warn(`Telegram sendPhoto failed for ${id}, falling back to sendMessage:`, data);
+              const fallbackResponse = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  chat_id: id,
+                  text: message,
+                  parse_mode: 'HTML'
+                })
+              });
+              return await fallbackResponse.json();
+            }
+            return data;
+          } else {
+            // Use sendMessage
+            const response = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                chat_id: id,
+                text: message,
+                parse_mode: 'HTML'
+              })
+            });
+            return await response.json();
+          }
         } catch (e) {
           console.error(`Failed to send to ${id}:`, e);
           return { error: true, id };
@@ -439,6 +475,336 @@ async function startServer() {
     } catch (error) {
       console.error('Telegram notification error:', error);
       res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+
+  // --- TELEGRAM BOT STATE MANAGEMENT ---
+  const botStates: { [chatId: string]: { 
+    step: string; 
+    data: Partial<any>; 
+    lastMessageId?: number;
+  } } = {};
+
+  const calculatePrice = (weight: number, carat: string, brilliant: string, settings: any) => {
+    if (!weight || isNaN(weight)) return 0;
+    
+    let gramPrice = settings.pricePerGram || 0;
+    if (carat === '750' || carat === '18') {
+      gramPrice = settings.pricePerGram750 || 0;
+    }
+    
+    let total = weight * gramPrice;
+    
+    if (brilliant) {
+      const match = brilliant.match(/(\d+(\.\d+)?)/);
+      if (match) {
+        const ct = parseFloat(match[1]);
+        total += ct * (settings.pricePerBrilliant || 1000);
+      }
+    }
+    
+    return Math.round(total / 10) * 10;
+  };
+
+  const getNextCode = async (prefix: string) => {
+    try {
+      const [rows] = await pool.query('SELECT content FROM products');
+      const products = (rows as any[]).map(r => JSON.parse(r.content));
+      
+      const filtered = products.filter(p => p.code.startsWith(prefix));
+      if (filtered.length === 0) return `${prefix}101`;
+
+      const codes = filtered.map(p => {
+        const numPart = p.code.replace(prefix, '');
+        const num = parseInt(numPart);
+        return isNaN(num) ? 0 : num;
+      });
+
+      const maxCode = Math.max(...codes);
+      return `${prefix}${maxCode + 1}`;
+    } catch (e) {
+      return `${prefix}${Date.now().toString().slice(-3)}`;
+    }
+  };
+
+  // --- TELEGRAM BOT WEBHOOK ---
+  app.post('/api/telegram/webhook', async (req: Request, res: Response) => {
+    // Respond to Telegram immediately
+    res.sendStatus(200);
+
+    const { message, callback_query } = req.body;
+    const photo = message?.photo;
+    
+    const chatId = message?.chat?.id?.toString() || callback_query?.message?.chat?.id?.toString();
+    if (!chatId) return;
+
+    const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+    if (!BOT_TOKEN) return;
+
+    const sendResponse = async (txt: string, keyboard?: any) => {
+      try {
+        const body: any = { chat_id: chatId, text: txt, parse_mode: 'HTML' };
+        if (keyboard) body.reply_markup = { inline_keyboard: keyboard };
+        
+        const resp = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        return await resp.json();
+      } catch (e) {
+        console.error('Failed to send telegram message response:', e);
+      }
+    };
+
+    const answerCallback = async (callbackId: string, txt?: string) => {
+      try {
+        await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/answerCallbackQuery`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ callback_query_id: callbackId, text: txt })
+        });
+      } catch (e) {}
+    };
+
+    // 1. Fetch settings to check authorization
+    let settings: any = null;
+    try {
+      const [rows] = await pool.query('SELECT content FROM settings WHERE id = "current"');
+      if ((rows as any[]).length > 0) {
+        settings = JSON.parse((rows as any[])[0].content);
+      }
+    } catch (e) {}
+
+    const authorizedIds = settings?.telegramChatIds || [];
+    if (authorizedIds.length > 0 && !authorizedIds.includes(chatId)) {
+       const text = message?.text || '';
+       if (text.startsWith('/')) {
+         await sendResponse(`❌ Sizin Chat ID (<code>${chatId}</code>) səlahiyyətli deyil. Zəhmət olmasa Ayarlar bölməsindən bu ID-ni əlavə edin.`);
+       }
+       return;
+    }
+
+    // 2. Handle Callback Queries (Buttons)
+    if (callback_query) {
+      await answerCallback(callback_query.id);
+      const data = callback_query.data;
+      const state = botStates[chatId];
+
+      if (!state) return;
+
+      if (state.step === 'CHOOSING_CATEGORY') {
+        const group = settings.productGroups.find((g: any) => g.name === data);
+        if (group) {
+          state.data.type = group.name;
+          state.data.prefix = group.prefix;
+          state.step = 'ENTERING_NAME';
+          await sendResponse(`✅ Kateqoriya seçildi: <b>${group.name}</b>\n\n📝 Məhsulun ADINI daxil edin:`);
+        }
+      } else if (state.step === 'CHOOSING_CARAT') {
+        state.data.carat = data;
+        state.step = 'ENTERING_WEIGHT';
+        await sendResponse(`✅ Əyar seçildi: <b>${data}</b>\n\n⚖️ Məhsulun ÇƏKİSİNİ daxil edin (məs: 3.45):`);
+      } else if (state.step === 'CONFIRMING') {
+        if (data === 'confirm_yes') {
+          const product = state.data;
+          product.id = Math.random().toString(36).substr(2, 9);
+          product.purchaseDate = new Date().toISOString();
+          product.stockCount = 1;
+          product.logs = [{ 
+            date: new Date().toISOString(), 
+            action: 'Telegram Bot vasitəsilə əlavə edildi',
+            details: `ChatID: ${chatId}`
+          }];
+
+          try {
+            await pool.execute('INSERT INTO products (id, content) VALUES (?, ?)', [product.id, JSON.stringify(product)]);
+            
+            const systemLog = {
+              id: Math.random().toString(36).substr(2, 9),
+              date: new Date().toISOString(),
+              user: `Bot (${chatId})`,
+              action: 'Məhsul Əlavə Edildi',
+              details: `${product.name} (${product.code}) - ${product.weight}gr`,
+              category: 'PRODUCT'
+            };
+            await pool.execute('INSERT INTO logs (id, content) VALUES (?, ?)', [systemLog.id, JSON.stringify(systemLog)]);
+
+            await sendResponse(`🎊 <b>Məhsul uğurla stoka əlavə edildi!</b>\n\n🆔 Kod: ${product.code}`);
+          } catch (err: any) {
+            await sendResponse(`❌ Xəta baş verdi: ${err.message}`);
+          }
+          delete botStates[chatId];
+        } else {
+          await sendResponse(`❌ Əməliyyat ləğv edildi.`);
+          delete botStates[chatId];
+        }
+      }
+      return;
+    }
+
+    // 3. Handle Text Messages
+    const text = message?.text || message?.caption || '';
+    
+    if (text === '/cancel') {
+      delete botStates[chatId];
+      await sendResponse('❌ Əməliyyat ləğv edildi.');
+      return;
+    }
+
+    if (text === '/start' || text === '/help') {
+      await sendResponse(`👋 <b>NEKO GOLD Botuna xoş gəlmisiniz!</b>\n\n🛍️ Məhsul əlavə etmək üçün /mesul komandasını yazın.`);
+      return;
+    }
+
+    if (text === '/mesul') {
+      botStates[chatId] = { step: 'CHOOSING_CATEGORY', data: {} };
+      const categories = (settings.productGroups || []).map((g: any) => ([{ text: g.name, callback_data: g.name }]));
+      await sendResponse('📂 Zəhmət olmasa <b>KATEQORİYA</b> seçin:', categories);
+      return;
+    }
+
+    const state = botStates[chatId];
+    if (state) {
+      if (state.step === 'ENTERING_NAME') {
+        state.data.name = text;
+        state.step = 'CHOOSING_CARAT';
+        const carats = (settings.carats || ['585', '750']).map((c: string) => ([{ text: c, callback_data: c }]));
+        await sendResponse(`🏷️ Ad: <b>${text}</b>\n\n💎 <b>ƏYAR (Eyar)</b> seçin:`, carats);
+      } else if (state.step === 'ENTERING_WEIGHT') {
+        const weight = parseFloat(text.replace(',', '.'));
+        if (isNaN(weight)) {
+          await sendResponse('⚠️ Zəhmət olmasa rəqəm daxil edin (məs: 5.20):');
+          return;
+        }
+        state.data.weight = weight;
+        state.step = 'ENTERING_BRILLIANT';
+        await sendResponse(`⚖️ Çəki: <b>${weight} gr</b>\n\n💎 <b>Brilliant/Daş</b> məlumatı varsa daxil edin (yoxdursa "/" və ya "yox" yazın):`);
+      } else if (state.step === 'ENTERING_BRILLIANT') {
+        state.data.brilliant = (text === '/' || text.toLowerCase() === 'yox') ? '' : text;
+        
+        // Final calculations
+        const code = await getNextCode(state.data.prefix);
+        state.data.code = code;
+        state.data.price = calculatePrice(state.data.weight, state.data.carat, state.data.brilliant, settings);
+        state.data.supplierPrice = Math.round(state.data.price * 0.8 / 10) * 10; // Default 20% margin for supplier price if not known
+        state.data.supplier = settings.suppliers?.[0] || 'Təyin edilməyib';
+
+        const summary = `📝 <b>Məhsul Xülasəsi:</b>\n\n` +
+                        `🆔 Kod: <b>${state.data.code}</b>\n` +
+                        `📦 Ad: <b>${state.data.name}</b>\n` +
+                        `💎 Əyar: <b>${state.data.carat}</b>\n` +
+                        `⚖️ Çəki: <b>${state.data.weight} gr</b>\n` +
+                        `✨ Daş: <b>${state.data.brilliant || 'Yox'}</b>\n` +
+                        `💰 Satış Qiyməti: <b>${state.data.price} AZN</b>\n\n` +
+                        `Təsdiq edirsiniz?`;
+        
+        state.step = 'CONFIRMING';
+        await sendResponse(summary, [
+          [{ text: '✅ Hə (Əlavə et)', callback_data: 'confirm_yes' }],
+          [{ text: '❌ Yox (Ləğv et)', callback_data: 'confirm_no' }]
+        ]);
+      }
+      return;
+    }
+
+    // Keep the old /yeni command for users who prefer it (backward compatibility)
+    if (text.startsWith('/yeni')) {
+        // ... (rest of the /yeni logic remains largely same or I could just remove it and keep the new one)
+      const parts = text.split(/\s+/).slice(1);
+      if (parts.length < 8) {
+        await sendResponse(`⚠️ <b>Səhv format!</b> Bütün məlumatları qeyd edin:\n<code>/yeni Kod Ad Əyar Çəki Alış Satış Tədarükçü Kateqoriya</code>`);
+        return;
+      }
+
+      // Handle cases where name or supplier might have spaces - actually splitting by space won't work perfectly for spaced names
+      // But let's assume simple space separated for now or ask user to use underscores
+      // Improved: take first part as code, last parts as specific fields, and everything in between as name
+      const code = parts[0];
+      const type = parts[parts.length - 1];
+      const supplier = parts[parts.length - 2];
+      const sellPriceStr = parts[parts.length - 3];
+      const buyPriceStr = parts[parts.length - 4];
+      const weightStr = parts[parts.length - 5];
+      const carat = parts[parts.length - 6];
+      
+      // Name is everything in between
+      const name = parts.slice(1, parts.length - 6).join(' ');
+
+      const weight = parseFloat(weightStr.replace(',', '.'));
+      const buyPrice = parseFloat(buyPriceStr);
+      const sellPrice = parseFloat(sellPriceStr);
+
+      if (!name || isNaN(weight) || isNaN(buyPrice) || isNaN(sellPrice)) {
+        await sendResponse(`⚠️ <b>Məlumat xətası!</b> Ad, çəki və qiymətləri düzgün daxil edin.`);
+        return;
+      }
+
+      let imageUrl = null;
+      if (photo && photo.length > 0) {
+        try {
+          const fileId = photo[photo.length - 1].file_id;
+          const fileInfoResp = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${fileId}`);
+          const fileInfo = await fileInfoResp.json();
+          
+          if (fileInfo.ok) {
+            const filePath = fileInfo.result.file_path;
+            const fileDownloadUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${filePath}`;
+            
+            const imgResp = await fetch(fileDownloadUrl);
+            const buffer = await imgResp.arrayBuffer();
+            
+            const fileName = `tg-${Date.now()}-${path.basename(filePath)}`;
+            const localPath = path.join(uploadDir, fileName);
+            fs.writeFileSync(localPath, Buffer.from(buffer));
+            imageUrl = `/uploads/${fileName}`;
+          }
+        } catch (imgErr) {
+          console.error('Failed to handle telegram photo:', imgErr);
+        }
+      }
+
+      const newProduct = {
+        id: Math.random().toString(36).substr(2, 9),
+        code,
+        name,
+        carat,
+        weight,
+        supplierPrice: buyPrice,
+        price: sellPrice,
+        supplier,
+        type,
+        stockCount: 1,
+        purchaseDate: new Date().toISOString(),
+        imageUrl,
+        logs: [{ 
+          date: new Date().toISOString(), 
+          action: 'Telegram vasitəsilə əlavə edildi',
+          details: `ChatID: ${chatId}`
+        }]
+      };
+
+      try {
+        await pool.execute(
+          'INSERT INTO products (id, content) VALUES (?, ?)',
+          [newProduct.id, JSON.stringify(newProduct)]
+        );
+        
+        const systemLog = {
+          id: Math.random().toString(36).substr(2, 9),
+          date: new Date().toISOString(),
+          user: `Telegram (${chatId})`,
+          action: 'Məhsul Əlavə Edildi',
+          details: `${newProduct.name} (${newProduct.code}) - ${newProduct.weight}gr`,
+          category: 'PRODUCT'
+        };
+        await pool.execute('INSERT INTO logs (id, content) VALUES (?, ?)', [systemLog.id, JSON.stringify(systemLog)]);
+
+        await sendResponse(`✅ <b>Məhsul əlavə edildi!</b>\n\n🆔 <b>Kod:</b> ${code}\n📦 <b>Ad:</b> ${name}\n💎 <b>Əyar:</b> ${carat}\n⚖️ <b>Çəki:</b> ${weight} gr\n💰 <b>Satış:</b> ${sellPrice} AZN\n🏢 <b>Tədarükçü:</b> ${supplier}\n📁 <b>Kateqoriya:</b> ${type}`);
+      } catch (err: any) {
+        console.error('Failed to add product via telegram:', err);
+        await sendResponse(`❌ <b>Xəta baş verdi:</b> ${err.message}`);
+      }
     }
   });
 
