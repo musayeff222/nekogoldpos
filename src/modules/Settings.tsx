@@ -373,14 +373,7 @@ if "%CHROME_PATH%"=="" (
 echo 📌 Tapıldı: %CHROME_PATH%
 echo 🚀 Masaüstünə qısayol (LNK) əlavə edilir...
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-    "$ws = New-Object -ComObject WScript.Shell; " ^
-    "$desktop = [System.Environment]::GetFolderPath('Desktop'); " ^
-    "$shortcut = $ws.CreateShortcut(\\"$desktop\\NEKO GOLD Kiosk.lnk\\"); " ^
-    "$shortcut.TargetPath = '%CHROME_PATH%'; " ^
-    "$shortcut.Arguments = '--kiosk --kiosk-printing \\"%APP_URL%\\"'; " ^
-    "$shortcut.WorkingDirectory = [System.IO.Path]::GetDirectoryName('%CHROME_PATH%'); " ^
-    "$shortcut.Save()"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ws = New-Object -ComObject WScript.Shell; $desktop = $ws.SpecialFolders.Item('Desktop'); $shortcut = $ws.CreateShortcut($desktop + '\\NEKO GOLD Kiosk.lnk'); $shortcut.TargetPath = '%CHROME_PATH%'; $shortcut.Arguments = '--kiosk --kiosk-printing \\"%APP_URL%\\"'; $shortcut.WorkingDirectory = Split-Path '%CHROME_PATH%'; $shortcut.Save()"
 
 echo.
 echo ====================================================
@@ -394,7 +387,10 @@ echo.
 pause
 `;
 
-    const blob = new Blob([scriptContent], { type: 'text/plain;charset=utf-8' });
+    // Write with UTF-8 BOM to guarantee Windows reads the Azerbaijani characters correctly
+    const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+    const byteCharacters = new TextEncoder().encode(scriptContent);
+    const blob = new Blob([bom, byteCharacters], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
