@@ -108,7 +108,7 @@ const App: React.FC = () => {
     receiptFontWeight: '600',
     labelFontWeight: '600',
     isPrintStation: false,
-    remotePrintEnabled: false,
+    remotePrintEnabled: true,
     telegramChatIds: []
   });
 
@@ -392,7 +392,7 @@ const App: React.FC = () => {
             receiptFontWeight: '600',
             labelFontWeight: '600',
             isPrintStation: false,
-            remotePrintEnabled: false
+            remotePrintEnabled: true
           };
           setSettings(defaultSettings);
           lastSyncedSettings.current = JSON.stringify(defaultSettings);

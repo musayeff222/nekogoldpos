@@ -398,8 +398,8 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
         if (!res.ok) throw new Error('Failed to save to database');
         console.log('Product saved successfully to database');
 
-        // Remote Print if enabled
-        if (settings.remotePrintEnabled) {
+        // Remote Print if enabled (either explicitly enabled OR if this current device is NOT a print station, we auto-send to the print station)
+        if (settings.remotePrintEnabled || !settings.isPrintStation) {
           fetch('/api/print-queue/add', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -2282,6 +2282,18 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                        </div>
                        <div className="space-y-1.5"><label className="text-[10px] font-black text-stone-400 uppercase ml-2">Ad</label><input type="text" value={editForm.name || ''} onChange={(e) => setEditForm({...editForm, name: e.target.value})} className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-4 px-5 font-black text-stone-800 outline-none" /></div>
                        <div className="space-y-1.5"><label className="text-[10px] font-black text-stone-400 uppercase ml-2">Tədarükçü</label><select value={editForm.supplier || ''} onChange={(e) => setEditForm({...editForm, supplier: e.target.value})} className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-4 px-5 font-black text-stone-800 outline-none cursor-pointer">{settings.suppliers.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+                       <div className="space-y-1.5">
+                         <label className="text-[10px] font-black text-amber-600 uppercase ml-2 flex items-center">
+                           <Gem size={12} className="mr-1" /> Daş (Brilyant)
+                         </label>
+                         <input 
+                           type="text" 
+                           value={editForm.brilliant !== undefined ? editForm.brilliant : (selectedProduct.brilliant || '')} 
+                           onChange={(e) => setEditForm({...editForm, brilliant: e.target.value})} 
+                           className="w-full bg-stone-50 border-2 border-stone-100 rounded-xl py-4 px-5 font-black text-stone-800 outline-none" 
+                           placeholder="Məsələn: 0.15 ct" 
+                         />
+                       </div>
                        <div className="space-y-1.5">
                          <label className="text-[10px] font-black text-stone-400 uppercase ml-2">Əyar</label>
                          <div className="flex gap-2 h-[58px]">
