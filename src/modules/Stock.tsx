@@ -89,6 +89,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
   const editFileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const archiveInputRef = useRef<HTMLInputElement>(null);
   
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -101,6 +102,14 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
       return () => clearTimeout(timer);
     }
   }, [notification]);
+
+  useEffect(() => {
+    if (showMoveToArchiveModal) {
+      setTimeout(() => {
+        archiveInputRef.current?.focus();
+      }, 150);
+    }
+  }, [showMoveToArchiveModal]);
 
   const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
     setNotification({ message, type });
@@ -795,6 +804,30 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     setAddWeightForm({ name: '', weight: '', isReplacement: true });
     setSelectedProductForAddWeight(null);
     showNotification('Məhsulun çəkisi uğurla artırıldı.');
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const term = archiveSearchTerm.trim().toLowerCase();
+      if (term) {
+        const matchingProduct = activeProducts.find(
+          p => p.type === activeFolder && !p.isArchived && p.code.trim().toLowerCase() === term
+        );
+        if (matchingProduct) {
+          setSelectedForArchive(prev => {
+            if (!prev.includes(matchingProduct.id)) {
+              return [...prev, matchingProduct.id];
+            }
+            return prev;
+          });
+        }
+        setArchiveSearchTerm('');
+        setTimeout(() => {
+          archiveInputRef.current?.focus();
+        }, 50);
+      }
+    }
   };
 
   const handleMoveToArchive = () => {
@@ -2395,9 +2428,11 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 w-4 h-4 group-focus-within:text-amber-500 transition-colors" />
                 <input 
                   type="text" 
-                  placeholder="Kod ilə axtar..." 
+                  ref={archiveInputRef}
+                  placeholder="Kod yazın və Enter basın..." 
                   value={archiveSearchTerm}
                   onChange={(e) => setArchiveSearchTerm(e.target.value)}
+                  onKeyDown={handleSearchKeyDown}
                   className="w-full bg-stone-50 border-stone-200 border rounded-xl py-3 pl-10 pr-4 focus:ring-4 focus:ring-amber-100 outline-none shadow-sm text-sm font-bold uppercase transition-all"
                 />
               </div>
@@ -2406,7 +2441,13 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
             <main className="flex-1 overflow-y-auto p-6 scrollbar-hide">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {activeProducts
-                  .filter(p => p.type === activeFolder && !p.isArchived && (p.code.toLowerCase().includes(archiveSearchTerm.toLowerCase()) || p.name.toLowerCase().includes(archiveSearchTerm.toLowerCase())))
+                  .filter(p => {
+                    if (p.type !== activeFolder || p.isArchived) return false;
+                    const term = archiveSearchTerm.trim().toLowerCase();
+                    if (!term) return true;
+                    // Exact match on product code, OR product is already selected so it stays on screen
+                    return p.code.trim().toLowerCase() === term || selectedForArchive.includes(p.id);
+                  })
                   .map(p => (
                     <div 
                       key={p.id} 
