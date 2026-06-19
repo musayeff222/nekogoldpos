@@ -2455,15 +2455,39 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
             
             <main className="flex-1 overflow-y-auto p-6 scrollbar-hide">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {activeProducts
-                  .filter(p => {
-                    if (p.type !== activeFolder || p.isArchived) return false;
-                    const term = archiveSearchTerm.trim().toLowerCase();
-                    if (!term) return true;
-                    // Flexible match on product code, OR product is already selected so it stays on screen
-                    return checkCodeMatch(p.code, term) || selectedForArchive.includes(p.id);
-                  })
-                  .map(p => (
+                {(() => {
+                  const filtered = activeProducts
+                    .filter(p => {
+                      if (p.type !== activeFolder || p.isArchived) return false;
+                      const term = archiveSearchTerm.trim().toLowerCase();
+                      if (!term) return true;
+                      // Flexible match on product code, OR product is already selected so it stays on screen
+                      return checkCodeMatch(p.code, term) || selectedForArchive.includes(p.id);
+                    })
+                    .sort((a, b) => {
+                      const term = archiveSearchTerm.trim().toLowerCase();
+                      const getWeight = (p: any) => {
+                        const isSelected = selectedForArchive.includes(p.id);
+                        const isMatch = term ? checkCodeMatch(p.code, term) : false;
+                        
+                        if (isMatch && !isSelected) return 3;
+                        if (isMatch && isSelected) return 2;
+                        if (isSelected) return 1;
+                        return 0;
+                      };
+                      return getWeight(b) - getWeight(a);
+                    });
+
+                  if (filtered.length === 0 && archiveSearchTerm.trim().length > 0) {
+                    return (
+                      <div className="col-span-full py-16 text-center border-2 border-dashed border-stone-100 rounded-3xl bg-stone-50/50">
+                        <p className="text-stone-400 font-bold uppercase text-xs tracking-widest mb-1">Məhsul tapılmadı</p>
+                        <p className="text-red-500 font-black uppercase text-sm tracking-widest">KOD ÇIXMADI</p>
+                      </div>
+                    );
+                  }
+
+                  return filtered.map(p => (
                     <div 
                       key={p.id} 
                       onClick={() => {
@@ -2474,7 +2498,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                       className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-center space-x-4 ${selectedForArchive.includes(p.id) ? 'border-amber-500 bg-amber-50/50 shadow-md' : 'border-stone-100 bg-white hover:border-stone-200'}`}
                     >
                       <div className="w-12 h-12 rounded-xl border border-stone-100 overflow-hidden bg-stone-50 flex-shrink-0">
-                        {p.imageUrl ? <img src={p.imageUrl} className="w-full h-full object-cover" /> : <ImageIcon className="w-full h-full p-3 text-stone-200" />}
+                        {p.imageUrl ? <img src={p.imageUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" /> : <ImageIcon className="w-full h-full p-3 text-stone-200" />}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-black text-stone-900 uppercase truncate">{p.name}</p>
@@ -2484,7 +2508,8 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                         {selectedForArchive.includes(p.id) && <Zap size={12} className="text-stone-950" />}
                       </div>
                     </div>
-                  ))}
+                  ));
+                })()}
               </div>
               {activeProducts.filter(p => p.type === activeFolder && !p.isArchived).length === 0 && (
                 <div className="py-20 text-center">
