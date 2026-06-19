@@ -806,13 +806,28 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     showNotification('Məhsulun çəkisi uğurla artırıldı.');
   };
 
+  const checkCodeMatch = (productCode: string, term: string): boolean => {
+    const pCode = productCode.trim().toLowerCase();
+    const search = term.trim().toLowerCase();
+    if (!search) return false;
+    if (pCode === search) return true;
+    if (pCode.endsWith(search)) return true;
+    
+    // Check if stripping non-digits matches
+    const pDigits = pCode.replace(/\D/g, '');
+    const sDigits = search.replace(/\D/g, '');
+    if (sDigits && pDigits === sDigits) return true;
+    
+    return false;
+  };
+
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       const term = archiveSearchTerm.trim().toLowerCase();
       if (term) {
         const matchingProduct = activeProducts.find(
-          p => p.type === activeFolder && !p.isArchived && p.code.trim().toLowerCase() === term
+          p => p.type === activeFolder && !p.isArchived && checkCodeMatch(p.code, term)
         );
         if (matchingProduct) {
           setSelectedForArchive(prev => {
@@ -2445,8 +2460,8 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                     if (p.type !== activeFolder || p.isArchived) return false;
                     const term = archiveSearchTerm.trim().toLowerCase();
                     if (!term) return true;
-                    // Exact match on product code, OR product is already selected so it stays on screen
-                    return p.code.trim().toLowerCase() === term || selectedForArchive.includes(p.id);
+                    // Flexible match on product code, OR product is already selected so it stays on screen
+                    return checkCodeMatch(p.code, term) || selectedForArchive.includes(p.id);
                   })
                   .map(p => (
                     <div 
