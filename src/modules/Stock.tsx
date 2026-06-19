@@ -1208,7 +1208,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
       
       {/* ÇAP KONTEYNERİ (80MM Receipt Design) - PORTAL */}
       {viewMode === 'printList' && createPortal(
-        <div id="receipt-print" className="bg-white text-black">
+        <div id="receipt-print" className="bg-white text-black receipt-80mm">
             <header className="text-center mb-6">
                 <h1 className="brand-font text-3xl font-black mb-1">{settings.shopName || 'NEKO GOLD'}</h1>
                 <h2 className="text-sm font-bold tracking-widest mb-4">STOKDA OLAN MALLAR</h2>

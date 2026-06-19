@@ -78,6 +78,37 @@ body {
     margin: 0 !important;
   }
 
+  /* 80mm THERMAL PRINTER SETTINGS FOR LISTS */
+  #receipt-print.receipt-80mm {
+    width: 80mm !important;
+    max-width: 80mm !important;
+    padding: 3mm !important;
+    margin: 0 !important;
+  }
+
+  #receipt-print.receipt-80mm h1 {
+    font-size: 18px !important;
+  }
+
+  #receipt-print.receipt-80mm h2 {
+    font-size: 11px !important;
+    margin-bottom: 8px !important;
+  }
+
+  #receipt-print.receipt-80mm .text-xs,
+  #receipt-print.receipt-80mm span,
+  #receipt-print.receipt-80mm p,
+  #receipt-print.receipt-80mm div,
+  #receipt-print.receipt-80mm footer {
+    font-size: 9px !important;
+  }
+
+  #receipt-print.receipt-80mm .receipt-table th, 
+  #receipt-print.receipt-80mm .receipt-table td {
+    font-size: 9px !important;
+    padding: 3px 1px !important;
+  }
+
   /* A4 DOCUMENT SETTINGS */
   #receipt-print {
     width: 210mm !important;

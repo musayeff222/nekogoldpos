@@ -328,7 +328,7 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales, setSales, prod
     <div className="space-y-6 md:space-y-8 pb-24 md:pb-10 animate-in fade-in duration-500">
       
       {/* ÇAP KONTEYNERİ (Yeni Qəbz Dizaynı) */}
-      <div id="receipt-print" className={`hidden ${viewMode === 'printList' ? 'print:block' : ''} bg-white text-black`}>
+      <div id="receipt-print" className={`hidden ${viewMode === 'printList' ? 'print:block' : ''} bg-white text-black receipt-80mm`}>
           <header className="text-center mb-6">
               <h1 className="brand-font text-3xl font-black mb-1">NEKO GOLD</h1>
               <h2 className="text-sm font-bold tracking-widest mb-4">YENİDƏN SİFARİŞ SİYAHISI</h2>
