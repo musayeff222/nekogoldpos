@@ -619,6 +619,7 @@ async function startServer() {
 
           try {
             await pool.execute('INSERT INTO products (id, content) VALUES (?, ?)', [product.id, JSON.stringify(product)]);
+            await pool.execute('INSERT INTO print_queue (product_data) VALUES (?)', [JSON.stringify(product)]);
             
             const systemLog = {
               id: Math.random().toString(36).substr(2, 9),
@@ -788,6 +789,10 @@ async function startServer() {
         await pool.execute(
           'INSERT INTO products (id, content) VALUES (?, ?)',
           [newProduct.id, JSON.stringify(newProduct)]
+        );
+        await pool.execute(
+          'INSERT INTO print_queue (product_data) VALUES (?)',
+          [JSON.stringify(newProduct)]
         );
         
         const systemLog = {

@@ -192,22 +192,21 @@ const App: React.FC = () => {
         }
 
         // 3. Handle Print Queue
-        if (settings.isPrintStation && Array.isArray(data.printQueue) && data.printQueue.length > 0) {
-          for (const job of data.printQueue) {
-            if (!active) break;
-            try {
-              const productData = JSON.parse(job.product_data);
-              setCurrentRemoteJob({ ...job, product: productData });
-              
-              // Wait for print interaction
-              await new Promise(resolve => setTimeout(resolve, 8000));
-              
-              await fetch(`/api/print-queue/complete/${encodeURIComponent(job.id)}`, { method: 'POST' });
-              setCurrentRemoteJob(null);
-            } catch (e) {
-              console.error('Job processing failed:', e);
-            }
-          }
+        if (settings?.isPrintStation && Array.isArray(data.printQueue) && data.printQueue.length > 0) {
+          setRemotePrintQueue(prev => {
+            const nextQueue = [...prev];
+            data.printQueue.forEach((job: any) => {
+              if (!nextQueue.some(q => q.id === job.id) && (!currentRemoteJob || currentRemoteJob.id !== job.id)) {
+                try {
+                  const productData = JSON.parse(job.product_data);
+                  nextQueue.push({ ...job, product: productData });
+                } catch (e) {
+                  console.error('Failed to parse print job product_data:', e);
+                }
+              }
+            });
+            return nextQueue;
+          });
         }
       } catch (err: any) {
         if (!active) return;
@@ -558,14 +557,35 @@ const App: React.FC = () => {
     if (currentRemoteJob) {
       document.body.classList.add('printing');
       const timer = setTimeout(() => {
-        window.print();
-        setTimeout(() => {
+        try {
+          window.print();
+        } catch (e) {
+          console.error('Print trigger error:', e);
+        }
+        
+        // Immediately after window.print finishes (dialog dismissed or silent print complete)
+        setTimeout(async () => {
           document.body.classList.remove('printing');
-        }, 1000);
+          try {
+            await fetch(`/api/print-queue/complete/${encodeURIComponent(currentRemoteJob.id)}`, { method: 'POST' });
+          } catch (err) {
+            console.error('Failed to mark print job complete:', err);
+          }
+          setCurrentRemoteJob(null);
+        }, 500);
       }, 1500);
       return () => clearTimeout(timer);
     }
   }, [currentRemoteJob]);
+
+  // Sequentially process the remote print queue
+  useEffect(() => {
+    if (!currentRemoteJob && remotePrintQueue.length > 0) {
+      const nextJob = remotePrintQueue[0];
+      setRemotePrintQueue(prev => prev.slice(1));
+      setCurrentRemoteJob(nextJob);
+    }
+  }, [remotePrintQueue, currentRemoteJob]);
 
   // Sync data to backend on changes - ONLY after initial load is complete
   // NOTE: Products are now handled individually in modules (Stock, Sales, Returns) 

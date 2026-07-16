@@ -817,6 +817,10 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     const pDigits = pCode.replace(/\D/g, '');
     const sDigits = search.replace(/\D/g, '');
     if (sDigits && pDigits === sDigits) return true;
+
+    // Check if stripping the alphabetical prefix of productCode matches search exactly
+    const pNoPrefix = pCode.replace(/^[a-zA-Z]+/, '');
+    if (pNoPrefix === search) return true;
     
     return false;
   };
@@ -2451,6 +2455,12 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                   className="w-full bg-stone-50 border-stone-200 border rounded-xl py-3 pl-10 pr-4 focus:ring-4 focus:ring-amber-100 outline-none shadow-sm text-sm font-bold uppercase transition-all"
                 />
               </div>
+              {archiveSearchTerm.trim().length > 0 && !activeProducts.some(p => p.type === activeFolder && !p.isArchived && checkCodeMatch(p.code, archiveSearchTerm)) && (
+                <div className="mt-3 p-3 bg-red-50 border border-red-100 rounded-xl flex items-center justify-between text-red-600 animate-in slide-in-from-top duration-200">
+                  <span className="text-[10px] font-black uppercase tracking-widest">Axtarılan məhsul mövcud deyil</span>
+                  <span className="text-[11px] font-black uppercase bg-red-600 text-white px-3 py-1 rounded-lg">KOD ÇIXMADI</span>
+                </div>
+              )}
             </div>
             
             <main className="flex-1 overflow-y-auto p-6 scrollbar-hide">

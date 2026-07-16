@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   Search, 
@@ -53,6 +53,15 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
   const [discount, setDiscount] = useState(0);
   const [customerInfo, setCustomerInfo] = useState({ id: '', fullName: '', phone: '', title: '', address: '' });
   const [searchCode, setSearchCode] = useState('');
+  const [customSaleDate, setCustomSaleDate] = useState(new Date().toISOString().substring(0, 10));
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  
+  const handlePrefixClick = (prefix: string) => {
+    setSearchCode(prefix);
+    setTimeout(() => {
+      searchInputRef.current?.focus();
+    }, 50);
+  };
   
   const [showCustomerSelector, setShowCustomerSelector] = useState(false);
   const [customerSearchTerm, setCustomerSearchTerm] = useState('');
@@ -164,8 +173,8 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
       // Use formatting closer to user's example
       const itemsText = saleRecords.map(s => `• ${s.productName} (${s.productCode}) (${s.weight} gr) - <b>${s.total} AZN</b>`).join('\n');
       
-      const now = new Date();
-      const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+      const saleDate = saleRecords[0]?.date ? new Date(saleRecords[0].date) : new Date();
+      const formattedDate = `${saleDate.getFullYear()}-${String(saleDate.getMonth() + 1).padStart(2, '0')}-${String(saleDate.getDate()).padStart(2, '0')} ${String(saleDate.getHours()).padStart(2, '0')}:${String(saleDate.getMinutes()).padStart(2, '0')}:${String(saleDate.getSeconds()).padStart(2, '0')}`;
 
       const message = `📢 <b>YENİ SATIŞ ANONSU</b> 💰\n\n` +
                       `👤 <b>Müştəri:</b> ${customerName}\n` +
@@ -219,7 +228,15 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
     }
 
     const transactionId = Math.random().toString(36).substr(2, 6).toUpperCase();
-    const date = new Date().toISOString();
+    let date = new Date().toISOString();
+    if (customSaleDate) {
+      const selected = new Date(customSaleDate);
+      const now = new Date();
+      selected.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
+      if (!isNaN(selected.getTime())) {
+        date = selected.toISOString();
+      }
+    }
     
     const subtotalValue = isPartial 
       ? (Number(product.price) / Number(product.weight)) * Number(partialSaleInfo.weight)
@@ -395,6 +412,7 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
     setDiscount(0);
     setCustomerInfo({ id: '', fullName: '', phone: '', title: '', address: '' });
     setSearchCode('');
+    setCustomSaleDate(new Date().toISOString().substring(0, 10));
     setLastTransaction(null);
   };
 
@@ -555,18 +573,44 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
           </div>
 
           <div className="bg-white rounded-3xl md:rounded-[3rem] p-4 md:p-8 shadow-2xl border border-stone-100 flex flex-col items-center justify-start pt-8 md:pt-12 min-h-[400px] overflow-y-auto">
-            <div className="w-full max-w-2xl relative mb-6">
-              <Search className="absolute left-4 md:left-6 top-1/2 -translate-y-1/2 text-stone-300 w-5 h-5 md:w-8 md:h-8" />
-              <input 
-                type="text" autoFocus value={searchCode}
-                onChange={(e) => setSearchCode(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleProductSearch()}
-                placeholder="Məhsul kodu..."
-                className="w-full bg-stone-50 border-none rounded-2xl md:rounded-[1.5rem] py-5 md:py-7 pl-12 md:pl-16 pr-24 md:pr-40 text-lg md:text-2xl font-bold text-stone-800 focus:ring-8 focus:ring-amber-50 focus:bg-white transition-all shadow-inner"
-              />
-              <button onClick={handleProductSearch} className="absolute right-2 md:right-3 top-1/2 -translate-y-1/2 bg-amber-500 text-amber-950 px-4 md:px-10 py-2 md:py-4 rounded-xl font-black text-[10px] md:text-sm uppercase tracking-widest transition-all active:scale-95">
-                AXTAR
-              </button>
+            <div className="w-full max-w-2xl mb-6">
+              <div className="relative">
+                <Search className="absolute left-4 md:left-6 top-1/2 -translate-y-1/2 text-stone-300 w-5 h-5 md:w-8 md:h-8" />
+                <input 
+                  type="text" 
+                  ref={searchInputRef}
+                  autoFocus 
+                  value={searchCode}
+                  onChange={(e) => setSearchCode(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleProductSearch()}
+                  placeholder="Məhsul kodu..."
+                  className="w-full bg-stone-50 border-none rounded-2xl md:rounded-[1.5rem] py-5 md:py-7 pl-12 md:pl-16 pr-24 md:pr-40 text-lg md:text-2xl font-bold text-stone-800 focus:ring-8 focus:ring-amber-50 focus:bg-white transition-all shadow-inner"
+                />
+                <button onClick={handleProductSearch} className="absolute right-2 md:right-3 top-1/2 -translate-y-1/2 bg-amber-500 text-amber-950 px-4 md:px-10 py-2 md:py-4 rounded-xl font-black text-[10px] md:text-sm uppercase tracking-widest transition-all active:scale-95">
+                  AXTAR
+                </button>
+              </div>
+
+              {/* Kateqoriya (KSS) Qısayol Seçimləri */}
+              <div className="flex flex-wrap gap-2 justify-center mt-4">
+                {(settings.productGroups && settings.productGroups.length > 0 ? settings.productGroups : [
+                  { name: 'Üzük', prefix: 'ÜK' },
+                  { name: 'Bilərzik', prefix: 'BK' },
+                  { name: 'Sırğa', prefix: 'SR' },
+                  { name: 'Kulon', prefix: 'KL' },
+                  { name: 'Zəncir', prefix: 'ZN' },
+                  { name: 'Dəst', prefix: 'DS' }
+                ]).map((group, index) => (
+                  <button
+                    key={index}
+                    type="button"
+                    onClick={() => handlePrefixClick(group.prefix)}
+                    className="px-4 py-2 bg-stone-50 hover:bg-amber-500 hover:text-white hover:border-amber-500 text-stone-700 border border-stone-200 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-sm active:scale-95"
+                  >
+                    {group.prefix} ({group.name})
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* BU HİSSƏ: ƏVVƏLLƏR SATILAN MƏHSUL XƏBƏRDARLIĞI */}
@@ -758,6 +802,15 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
           <div className="lg:col-span-4 flex flex-col space-y-4 md:space-y-6">
              <div className="bg-stone-900 text-white rounded-3xl md:rounded-[3rem] p-6 md:p-10 shadow-2xl flex-1 flex flex-col justify-between">
                 <div className="space-y-6 md:space-y-8">
+                   <div>
+                      <p className="text-[9px] md:text-[10px] font-black text-stone-500 uppercase tracking-widest mb-3 md:mb-4">SATIŞ TARİXİ</p>
+                      <input 
+                        type="date" 
+                        value={customSaleDate} 
+                        onChange={(e) => setCustomSaleDate(e.target.value)} 
+                        className="w-full bg-white/5 border border-white/10 rounded-xl md:rounded-2xl py-4 md:py-5 px-5 md:px-6 font-black text-base text-amber-500 focus:ring-4 focus:ring-amber-500/20 outline-none transition-all mb-4" 
+                      />
+                   </div>
                    <div>
                       <p className="text-[9px] md:text-[10px] font-black text-stone-500 uppercase tracking-widest mb-3 md:mb-4">ENDİRİM (₼)</p>
                       <input 
