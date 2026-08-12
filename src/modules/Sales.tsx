@@ -92,11 +92,13 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
 
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const [foundProducts, setFoundProducts] = useState<Product[]>([]);
+  const [foundSoldItems, setFoundSoldItems] = useState<Sale[]>([]);
 
   const handleProductSearch = () => {
     const code = searchCode.trim().toLowerCase();
     if (!code) {
       setFoundProducts([]);
+      setFoundSoldItems([]);
       setCurrentProduct(null);
       setPreviouslySoldItem(null);
       return;
@@ -125,34 +127,31 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
       return false;
     });
 
-    if (activeMatches.length > 0) {
+    // Search sold products in sales history
+    const soldMatches = sales.filter(s => {
+      const sCode = (s.productCode || '').toLowerCase();
+      const sNoPrefix = sCode.replace(/^[a-zA-Z]+/, '');
+      const sDigits = sCode.replace(/\D/g, '');
+
+      if (sCode === code) return true;
+      if (sNoPrefix === code) return true;
+      if (/^\d+$/.test(code) && sDigits === code) return true;
+      if (sCode.includes(code)) return true;
+
+      return false;
+    });
+
+    if (activeMatches.length > 0 || soldMatches.length > 0) {
       setFoundProducts(activeMatches);
+      setFoundSoldItems(soldMatches);
       setCurrentProduct(null);
       setPreviouslySoldItem(null);
     } else {
-      // Check if sold previously
-      const sold = sales.find(s => {
-        const sCode = s.productCode.toLowerCase();
-        const sNoPrefix = sCode.replace(/^[a-zA-Z]+/, '');
-        const sDigits = sCode.replace(/\D/g, '');
-        return (
-          sCode === code ||
-          sNoPrefix === code ||
-          (/^\d+$/.test(code) && sDigits === code) ||
-          sCode.includes(code)
-        );
-      });
-
-      if (sold) {
-        setPreviouslySoldItem(sold);
-        setFoundProducts([]);
-        setCurrentProduct(null);
-      } else {
-        alert(`'${searchCode}' kodlu aktiv məhsul tapılmadı!`);
-        setFoundProducts([]);
-        setCurrentProduct(null);
-        setPreviouslySoldItem(null);
-      }
+      alert(`'${searchCode}' kodlu aktiv və ya satılmış məhsul tapılmadı!`);
+      setFoundProducts([]);
+      setFoundSoldItems([]);
+      setCurrentProduct(null);
+      setPreviouslySoldItem(null);
     }
   };
 
@@ -169,6 +168,7 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
       setCart(prev => [...prev, product]);
     }
     setFoundProducts([]);
+    setFoundSoldItems([]);
     setCurrentProduct(null);
     setPreviouslySoldItem(null);
     setSearchCode('');
@@ -732,10 +732,10 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
                 <div className="flex items-center justify-between px-2">
                   <h4 className="text-xs md:text-sm font-black text-stone-700 uppercase tracking-wider flex items-center">
                     <Sparkles className="w-4 h-4 text-amber-500 mr-2" />
-                    Tapılan Məhsullar ({foundProducts.length} ədəd)
+                    Stokda Olan Tapılan Məhsullar ({foundProducts.length} ədəd)
                   </h4>
                   <button 
-                    onClick={() => { setFoundProducts([]); setSearchCode(''); }}
+                    onClick={() => { setFoundProducts([]); setFoundSoldItems([]); setSearchCode(''); }}
                     className="text-[10px] md:text-xs font-black text-stone-400 hover:text-red-500 uppercase tracking-widest transition-all"
                   >
                     Təmizlə
@@ -821,6 +821,81 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
                       </div>
                     );
                   })}
+                </div>
+              </div>
+            )}
+
+            {foundSoldItems.length > 0 && (
+              <div className="w-full max-w-4xl mt-4 space-y-4 animate-in fade-in zoom-in-95 duration-300">
+                <div className="flex items-center justify-between px-2">
+                  <h4 className="text-xs md:text-sm font-black text-rose-700 uppercase tracking-wider flex items-center">
+                    <History className="w-4 h-4 text-rose-600 mr-2" />
+                    Satılmış Məhsullar ({foundSoldItems.length} ədəd - SATILIB)
+                  </h4>
+                  <button 
+                    onClick={() => { setFoundSoldItems([]); }}
+                    className="text-[10px] md:text-xs font-black text-stone-400 hover:text-red-500 uppercase tracking-widest transition-all"
+                  >
+                    Gizlə
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {foundSoldItems.map(sold => (
+                    <div 
+                      key={sold.id}
+                      className="bg-rose-50/90 rounded-3xl p-5 border-2 border-rose-200 shadow-xl flex flex-col justify-between space-y-4 transition-all hover:shadow-2xl relative overflow-hidden"
+                    >
+                      <div className="absolute top-0 right-0 bg-rose-600 text-white text-[9px] font-black uppercase px-3 py-1 rounded-bl-xl tracking-widest flex items-center space-x-1">
+                        <X size={12} strokeWidth={3} />
+                        <span>SATILIB</span>
+                      </div>
+
+                      <div className="flex items-start space-x-4 pt-1">
+                        <div 
+                          onClick={() => sold.imageUrl && setZoomedImage(sold.imageUrl)}
+                          className={`w-20 h-20 md:w-24 md:h-24 bg-white rounded-2xl flex-shrink-0 flex items-center justify-center p-2 shadow-sm border border-rose-100 overflow-hidden ${sold.imageUrl ? 'cursor-zoom-in' : ''}`}
+                        >
+                          {sold.imageUrl ? (
+                            <img 
+                              src={sold.imageUrl} 
+                              referrerPolicy="no-referrer" 
+                              loading="lazy"
+                              className="w-full h-full object-contain" 
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            <ImageIcon className="text-rose-200 w-8 h-8" />
+                          )}
+                        </div>
+
+                        <div className="flex-1 space-y-1">
+                          <h5 className="text-base font-black text-stone-900 uppercase tracking-tighter leading-tight">{sold.productName}</h5>
+                          <div className="flex flex-wrap gap-1.5 text-[10px] font-bold text-stone-500 uppercase">
+                            <span className="bg-rose-200 text-rose-950 px-2 py-0.5 rounded-md font-black">{sold.productCode}</span>
+                            <span className="bg-white text-stone-800 px-2 py-0.5 rounded-md">{sold.weight} gr</span>
+                            <span className="bg-white text-stone-800 px-2 py-0.5 rounded-md">{sold.carat}</span>
+                          </div>
+                          <p className="text-lg font-black text-rose-600 tracking-tighter mt-1">
+                            {(Number(sold.total) || 0).toLocaleString()} <span className="text-xs text-rose-400">₼</span>
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-rose-200/60 text-[11px] font-bold text-stone-700 space-y-1 bg-white/70 p-3 rounded-2xl">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10px] font-black text-stone-400 uppercase">Alan Müştəri:</span>
+                          <span className="font-black text-stone-900 uppercase">{sold.customerName || 'Məlum deyil'}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10px] font-black text-stone-400 uppercase">Satış Tarixi:</span>
+                          <span className="font-black text-stone-900">{sold.date ? new Date(sold.date).toLocaleDateString('az-AZ') : '-'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
