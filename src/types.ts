@@ -165,5 +165,22 @@ export enum Page {
   Reports = 'REPORTS',
   Debt = 'DEBT',
   Expenses = 'EXPENSES',
-  Logs = 'LOGS'
+  Logs = 'LOGS',
+  Reminders = 'REMINDERS'
+}
+
+export interface Reminder {
+  id: string;
+  title: string;
+  note?: string;
+  productId?: string;
+  productName?: string;
+  productCode?: string;
+  customerId?: string;
+  customerName?: string;
+  category: 'Zərgərdə' | 'Müştəridə' | 'Sifariş' | 'Təcili' | 'Digər';
+  dueDate?: string;
+  isCompleted: boolean;
+  createdAt: string;
+  completedAt?: string;
 }

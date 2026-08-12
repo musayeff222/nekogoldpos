@@ -193,6 +193,14 @@ async function startServer() {
             )`
           },
           {
+            name: 'reminders',
+            sql: `CREATE TABLE IF NOT EXISTS reminders (
+              id VARCHAR(100) PRIMARY KEY,
+              content LONGTEXT,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )`
+          },
+          {
             name: 'logs',
             sql: `CREATE TABLE IF NOT EXISTS logs (
               id VARCHAR(100) PRIMARY KEY,
@@ -953,7 +961,7 @@ async function startServer() {
   // Generic Data Sync Endpoints
   app.get('/api/data/:type', async (req: Request, res: Response) => {
     const { type } = req.params;
-    const allowedTypes = ['products', 'sales', 'customers', 'scraps', 'settings', 'expenses', 'logs'];
+    const allowedTypes = ['products', 'sales', 'customers', 'scraps', 'settings', 'expenses', 'logs', 'reminders'];
     
     if (typeof type !== 'string' || !allowedTypes.includes(type)) {
       return res.status(400).json({ error: 'Invalid data type' });
@@ -1156,7 +1164,7 @@ async function startServer() {
   app.post('/api/data/:type/add', async (req: Request, res: Response) => {
     const type = req.params.type as string;
     const { item } = req.body;
-    const allowedTypes = ['products', 'sales', 'customers', 'scraps', 'settings', 'expenses', 'logs'];
+    const allowedTypes = ['products', 'sales', 'customers', 'scraps', 'settings', 'expenses', 'logs', 'reminders'];
     
     if (!allowedTypes.includes(type)) return res.status(400).json({ error: 'Invalid type' });
     if (!item || !item.id) return res.status(400).json({ error: 'Item data required' });
@@ -1182,7 +1190,7 @@ async function startServer() {
     const type = req.params.type as string;
     const id = req.params.id as string;
     const { item } = req.body;
-    const allowedTypes = ['products', 'sales', 'customers', 'scraps', 'settings', 'expenses', 'logs'];
+    const allowedTypes = ['products', 'sales', 'customers', 'scraps', 'settings', 'expenses', 'logs', 'reminders'];
     
     if (!allowedTypes.includes(type)) return res.status(400).json({ error: 'Invalid type' });
     if (!item) return res.status(400).json({ error: 'Item data required' });
@@ -1206,7 +1214,7 @@ async function startServer() {
   app.delete('/api/data/:type/:id', async (req: Request, res: Response) => {
     const type = req.params.type as string;
     const id = req.params.id as string;
-    const allowedTypes = ['products', 'sales', 'customers', 'scraps', 'settings', 'expenses', 'logs'];
+    const allowedTypes = ['products', 'sales', 'customers', 'scraps', 'settings', 'expenses', 'logs', 'reminders'];
     
     if (!allowedTypes.includes(type)) return res.status(400).json({ error: 'Invalid type' });
 
@@ -1226,7 +1234,7 @@ async function startServer() {
   app.post('/api/data/:type', async (req: Request, res: Response) => {
     const { type } = req.params;
     const { data } = req.body;
-    const allowedTypes = ['products', 'sales', 'customers', 'scraps', 'settings', 'expenses', 'logs'];
+    const allowedTypes = ['products', 'sales', 'customers', 'scraps', 'settings', 'expenses', 'logs', 'reminders'];
 
     if (typeof type !== 'string' || !allowedTypes.includes(type)) {
       return res.status(400).json({ error: 'Invalid data type' });
@@ -1298,7 +1306,8 @@ async function startServer() {
         { key: 'sales', sql: `SELECT content FROM sales ORDER BY updated_at DESC LIMIT 100` },
         { key: 'customers', sql: `SELECT content FROM customers LIMIT 500` },
         { key: 'scraps', sql: `SELECT content FROM scraps ORDER BY updated_at DESC LIMIT 50` },
-        { key: 'expenses', sql: `SELECT content FROM expenses ORDER BY updated_at DESC LIMIT 50` }
+        { key: 'expenses', sql: `SELECT content FROM expenses ORDER BY updated_at DESC LIMIT 50` },
+        { key: 'reminders', sql: `SELECT content FROM reminders ORDER BY updated_at DESC` }
       ];
 
       // Run queries in parallel for efficiency

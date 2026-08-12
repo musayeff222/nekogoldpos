@@ -14,9 +14,10 @@ import {
   ChevronLeft,
   LayoutGrid,
   History,
-  Wallet
+  Wallet,
+  Bell
 } from 'lucide-react';
-import { Page, Product, Sale, Customer, ScrapGold, Expense, AppSettings, SystemLog } from '@/types';
+import { Page, Product, Sale, Customer, ScrapGold, Expense, AppSettings, SystemLog, Reminder } from '@/types';
 import SalesModule from '@/modules/Sales';
 import StockModule from '@/modules/Stock';
 import CustomersModule from '@/modules/Customers';
@@ -28,6 +29,7 @@ import SettingsModule from '@/modules/Settings';
 import ReportsModule from '@/modules/Reports';
 import DebtModule from '@/modules/Debt';
 import LogsModule from '@/modules/Logs';
+import { RemindersModule } from '@/modules/Reminders';
 import Login from '@/modules/Login';
 import { LogOut } from 'lucide-react';
 
@@ -50,6 +52,7 @@ const App: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [scraps, setScraps] = useState<ScrapGold[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [reminders, setReminders] = useState<Reminder[]>([]);
   const [logs, setLogs] = useState<SystemLog[]>([]);
   const [cart, setCart] = useState<Product[]>([]);
   const [remotePrintQueue, setRemotePrintQueue] = useState<any[]>([]);
@@ -62,6 +65,7 @@ const App: React.FC = () => {
   const lastSyncedCustomers = React.useRef<string>('');
   const lastSyncedScraps = React.useRef<string>('');
   const lastSyncedExpenses = React.useRef<string>('');
+  const lastSyncedReminders = React.useRef<string>('');
   const lastSyncedLogs = React.useRef<string>('');
   const lastSyncedSettings = React.useRef<string>('');
   const [settings, setSettings] = useState<AppSettings>({
@@ -304,7 +308,7 @@ const App: React.FC = () => {
         if (!res.ok) throw new Error(`Initial sync failed (Status: ${res.status})`);
         const data = await res.json();
         
-        const { products: p, sales: s, customers: c, scraps: sc, settings: st, expenses: ex, logs: l } = data;
+        const { products: p, sales: s, customers: c, scraps: sc, settings: st, expenses: ex, logs: l, reminders: rm } = data;
 
         setProducts(Array.isArray(p) ? p : []);
         lastSyncedProducts.current = JSON.stringify(Array.isArray(p) ? p : []);
@@ -320,6 +324,9 @@ const App: React.FC = () => {
 
         setExpenses(Array.isArray(ex) ? ex : []);
         lastSyncedExpenses.current = JSON.stringify(Array.isArray(ex) ? ex : []);
+
+        setReminders(Array.isArray(rm) ? rm : []);
+        lastSyncedReminders.current = JSON.stringify(Array.isArray(rm) ? rm : []);
 
         setLogs(Array.isArray(l) ? l : []);
         lastSyncedLogs.current = JSON.stringify(Array.isArray(l) ? l : []);
@@ -623,6 +630,38 @@ const App: React.FC = () => {
     return () => clearTimeout(timeoutId);
   }, [settings, isLoaded]);
 
+  useEffect(() => {
+    if (!isLoaded || reminders === null) return;
+
+    const currentData = JSON.stringify(reminders);
+    if (currentData === lastSyncedReminders.current) return;
+
+    const syncData = async () => {
+      setIsSyncing(true);
+      try {
+        const res = await fetch('/api/data/reminders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: reminders })
+        });
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          throw new Error(errorData.details || errorData.error || 'Sync failed');
+        }
+        lastSyncedReminders.current = currentData;
+        setSyncError(null);
+      } catch (err: any) {
+        console.error('Failed to sync reminders:', err);
+        setSyncError(`Xatırlatmalar yadda saxlanılmadı: ${err.message}`);
+      } finally {
+        setIsSyncing(false);
+      }
+    };
+
+    const timeoutId = setTimeout(syncData, 1000);
+    return () => clearTimeout(timeoutId);
+  }, [reminders, isLoaded]);
+
   const addLog = async (action: string, category: SystemLog['category'], details?: string) => {
     const newLog: SystemLog = {
       id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
@@ -649,6 +688,7 @@ const App: React.FC = () => {
   const navItems = [
     { id: Page.Sales, icon: <ShoppingBag size={24} />, label: 'Satış' },
     { id: Page.Stock, icon: <Package size={24} />, label: 'Stok' },
+    { id: Page.Reminders, icon: <Bell size={24} />, label: 'Xatırlatmalar', badge: reminders.filter(r => !r.isCompleted).length },
     { id: Page.Customers, icon: <UserSquare2 size={24} />, label: 'Müştərilər' },
     { id: Page.SoldProducts, icon: <History size={24} />, label: 'Satılan Mallar' },
     { id: Page.Return, icon: <RotateCcw size={24} />, label: 'Qaytarma' },
@@ -713,6 +753,7 @@ const App: React.FC = () => {
       case Page.Scrap: return <ScrapModule scraps={scraps} setScraps={setScraps} settings={settings} addLog={addLog} />;
       case Page.Expenses: return <ExpensesModule expenses={expenses} setExpenses={setExpenses} sales={sales} addLog={addLog} />;
       case Page.Debt: return <DebtModule customers={customers} setCustomers={setCustomers} addLog={addLog} />;
+      case Page.Reminders: return <RemindersModule reminders={reminders} setReminders={setReminders} products={products} customers={customers} addLog={addLog} />;
       case Page.Reports: return <ReportsModule sales={sales} products={products} scraps={scraps} customers={customers} expenses={expenses} />;
       case Page.Logs: return <LogsModule logs={logs} setLogs={setLogs} />;
       case Page.Settings: return <SettingsModule 
@@ -755,10 +796,26 @@ const App: React.FC = () => {
             <button
               key={item.id}
               onClick={() => setCurrentPage(item.id)}
-              className={`w-full flex items-center rounded-2xl transition-all ${currentPage === item.id ? 'bg-amber-600 text-white shadow-lg shadow-amber-900/40' : 'hover:bg-stone-800 text-stone-500'} ${isSidebarOpen ? 'px-4 py-3.5 space-x-4' : 'p-3.5 justify-center'}`}
+              className={`w-full flex items-center rounded-2xl transition-all relative ${currentPage === item.id ? 'bg-amber-600 text-white shadow-lg shadow-amber-900/40' : 'hover:bg-stone-800 text-stone-500'} ${isSidebarOpen ? 'px-4 py-3.5 space-x-4' : 'p-3.5 justify-center'}`}
             >
-              {item.icon}
-              {isSidebarOpen && <span className="text-sm font-bold truncate">{item.label}</span>}
+              <div className="relative">
+                {item.icon}
+                {item.badge && item.badge > 0 ? (
+                  <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center animate-pulse">
+                    {item.badge > 9 ? '9+' : item.badge}
+                  </span>
+                ) : null}
+              </div>
+              {isSidebarOpen && (
+                <div className="flex-1 flex items-center justify-between min-w-0">
+                  <span className="text-sm font-bold truncate">{item.label}</span>
+                  {item.badge && item.badge > 0 ? (
+                    <span className="bg-rose-500/20 text-rose-400 text-[10px] font-black px-2 py-0.5 rounded-full ml-2">
+                      {item.badge}
+                    </span>
+                  ) : null}
+                </div>
+              )}
             </button>
           ))}
         </nav>
