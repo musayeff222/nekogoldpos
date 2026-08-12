@@ -28,6 +28,7 @@ import {
   History,
   User,
   Clock,
+  Check,
   Image as ImageIcon
 } from 'lucide-react';
 import { Product, ProductType, Sale, Customer, AppSettings, SystemLog } from '@/types';
@@ -90,51 +91,88 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
   });
 
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
+  const [foundProducts, setFoundProducts] = useState<Product[]>([]);
 
   const handleProductSearch = () => {
     const code = searchCode.trim().toLowerCase();
-    if (!code) return;
+    if (!code) {
+      setFoundProducts([]);
+      setCurrentProduct(null);
+      setPreviouslySoldItem(null);
+      return;
+    }
 
-    // 1. Aktiv stokda tapmağa çalışırıq
-    const found = products.find(p => 
-      p.code.toLowerCase() === code && 
-      !cart.some(item => item.id === p.id)
-    );
+    // Search active products (stockCount > 0 and not returned)
+    const activeMatches = products.filter(p => {
+      if (p.stockCount <= 0 || p.isReturned) return false;
 
-    if (found) {
-      if (found.isReturned) {
-        alert(`BU MƏHSUL VAZVRAT OLUNUB! (Səbəb: ${found.returnReason || 'Qeyd yoxdur'})`);
-        setCurrentProduct(null);
-        setPreviouslySoldItem(null);
-        return;
-      }
-      if (found.stockCount > 0) {
-        setCurrentProduct(found);
-        setPreviouslySoldItem(null);
-      } else {
-        // Stokda yoxdursa, satış tarixçəsində yoxlayırıq
-        const sold = sales.find(s => s.productCode.toLowerCase() === code);
-        if (sold) {
-          setPreviouslySoldItem(sold);
-          setCurrentProduct(null);
-        } else {
-          alert(`'${searchCode}' kodlu aktiv məhsul tapılmadı!`);
-          setCurrentProduct(null);
-          setPreviouslySoldItem(null);
-        }
-      }
+      const pCode = p.code.toLowerCase();
+      const pNoPrefix = pCode.replace(/^[a-zA-Z]+/, '');
+      const pDigits = pCode.replace(/\D/g, '');
+
+      // 1. Exact match (e.g., 'bk2258' === 'bk2258')
+      if (pCode === code) return true;
+
+      // 2. No prefix match (e.g., search '2258' matches 'bk2258', 'ük2258', 'sr2258')
+      if (pNoPrefix === code) return true;
+
+      // 3. Numeric digits match if search consists only of digits
+      if (/^\d+$/.test(code) && pDigits === code) return true;
+
+      // 4. Substring match
+      if (pCode.includes(code)) return true;
+
+      return false;
+    });
+
+    if (activeMatches.length > 0) {
+      setFoundProducts(activeMatches);
+      setCurrentProduct(null);
+      setPreviouslySoldItem(null);
     } else {
-      // Heç tapılmadısa satış tarixçəsində yoxlayırıq
-      const sold = sales.find(s => s.productCode.toLowerCase() === code);
+      // Check if sold previously
+      const sold = sales.find(s => {
+        const sCode = s.productCode.toLowerCase();
+        const sNoPrefix = sCode.replace(/^[a-zA-Z]+/, '');
+        const sDigits = sCode.replace(/\D/g, '');
+        return (
+          sCode === code ||
+          sNoPrefix === code ||
+          (/^\d+$/.test(code) && sDigits === code) ||
+          sCode.includes(code)
+        );
+      });
+
       if (sold) {
         setPreviouslySoldItem(sold);
+        setFoundProducts([]);
         setCurrentProduct(null);
       } else {
         alert(`'${searchCode}' kodlu aktiv məhsul tapılmadı!`);
+        setFoundProducts([]);
         setCurrentProduct(null);
         setPreviouslySoldItem(null);
       }
     }
+  };
+
+  const handleAddToCartProduct = (product: Product) => {
+    if (cart.some(item => item.id === product.id)) {
+      alert("Bu məhsul artıq səbətdədir!");
+      return;
+    }
+    setCart(prev => [...prev, product]);
+  };
+
+  const handleDirectPaymentProduct = (product: Product) => {
+    if (!cart.some(item => item.id === product.id)) {
+      setCart(prev => [...prev, product]);
+    }
+    setFoundProducts([]);
+    setCurrentProduct(null);
+    setPreviouslySoldItem(null);
+    setSearchCode('');
+    setStep(3);
   };
 
   const addToCart = () => {
@@ -408,6 +446,7 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
     setStep(1);
     setCart([]);
     setCurrentProduct(null);
+    setFoundProducts([]);
     setPreviouslySoldItem(null);
     setDiscount(0);
     setCustomerInfo({ id: '', fullName: '', phone: '', title: '', address: '' });
@@ -685,6 +724,104 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
                        Axtarışı Təmizlə
                     </button>
                  </div>
+              </div>
+            )}
+
+            {foundProducts.length > 0 && (
+              <div className="w-full max-w-4xl mt-4 space-y-4 animate-in fade-in zoom-in-95 duration-300">
+                <div className="flex items-center justify-between px-2">
+                  <h4 className="text-xs md:text-sm font-black text-stone-700 uppercase tracking-wider flex items-center">
+                    <Sparkles className="w-4 h-4 text-amber-500 mr-2" />
+                    Tapılan Məhsullar ({foundProducts.length} ədəd)
+                  </h4>
+                  <button 
+                    onClick={() => { setFoundProducts([]); setSearchCode(''); }}
+                    className="text-[10px] md:text-xs font-black text-stone-400 hover:text-red-500 uppercase tracking-widest transition-all"
+                  >
+                    Təmizlə
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {foundProducts.map(product => {
+                    const isInCart = cart.some(item => item.id === product.id);
+                    const remainingWeight = (Number(product.weight) || 0) - (product.soldWeight || 0);
+
+                    return (
+                      <div 
+                        key={product.id}
+                        className={`bg-amber-50/90 rounded-3xl p-5 border-2 ${isInCart ? 'border-amber-400 bg-amber-100/60' : 'border-white'} shadow-xl flex flex-col justify-between space-y-4 transition-all hover:shadow-2xl`}
+                      >
+                        <div className="flex items-start space-x-4">
+                          <div 
+                            onClick={() => product.imageUrl && setZoomedImage(product.imageUrl)}
+                            className={`w-24 h-24 md:w-28 md:h-28 bg-white rounded-2xl flex-shrink-0 flex items-center justify-center p-2 shadow-sm border border-stone-100 overflow-hidden ${product.imageUrl ? 'cursor-zoom-in' : ''}`}
+                          >
+                            {product.imageUrl ? (
+                              <img 
+                                src={product.imageUrl} 
+                                referrerPolicy="no-referrer" 
+                                loading="lazy"
+                                className="w-full h-full object-contain" 
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.display = 'none';
+                                }}
+                              />
+                            ) : (
+                              <Sparkles className="text-amber-200 w-8 h-8" />
+                            )}
+                          </div>
+
+                          <div className="flex-1 space-y-1">
+                            {product.allowPartialSale && (
+                              <div className="inline-flex items-center space-x-1 bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest mb-1">
+                                <Scale size={10} />
+                                <span>Qalıq: {remainingWeight.toFixed(2)} gr</span>
+                              </div>
+                            )}
+                            <h5 className="text-base md:text-lg font-black text-stone-900 uppercase tracking-tighter leading-tight">{product.name}</h5>
+                            <div className="flex flex-wrap gap-1.5 text-[10px] font-bold text-stone-500 uppercase">
+                              <span className="bg-amber-200/80 text-amber-950 px-2 py-0.5 rounded-md font-black">{product.code}</span>
+                              <span className="bg-white/80 text-stone-800 px-2 py-0.5 rounded-md">{product.weight} gr</span>
+                              <span className="bg-white/80 text-stone-800 px-2 py-0.5 rounded-md">{product.carat}</span>
+                            </div>
+                            <p className="text-xl md:text-2xl font-black text-amber-600 tracking-tighter mt-1">
+                              {(Number(product.price) || 0).toLocaleString()} <span className="text-sm text-amber-400">₼</span>
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex space-x-2 pt-2 border-t border-amber-200/60">
+                          <button 
+                            onClick={() => handleAddToCartProduct(product)} 
+                            className={`flex-1 py-3 px-2 rounded-xl font-black text-[10px] md:text-xs uppercase transition-all shadow-md flex items-center justify-center ${
+                              isInCart 
+                                ? 'bg-emerald-600 text-white hover:bg-emerald-700' 
+                                : 'bg-stone-900 text-white hover:bg-black'
+                            }`}
+                          >
+                            {isInCart ? (
+                              <>
+                                <Check size={14} className="mr-1.5" /> SƏBƏTDƏDİR
+                              </>
+                            ) : (
+                              <>
+                                <PackagePlus size={14} className="mr-1.5" /> SƏBƏTƏ ƏLAVƏ ET
+                              </>
+                            )}
+                          </button>
+
+                          <button 
+                            onClick={() => handleDirectPaymentProduct(product)} 
+                            className="flex-1 bg-amber-500 text-amber-950 py-3 px-2 rounded-xl font-black text-[10px] md:text-xs uppercase hover:bg-amber-400 transition-all shadow-md flex items-center justify-center"
+                          >
+                            <CreditCard size={14} className="mr-1.5" /> BİRDƏFƏLİK ÖDƏ
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
