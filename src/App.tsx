@@ -1135,7 +1135,7 @@ const App: React.FC = () => {
 
       {/* MOBILE BOTTOM NAV */}
       {!isAddingProductActive && (
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-stone-900 border-t border-white/10 z-50 flex justify-around items-center py-2 px-1 no-print safe-bottom-padding animate-in slide-in-from-bottom duration-300">
+        <nav id="mobile-bottom-nav" className="mobile-bottom-nav md:hidden fixed bottom-0 left-0 right-0 bg-stone-900 border-t border-white/10 z-50 flex justify-around items-center py-2 px-1 no-print safe-bottom-padding animate-in slide-in-from-bottom duration-300">
           {navItems.slice(0, 4).map((item) => {
             const active = item.isActive !== undefined ? item.isActive : currentPage === item.id;
             return (

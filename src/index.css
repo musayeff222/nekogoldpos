@@ -27,6 +27,21 @@ body {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
+/* HIDE MOBILE BOTTOM NAV WHEN ADDING PRODUCT */
+body.hide-mobile-nav nav#mobile-bottom-nav,
+body.hide-mobile-nav .mobile-bottom-nav,
+body[data-hide-nav="true"] nav#mobile-bottom-nav,
+body[data-hide-nav="true"] .mobile-bottom-nav {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+body.hide-mobile-nav main,
+body[data-hide-nav="true"] main {
+  padding-bottom: 0px !important;
+}
+
 .brand-font {
   font-family: 'Georgia', serif;
   letter-spacing: 0.1em;

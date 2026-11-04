@@ -67,7 +67,16 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
 
   useEffect(() => {
     onIsAddingNewChange?.(isAddingNew);
+    if (isAddingNew) {
+      document.body.classList.add('hide-mobile-nav');
+      document.body.setAttribute('data-hide-nav', 'true');
+    } else {
+      document.body.classList.remove('hide-mobile-nav');
+      document.body.removeAttribute('data-hide-nav');
+    }
     return () => {
+      document.body.classList.remove('hide-mobile-nav');
+      document.body.removeAttribute('data-hide-nav');
       onIsAddingNewChange?.(false);
     };
   }, [isAddingNew, onIsAddingNewChange]);
@@ -1144,16 +1153,16 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
 
   if (isAddingNew) {
     return (
-      <div className="flex flex-col animate-in slide-in-from-right duration-300 min-h-full">
-        <div className="bg-white rounded-2xl md:rounded-3xl shadow-2xl border border-stone-100 flex flex-col overflow-hidden min-h-[calc(100vh-16px)] md:max-h-[calc(100vh-48px)]">
-            <div className="flex items-center justify-between p-3 md:p-4 border-b border-stone-50 bg-stone-50/30">
+      <div className="fixed inset-0 z-[70] md:relative md:inset-auto md:z-auto bg-stone-100 md:bg-transparent flex flex-col p-1 sm:p-2 md:p-0 animate-in slide-in-from-right duration-200">
+        <div className="bg-white rounded-2xl md:rounded-3xl shadow-2xl border border-stone-100 flex flex-col overflow-hidden h-full md:max-h-[calc(100vh-48px)]">
+            <div className="flex items-center justify-between p-3 md:p-4 border-b border-stone-50 bg-stone-50/50 shrink-0">
               <div className="flex items-center space-x-3 md:space-x-4">
-                  <button onClick={() => { setIsAddingNew(false); resetForm(); }} className="px-3 py-2 md:p-2.5 bg-white border border-stone-200 rounded-xl text-stone-600 hover:text-stone-900 transition-all shadow-sm active:scale-95 flex items-center space-x-1.5"><ArrowLeft size={18} /><span className="text-xs font-bold md:hidden">Geri</span></button>
+                  <button onClick={() => { setIsAddingNew(false); resetForm(); }} className="px-3 py-2 md:p-2.5 bg-white border border-stone-200 rounded-xl text-stone-700 hover:text-stone-900 transition-all shadow-sm active:scale-95 flex items-center space-x-1.5"><ArrowLeft size={18} /><span className="text-xs font-bold md:hidden">Geri</span></button>
                   <h2 className="text-base md:text-lg font-black text-stone-900 uppercase tracking-tighter leading-none">Yeni Məhsul</h2>
               </div>
             </div>
 
-            <form id="ultraCompactForm" onSubmit={handleAddProduct} className="flex-1 p-4 md:p-5 grid grid-cols-1 lg:grid-cols-12 gap-5 overflow-y-auto scrollbar-hide">
+            <form id="ultraCompactForm" onSubmit={handleAddProduct} className="flex-1 p-3 md:p-5 grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-5 overflow-y-auto scrollbar-hide pb-6">
               <div className="lg:col-span-5 space-y-3">
                 <div className="relative aspect-square md:aspect-auto md:h-72 border-2 border-dashed border-stone-100 rounded-2xl bg-stone-50/50 flex items-center justify-center overflow-hidden shadow-inner">
                   {isCameraOpen ? (
