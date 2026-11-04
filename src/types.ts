@@ -35,6 +35,11 @@ export interface Product {
   soldWeight?: number; // Hissəli satışda satılan ümumi çəki
   saleType?: 'weight' | 'count';
   soldCount?: number; 
+  receiptName?: string; // Çekdə çıxacaq ad
+  customSalePrice?: number; // Müştərinin aldığı / razılaşdırılmış qiymət
+  originalPrice?: number; // İlkin baza qiyməti
+  addedBy?: string; // Əlavə edən əməkdaş
+  addedAt?: string; // Bazaya əlavə olunma vaxtı (ISO string)
 }
 
 export interface Customer {
@@ -51,10 +56,13 @@ export interface Sale {
   id: string;
   productId: string;
   productName: string;
+  receiptName?: string; // Çekdəki fərdi ad
+  originalProductName?: string;
   productCode: string;
   type: ProductType;
   customerName: string;
   price: number;
+  originalPrice?: number; // Orijinal ilkin qiymət
   discount: number;
   total: number;
   date: string;
@@ -143,6 +151,8 @@ export interface AppSettings {
   isPrintStation?: boolean;
   remotePrintEnabled?: boolean;
   telegramChatIds?: string[];
+  telegramSalesChatIds?: string[];
+  telegramProductChatIds?: string[];
 }
 
 export interface SystemLog {
@@ -166,7 +176,10 @@ export enum Page {
   Debt = 'DEBT',
   Expenses = 'EXPENSES',
   Logs = 'LOGS',
-  Reminders = 'REMINDERS'
+  Reminders = 'REMINDERS',
+  PatronDashboard = 'PATRON_DASHBOARD',
+  ManagerDashboard = 'MANAGER_DASHBOARD',
+  Approvals = 'APPROVALS'
 }
 
 export interface Reminder {
@@ -184,3 +197,42 @@ export interface Reminder {
   createdAt: string;
   completedAt?: string;
 }
+
+export type UserRole = 'mudir' | 'patron' | 'staff' | 'shop' | 'admin' | 'manager';
+
+export interface AuthUser {
+  id?: number;
+  username: string;
+  fullName: string;
+  role: UserRole;
+  mustChangePassword?: boolean;
+}
+
+export interface UserAccount {
+  id: number;
+  username: string;
+  full_name: string;
+  role: UserRole;
+  must_change_password: number | boolean;
+  created_by?: string;
+  created_at?: string;
+}
+
+export interface ApprovalRequest {
+  id: string;
+  type: 'return' | 'delete_product' | 'edit_product' | 'change_group' | 'other';
+  employee_name: string;
+  employee_username: string;
+  product_id?: string;
+  product_name?: string;
+  product_code?: string;
+  product_quantity?: string;
+  reason: string;
+  payload?: any;
+  status: 'pending' | 'approved' | 'rejected';
+  decided_by?: string;
+  decided_at?: string;
+  rejection_reason?: string;
+  created_at: string;
+}
+

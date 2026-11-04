@@ -68,11 +68,16 @@ const ReportsModule: React.FC<ReportsProps> = ({ sales, products, scraps, custom
         {/* Z Hesabatı Bölməsi */}
         <div className="bg-slate-900 text-white rounded-[2.5rem] md:rounded-[3rem] p-6 md:p-10 shadow-2xl relative overflow-hidden group">
            <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600 opacity-10 rounded-full blur-[100px] -mr-32 -mt-32 group-hover:opacity-20 transition-all duration-1000"></div>
-           <div className="relative z-10 space-y-8 md:space-y-12">
+           <div className="relative z-10 space-y-6 md:space-y-8">
               <div className="flex justify-between items-center">
-                 <h3 className="text-xl md:text-2xl font-black flex items-center tracking-tighter uppercase leading-none">
-                    <Calendar className="mr-3 md:mr-4 text-indigo-500 w-6 h-6 md:w-8 md:h-8" /> Z Hesabatı
-                 </h3>
+                 <div>
+                   <h3 className="text-xl md:text-2xl font-black flex items-center tracking-tighter uppercase leading-none">
+                      <Calendar className="mr-3 md:mr-4 text-indigo-500 w-6 h-6 md:w-8 md:h-8" /> Z Hesabatı
+                   </h3>
+                   <p className="text-xs text-indigo-300 font-bold mt-1">
+                     Müdir / Rəhbər: <span className="text-white font-black underline decoration-amber-500">Etibar Nuriyev</span>
+                   </p>
+                 </div>
                  <div className="bg-white/5 px-4 py-1.5 rounded-xl border border-white/10 text-[10px] md:text-xs font-black uppercase tracking-widest text-slate-400">
                     {new Date().toLocaleDateString('az-AZ')}
                  </div>
@@ -87,13 +92,21 @@ const ReportsModule: React.FC<ReportsProps> = ({ sales, products, scraps, custom
                     <span className="text-[10px] md:text-sm font-black text-slate-500 uppercase tracking-widest">Bugünkü Xərc</span>
                     <span className="text-lg md:text-2xl font-black tracking-tighter">-{dailyExpensesTotal.toLocaleString()} <span className="text-xs text-slate-600">₼</span></span>
                  </div>
-                 <div className="flex justify-between items-center pt-4 md:pt-6">
+                 <div className="flex justify-between items-center pt-2">
                     <span className="text-xs md:text-sm font-black text-indigo-500 uppercase tracking-[0.2em]">KASSA QALIĞI</span>
                     <span className="text-3xl md:text-5xl font-black text-indigo-500 tracking-tighter">{(dailyRevenue - dailyExpensesTotal).toLocaleString()} <span className="text-base md:text-xl text-indigo-800">₼</span></span>
                  </div>
               </div>
 
-              <button className="w-full bg-indigo-600 text-white py-5 md:py-7 rounded-[2rem] font-black text-base md:text-xl hover:bg-indigo-500 transition-all flex items-center justify-center shadow-xl active:scale-95 uppercase tracking-[0.2em]">
+              <div className="pt-2 border-t border-white/10 flex justify-between items-center text-[11px] text-slate-400 font-medium">
+                 <span>Hesabatı Təsdiqləyən:</span>
+                 <span className="font-bold text-white">Müdir Etibar Nuriyev</span>
+              </div>
+
+              <button 
+                 onClick={() => window.print()}
+                 className="w-full bg-indigo-600 text-white py-4 md:py-6 rounded-[2rem] font-black text-base md:text-lg hover:bg-indigo-500 transition-all flex items-center justify-center shadow-xl active:scale-95 uppercase tracking-[0.2em]"
+              >
                  <Printer className="w-6 h-6 md:w-8 md:h-8 mr-4" /> HESABATI ÇAP ET
               </button>
            </div>

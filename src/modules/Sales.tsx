@@ -31,7 +31,7 @@ import {
   Check,
   Image as ImageIcon
 } from 'lucide-react';
-import { Product, ProductType, Sale, Customer, AppSettings, SystemLog } from '@/types';
+import { Product, ProductType, Sale, Customer, AppSettings, SystemLog, AuthUser } from '@/types';
 
 interface SalesProps {
   products: Product[];
@@ -44,7 +44,7 @@ interface SalesProps {
   cart: Product[];
   setCart: React.Dispatch<React.SetStateAction<Product[]>>;
   addLog: (action: string, category: SystemLog['category'], details?: string) => void;
-  user: { username: string } | null;
+  user: AuthUser | null;
 }
 
 const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSales, customers, setCustomers, settings, cart, setCart, addLog, user }) => {
@@ -93,6 +93,22 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const [foundProducts, setFoundProducts] = useState<Product[]>([]);
   const [foundSoldItems, setFoundSoldItems] = useState<Sale[]>([]);
+
+  const getReceiptSeller = () => {
+    const recorded = lastTransaction?.sales[0]?.sellerName;
+    if (recorded) {
+      const rLower = recorded.toLowerCase().replace(/^@/, '');
+      if (rLower === 'magaza' || rLower.includes('mağaza')) return '@magaza';
+      if (rLower === 'admin' || rLower === 'sistem') {
+        if (user?.username?.toLowerCase().replace(/^@/, '') === 'magaza' || user?.role === 'shop') return '@magaza';
+        return 'Admin';
+      }
+      return recorded.startsWith('@') ? recorded : `@${recorded}`;
+    }
+    if (user?.username?.toLowerCase().replace(/^@/, '') === 'magaza' || user?.role === 'shop') return '@magaza';
+    if (user?.username) return `@${user.username.replace(/^@/, '')}`;
+    return 'Admin';
+  };
 
   const handleProductSearch = () => {
     const code = searchCode.trim().toLowerCase();
@@ -160,12 +176,24 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
       alert("Bu məhsul artıq səbətdədir!");
       return;
     }
-    setCart(prev => [...prev, product]);
+    const itemWithReceiptProps: Product = {
+      ...product,
+      receiptName: product.receiptName || product.name,
+      customSalePrice: product.customSalePrice !== undefined ? product.customSalePrice : (Number(product.price) || 0),
+      originalPrice: Number(product.price) || 0
+    };
+    setCart(prev => [...prev, itemWithReceiptProps]);
   };
 
   const handleDirectPaymentProduct = (product: Product) => {
     if (!cart.some(item => item.id === product.id)) {
-      setCart(prev => [...prev, product]);
+      const itemWithReceiptProps: Product = {
+        ...product,
+        receiptName: product.receiptName || product.name,
+        customSalePrice: product.customSalePrice !== undefined ? product.customSalePrice : (Number(product.price) || 0),
+        originalPrice: Number(product.price) || 0
+      };
+      setCart(prev => [...prev, itemWithReceiptProps]);
     }
     setFoundProducts([]);
     setFoundSoldItems([]);
@@ -181,7 +209,13 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
         alert("Bu məhsul artıq səbətdədir!");
         return;
       }
-      setCart([...cart, currentProduct]);
+      const itemWithReceiptProps: Product = {
+        ...currentProduct,
+        receiptName: currentProduct.receiptName || currentProduct.name,
+        customSalePrice: currentProduct.customSalePrice !== undefined ? currentProduct.customSalePrice : (Number(currentProduct.price) || 0),
+        originalPrice: Number(currentProduct.price) || 0
+      };
+      setCart([...cart, itemWithReceiptProps]);
       setCurrentProduct(null);
       setPreviouslySoldItem(null);
       setSearchCode('');
@@ -193,13 +227,36 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
     if (currentProduct) {
       const alreadyInCart = cart.find(item => item.id === currentProduct.id);
       if (!alreadyInCart) {
-        setCart([...cart, currentProduct]);
+        const itemWithReceiptProps: Product = {
+          ...currentProduct,
+          receiptName: currentProduct.receiptName || currentProduct.name,
+          customSalePrice: currentProduct.customSalePrice !== undefined ? currentProduct.customSalePrice : (Number(currentProduct.price) || 0),
+          originalPrice: Number(currentProduct.price) || 0
+        };
+        setCart([...cart, itemWithReceiptProps]);
       }
       setCurrentProduct(null);
       setPreviouslySoldItem(null);
       setSearchCode('');
       setStep(3);
     }
+  };
+
+  const updateCartItemReceiptName = (id: string, newName: string) => {
+    setCart(prev => prev.map(item => item.id === id ? { ...item, receiptName: newName } : item));
+  };
+
+  const updateCartItemPrice = (id: string, newPrice: number | '') => {
+    setCart(prev => prev.map(item => {
+      if (item.id === id) {
+        return {
+          ...item,
+          customSalePrice: newPrice === '' ? 0 : Number(newPrice),
+          originalPrice: item.originalPrice !== undefined ? item.originalPrice : (Number(item.price) || 0)
+        };
+      }
+      return item;
+    }));
   };
 
   const removeFromCart = (id: string) => {
@@ -224,13 +281,19 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
       // Try to find the first product image from the cart/records
       const imageUrls = saleRecords.map(s => s.imageUrl).filter(Boolean);
 
+      // Determine sales chat IDs (support telegramSalesChatIds and backward-compatible telegramChatIds)
+      const salesChatIds = (settings.telegramSalesChatIds && settings.telegramSalesChatIds.length > 0)
+        ? settings.telegramSalesChatIds
+        : (settings.telegramChatIds || []);
+
       await fetch('/api/notify/telegram', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           message,
           imageUrl: imageUrls.length > 0 ? imageUrls[0] : null,
-          chatIds: settings.telegramChatIds || []
+          type: 'sale',
+          chatIds: salesChatIds
         })
       });
     } catch (error) {
@@ -277,19 +340,26 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
     }
     
     const subtotalValue = isPartial 
-      ? (Number(product.price) / Number(product.weight)) * Number(partialSaleInfo.weight)
-      : cart.reduce((acc, p) => acc + (Number(p.price) || 0), 0);
+      ? ((product.customSalePrice !== undefined ? Number(product.customSalePrice) : Number(product.price)) / Number(product.weight)) * Number(partialSaleInfo.weight)
+      : cart.reduce((acc, p) => acc + (p.customSalePrice !== undefined ? Number(p.customSalePrice) : (Number(p.price) || 0)), 0);
     
-    const finalTotalValue = subtotalValue - discount;
+    const finalTotalValue = Math.max(0, subtotalValue - discount);
+
+    const activeSellerName = (user?.username?.toLowerCase().replace(/^@/, '') === 'magaza' || user?.role === 'shop')
+      ? '@magaza'
+      : (user?.username ? (user.username.startsWith('@') ? user.username : `@${user.username}`) : (user?.fullName || 'Sistem'));
 
     const newSalesRecords: Sale[] = isPartial ? [{
       id: `${transactionId}-1`,
       productId: product.id,
-      productName: product.name,
+      productName: product.receiptName?.trim() || product.name,
+      originalProductName: product.name,
+      receiptName: product.receiptName?.trim() || product.name,
       productCode: product.code,
       type: product.type,
       customerName: customerInfo.fullName || 'Anonim Müştəri',
       price: subtotalValue,
+      originalPrice: subtotalValue,
       discount: discount,
       total: finalTotalValue,
       date: date,
@@ -302,26 +372,37 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
       supplier: product.supplier,
       brilliant: product.brilliant,
       imageUrl: product.imageUrl,
-      sellerName: user?.username || 'Sistem'
-    }] : cart.map((product, index) => ({
-      id: `${transactionId}-${index + 1}`,
-      productId: product.id,
-      productName: product.name,
-      productCode: product.code,
-      type: product.type,
-      customerName: customerInfo.fullName || 'Anonim Müştəri',
-      price: Number(product.price) || 0,
-      discount: index === 0 ? discount : 0,
-      total: index === 0 ? (Number(product.price) || 0) - discount : (Number(product.price) || 0),
-      date: date,
-      status: 'completed',
-      weight: Number(product.weight) || 0,
-      carat: product.carat,
-      supplier: product.supplier,
-      brilliant: product.brilliant,
-      imageUrl: product.imageUrl,
-      sellerName: user?.username || 'Sistem'
-    }));
+      sellerName: activeSellerName
+    }] : cart.map((product, index) => {
+      const itemCustomPrice = product.customSalePrice !== undefined ? Number(product.customSalePrice) : (Number(product.price) || 0);
+      const itemOrigPrice = Number(product.originalPrice !== undefined ? product.originalPrice : product.price) || itemCustomPrice;
+      const priceDiff = Math.max(0, itemOrigPrice - itemCustomPrice);
+      const itemDiscount = (index === 0 ? discount : 0) + priceDiff;
+      const itemFinalTotal = Math.max(0, itemCustomPrice - (index === 0 ? discount : 0));
+
+      return {
+        id: `${transactionId}-${index + 1}`,
+        productId: product.id,
+        productName: product.receiptName?.trim() || product.name,
+        originalProductName: product.name,
+        receiptName: product.receiptName?.trim() || product.name,
+        productCode: product.code,
+        type: product.type,
+        customerName: customerInfo.fullName || 'Anonim Müştəri',
+        price: itemOrigPrice,
+        originalPrice: itemOrigPrice,
+        discount: itemDiscount,
+        total: itemFinalTotal,
+        date: date,
+        status: 'completed',
+        weight: Number(product.weight) || 0,
+        carat: product.carat,
+        supplier: product.supplier,
+        brilliant: product.brilliant,
+        imageUrl: product.imageUrl,
+        sellerName: activeSellerName
+      };
+    });
 
     // Send Telegram Notification
     sendTelegramNotification(newSalesRecords, finalTotalValue, customerInfo.fullName || 'Anonim Müştəri');
@@ -515,8 +596,8 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
     }, 250);
   };
 
-  const subtotalValue = cart.reduce((acc, p) => acc + (Number(p.price) || 0), 0);
-  const totalValue = subtotalValue - discount;
+  const subtotalValue = cart.reduce((acc, p) => acc + (p.customSalePrice !== undefined ? Number(p.customSalePrice) : (Number(p.price) || 0)), 0);
+  const totalValue = Math.max(0, subtotalValue - discount);
 
   const filteredCustomers = customers.filter(c => 
     c.fullName.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
@@ -528,69 +609,132 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
       
       {/* ÇAP KONTEYNERİ (PORTAL) */}
       {lastTransaction && createPortal(
-        <div id="receipt-print" style={{ fontFamily: 'Inter, sans-serif' }}>
-            <div className="receipt-content" style={{ background: 'white', color: 'black', fontWeight: settings.receiptFontWeight }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '30px', borderBottom: '3px solid black', paddingBottom: '20px' }}>
-                    <div>
-                        <h1 style={{ fontSize: '32px', fontWeight: '900', margin: '0', letterSpacing: '2px', color: '#000' }}>NEKO GOLD</h1>
-                        <p style={{ margin: '4px 0', fontSize: '14px', textTransform: 'uppercase', fontWeight: 'bold', color: '#666' }}>Zərgərlik Satış Mərkəzi</p>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                        <h2 style={{ fontSize: '18px', fontWeight: '900', margin: '0', textTransform: 'uppercase' }}>MƏHSUL TƏSVİRİ</h2>
-                        <p style={{ fontSize: '12px', color: '#777', marginTop: '5px' }}>Sənəd No: {Math.random().toString(36).substr(2, 6).toUpperCase()}</p>
-                    </div>
-                </div>
+        <div id="receipt-print" className="receipt-80mm" style={{ fontFamily: 'Inter, sans-serif' }}>
+            <div className="receipt-luxury-container" style={{ background: '#ffffff', color: '#000000', padding: '0', boxSizing: 'border-box', width: '100%', fontWeight: settings.receiptFontWeight || 'normal' }}>
                 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px', marginBottom: '40px' }}>
-                    <div style={{ background: '#f9f9f9', padding: '20px', borderRadius: '15px', border: '1px solid #eee' }}>
-                        <p style={{ fontSize: '11px', fontWeight: '900', color: '#999', textTransform: 'uppercase', marginBottom: '10px', borderBottom: '1px solid #ddd', paddingBottom: '5px' }}>ALICI MƏLUMATLARI</p>
-                        <p style={{ margin: '5px 0', fontSize: '16px', fontWeight: '900' }}>{lastTransaction.customer.fullName || 'Anonim Müştəri'}</p>
-                        <p style={{ margin: '5px 0', fontSize: '14px', fontWeight: 'bold', color: '#555' }}>Tel: {lastTransaction.customer.phone || '-'}</p>
+                {/* 1. BAŞLIQ */}
+                <div style={{ textAlign: 'center', borderBottom: '2px solid #000000', paddingBottom: '5px', marginBottom: '5px' }}>
+                    <h1 style={{ fontSize: '21px', fontWeight: '900', margin: '0', letterSpacing: '0.04em', color: '#000000', textTransform: 'uppercase' }}>
+                      {settings.shopName || 'NEKO GOLD'}
+                    </h1>
+                    <p style={{ margin: '1px 0', fontSize: '10.5px', textTransform: 'uppercase', fontWeight: 'bold', color: '#000000' }}>
+                      Zərgərlik Satış Mərkəzi
+                    </p>
+                    <p style={{ margin: '0', fontSize: '9px', fontStyle: 'italic', color: '#000000' }}>
+                      « Qızıl & Zinət Əşyaları »
+                    </p>
+                </div>
+
+                {/* SƏNƏD & MÜŞTƏRİ MƏLUMATLARI */}
+                <div style={{ borderBottom: '1px solid #000000', paddingBottom: '4px', marginBottom: '4px', fontSize: '10.5px', lineHeight: '1.4', color: '#000000' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
+                      <span>Sənəd №: #{lastTransaction.sales[0]?.id || Math.random().toString(36).substr(2, 6).toUpperCase()}</span>
+                      <span>Tarix: {new Date(lastTransaction.date).toLocaleDateString('az-AZ')} {new Date(lastTransaction.date).toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
-                    <div style={{ background: '#f9f9f9', padding: '20px', borderRadius: '15px', border: '1px solid #eee' }}>
-                        <p style={{ fontSize: '11px', fontWeight: '900', color: '#999', textTransform: 'uppercase', marginBottom: '10px', borderBottom: '1px solid #ddd', paddingBottom: '5px' }}>SATIŞ QEYDİ</p>
-                        <p style={{ margin: '5px 0', fontSize: '14px', fontWeight: 'bold' }}>Mağaza: NEKO GOLD</p>
-                        <p style={{ margin: '5px 0', fontSize: '12px', color: '#555' }}>Bu sənəd müştəriyə təqdim olunan malın texniki göstəricilərini təsdiq edir.</p>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Müştəri: <strong>{lastTransaction.customer.fullName || 'Anonim Müştəri'}</strong></span>
+                      {lastTransaction.customer.phone && <span>Tel: {lastTransaction.customer.phone}</span>}
+                    </div>
+                    <div style={{ fontSize: '10px' }}>
+                      <span>Satıcı: <strong>{getReceiptSeller()}</strong></span>
                     </div>
                 </div>
 
-                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '40px' }}>
+                {/* 2. MƏHSULLAR CƏDVƏLİ */}
+                <table className="receipt-luxury-table" style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', border: '1.5px solid #000000', margin: '4px 0', fontSize: '10px', color: '#000000' }}>
+                    <colgroup>
+                        <col style={{ width: '15%' }} />
+                        <col style={{ width: '31%' }} />
+                        <col style={{ width: '12%' }} />
+                        <col style={{ width: '11%' }} />
+                        <col style={{ width: '14%' }} />
+                        <col style={{ width: '17%' }} />
+                    </colgroup>
                     <thead>
-                        <tr style={{ background: '#000', color: '#fff' }}>
-                            <th style={{ textAlign: 'left', padding: '15px 20px', fontSize: '12px', textTransform: 'uppercase' }}>Məhsul Kodu</th>
-                            <th style={{ textAlign: 'left', padding: '15px 20px', fontSize: '12px', textTransform: 'uppercase' }}>Məhsulun Adı</th>
-                            <th style={{ textAlign: 'right', padding: '15px 20px', fontSize: '12px', textTransform: 'uppercase' }}>Çəki (gr)</th>
+                        <tr style={{ background: '#f8fafc', color: '#000000', borderBottom: '1.5px solid #000000' }}>
+                            <th style={{ padding: '3.5px 1px', fontSize: '9px', fontWeight: '900', textAlign: 'center', borderRight: '1px solid #000000' }}>KOD</th>
+                            <th style={{ padding: '3.5px 2px', fontSize: '9px', fontWeight: '900', textAlign: 'left', borderRight: '1px solid #000000' }}>MƏHSULUN ADI</th>
+                            <th style={{ padding: '3.5px 1px', fontSize: '9px', fontWeight: '900', textAlign: 'center', borderRight: '1px solid #000000' }}>ÇƏKİ</th>
+                            <th style={{ padding: '3.5px 1px', fontSize: '9px', fontWeight: '900', textAlign: 'center', borderRight: '1px solid #000000' }}>ƏYAR</th>
+                            <th style={{ padding: '3.5px 1px', fontSize: '9px', fontWeight: '900', textAlign: 'right', borderRight: '1px solid #000000' }}>İLKİN</th>
+                            <th style={{ padding: '3.5px 1px', fontSize: '9px', fontWeight: '900', textAlign: 'right' }}>QİYMƏT</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {lastTransaction.sales.map((item, i) => (
-                            <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
-                                <td style={{ padding: '20px', fontSize: '14px', fontWeight: 'bold' }}>{item.productCode}</td>
-                                <td style={{ padding: '20px', fontSize: '14px', fontWeight: '900', textTransform: 'uppercase' }}>{item.productName}</td>
-                                <td style={{ padding: '20px', fontSize: '14px', fontWeight: 'bold', textAlign: 'right' }}>{item.weight} gr</td>
-                            </tr>
-                        ))}
+                        {lastTransaction.sales.map((item, i) => {
+                            const origPriceVal = Number(item.originalPrice !== undefined ? item.originalPrice : (item.price || item.total)) || 0;
+                            const finalPriceVal = Number(item.total) || 0;
+                            const caratStr = item.carat ? (String(item.carat).toUpperCase().includes('K') || String(item.carat).length === 3 ? String(item.carat) : `${item.carat}K`) : '-';
+                            const weightVal = Number(item.weight) || 0;
+                            const prodDisplayName = item.isPartial ? `${item.productName} (${item.partialName})` : item.productName;
+
+                            return (
+                              <tr key={i} style={{ borderBottom: i === lastTransaction.sales.length - 1 ? 'none' : '1px solid #000000' }}>
+                                  <td style={{ padding: '3.5px 1px', fontSize: '9.5px', fontWeight: 'bold', textAlign: 'center', fontFamily: 'monospace', borderRight: '1px solid #000000', whiteSpace: 'nowrap' }}>
+                                    {item.productCode}
+                                  </td>
+                                  <td title={prodDisplayName} style={{ padding: '3.5px 2px', fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', borderRight: '1px solid #000000' }}>
+                                    {prodDisplayName}
+                                  </td>
+                                  <td style={{ padding: '3.5px 1px', fontSize: '9.5px', fontWeight: 'bold', textAlign: 'center', borderRight: '1px solid #000000', whiteSpace: 'nowrap' }}>
+                                    {weightVal > 0 ? `${weightVal}g` : '-'}
+                                  </td>
+                                  <td style={{ padding: '3.5px 1px', fontSize: '9.5px', fontWeight: 'bold', textAlign: 'center', borderRight: '1px solid #000000', whiteSpace: 'nowrap' }}>
+                                    {caratStr}
+                                  </td>
+                                  <td style={{ padding: '3.5px 1px', fontSize: '9.5px', textAlign: 'right', borderRight: '1px solid #000000', whiteSpace: 'nowrap' }}>
+                                    {origPriceVal > 0 ? `${origPriceVal.toLocaleString()} ₼` : '-'}
+                                  </td>
+                                  <td style={{ padding: '3.5px 1px', fontSize: '10.5px', fontWeight: '900', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                                    {finalPriceVal.toLocaleString()} ₼
+                                  </td>
+                              </tr>
+                            );
+                        })}
                     </tbody>
                 </table>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '60px', marginTop: '100px', borderTop: '1px solid #eee', paddingTop: '40px' }}>
-                    <div style={{ textAlign: 'center' }}>
-                        <div style={{ borderBottom: '2px solid black', width: '200px', margin: '0 auto 10px' }}></div>
-                        <p style={{ fontSize: '12px', fontWeight: '900', textTransform: 'uppercase' }}>TƏHVİL VERDİ (MAĞAZA)</p>
+                {/* 3. DƏRHAL YEKUN ÖDƏNİŞ (ARALIQ MƏBLƏĞ VƏ ÇƏKİ GÖTÜRÜLDÜ) */}
+                <div style={{ borderTop: '2px solid #000000', borderBottom: '2px solid #000000', padding: '5px 4px', margin: '5px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '13px', fontWeight: '900', letterSpacing: '0.04em' }}>YEKUN ÖDƏNİŞ:</span>
+                    <span style={{ fontSize: '17px', fontWeight: '900', fontFamily: 'monospace' }}>{lastTransaction.total.toLocaleString()} ₼</span>
+                </div>
+
+                {/* 4. ƏLAQƏ VƏ MƏLUMAT */}
+                <div style={{ borderBottom: '1px solid #000000', paddingBottom: '4px', marginBottom: '5px', fontSize: '10px', lineHeight: '1.4' }}>
+                    <div style={{ fontWeight: '900', textTransform: 'uppercase', marginBottom: '1px' }}>📞 ƏLAQƏ VƏ MƏLUMAT:</div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>👑 Müdir: <strong>Etibar</strong></span>
+                      <span>Tel: <strong>050-741-2222</strong></span>
                     </div>
-                    <div style={{ textAlign: 'center' }}>
-                        <div style={{ borderBottom: '2px solid black', width: '200px', margin: '0 auto 10px' }}></div>
-                        <p style={{ fontSize: '12px', fontWeight: '900', textTransform: 'uppercase' }}>TƏHVİL ALDI (ALICI)</p>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>🏬 Mağaza: <strong>NEKO GOLD</strong></span>
+                      <span>Tel: <strong>050-604-91-31</strong></span>
                     </div>
                 </div>
 
-                <div style={{ textAlign: 'center', marginTop: '60px', opacity: '0.4' }}>
-                    <p style={{ fontSize: '10px' }}>NEKO GOLD Zərgərlik Satış Mərkəzi © {new Date().getFullYear()}</p>
+                {/* 5. İMZALAR */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', textAlign: 'center', fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase', padding: '4px 0 2px' }}>
+                    <div>
+                        <div style={{ borderBottom: '1px solid #000000', width: '85px', margin: '0 auto 4px' }}></div>
+                        <span>Təhvil verdi (Mağaza)</span>
+                    </div>
+                    <div>
+                        <div style={{ borderBottom: '1px solid #000000', width: '85px', margin: '0 auto 4px' }}></div>
+                        <span>Təhvil aldı (Müştəri)</span>
+                    </div>
+                </div>
+
+                {/* 6. DİP QEYD */}
+                <div style={{ textAlign: 'center', marginTop: '4px', fontSize: '9.5px', color: '#000000', borderTop: '1px solid #e5e7eb', paddingTop: '3px' }}>
+                    <p style={{ margin: '1px 0', fontWeight: 'bold' }}>Bizi seçdiyiniz üçün təşəkkür edirik!</p>
+                    <p style={{ margin: '0' }}>{settings.shopName || 'NEKO GOLD'} Zərgərlik Satış Mərkəzi</p>
                 </div>
             </div>
         </div>,
         document.body
       )}
+
 
       {step === 1 && (
         <div className="flex-1 flex flex-col space-y-4 md:space-y-6 animate-in slide-in-from-right-12 duration-500 no-print">
@@ -958,31 +1102,92 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
                   </div>
                </div>
 
-               <div className="flex-1 space-y-3 overflow-y-auto pr-1 scrollbar-hide max-h-[40vh] md:max-h-none">
-                  {cart.map(item => (
-                    <div key={item.id} className="flex justify-between items-center p-4 md:p-6 bg-stone-50 rounded-2xl md:rounded-[2rem] border border-stone-100">
-                       <div className="flex items-center space-x-3 md:space-x-5">
-                          <div 
-                            onClick={() => item.imageUrl && setZoomedImage(item.imageUrl)}
-                            className={`w-10 h-10 md:w-14 md:h-14 bg-white rounded-xl flex items-center justify-center text-amber-500 border border-stone-100 overflow-hidden ${item.imageUrl ? 'cursor-zoom-in' : ''}`}
+               <div className="flex-1 space-y-3.5 overflow-y-auto pr-1 scrollbar-hide max-h-[55vh] md:max-h-none">
+                  {cart.map(item => {
+                    const originalPriceVal = Number(item.originalPrice !== undefined ? item.originalPrice : item.price) || 0;
+                    const customPriceVal = item.customSalePrice !== undefined ? item.customSalePrice : (Number(item.price) || 0);
+
+                    return (
+                      <div key={item.id} className="p-4 md:p-5 bg-stone-50 rounded-2xl md:rounded-[2rem] border border-stone-200/80 shadow-sm space-y-3.5 transition-all hover:border-amber-300">
+                        {/* 1. Məhsul Məlumatı Başlığı və Sil Düyməsi */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3 md:space-x-4">
+                            <div 
+                              onClick={() => item.imageUrl && setZoomedImage(item.imageUrl)}
+                              className={`w-12 h-12 md:w-16 md:h-16 bg-white rounded-2xl flex items-center justify-center text-amber-500 border border-stone-200 shadow-sm overflow-hidden flex-shrink-0 ${item.imageUrl ? 'cursor-zoom-in' : ''}`}
+                            >
+                              {item.imageUrl ? (
+                                <img src={item.imageUrl} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                              ) : (
+                                <Gem size={22}/>
+                              )}
+                            </div>
+                            <div>
+                              <div className="flex items-center space-x-2">
+                                <span className="bg-amber-100 text-amber-950 font-black text-xs md:text-sm px-2.5 py-0.5 rounded-lg font-mono">
+                                  {item.code}
+                                </span>
+                                <span className="text-[10px] md:text-xs font-bold text-stone-500 uppercase">
+                                  {item.weight} gr {item.carat ? `| ${item.carat}K` : ''}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-stone-400 font-bold mt-1 truncate max-w-[180px] md:max-w-md">
+                                Baza adı: <span className="text-stone-700 font-black">{item.name}</span>
+                              </p>
+                            </div>
+                          </div>
+
+                          <button 
+                            onClick={() => removeFromCart(item.id)} 
+                            title="Səbətdən sil"
+                            className="p-2 md:p-2.5 text-stone-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
                           >
-                             {item.imageUrl ? (
-                               <img src={item.imageUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                             ) : (
-                               <Gem size={20}/>
-                             )}
+                            <Trash2 size={20}/>
+                          </button>
+                        </div>
+
+                        {/* 2. Redaktə Olunan Sahələr: Çekdə Çıxacaq Adı və Müştərinin Aldığı Qiymət */}
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 p-3.5 md:p-4 bg-white rounded-2xl border border-stone-200 shadow-2xs">
+                          {/* Çekdə Çıxacaq Adı */}
+                          <div className="md:col-span-7 space-y-1.5 flex flex-col justify-between">
+                            <label className="text-[10px] font-black text-stone-700 uppercase flex items-center justify-between">
+                              <span className="flex items-center gap-1 text-amber-900">
+                                ✍️ ÇEKDƏ ÇIXACAQ AD
+                              </span>
+                              <span className="text-[9px] text-stone-400 font-bold lowercase">(səhv adı dəyişə bilərsiniz)</span>
+                            </label>
+                            <input 
+                              type="text" 
+                              value={item.receiptName !== undefined ? item.receiptName : item.name}
+                              onChange={(e) => updateCartItemReceiptName(item.id, e.target.value)}
+                              placeholder="Məs: 585 İtalyan Qolbaq"
+                              className="w-full bg-stone-50 border border-stone-300 focus:border-amber-500 focus:bg-white rounded-xl py-2 px-3 text-xs md:text-sm font-black text-stone-900 outline-none transition-all shadow-2xs focus:ring-2 focus:ring-amber-500/20"
+                            />
                           </div>
-                          <div className="max-w-[120px] md:max-w-none">
-                            <p className="font-black text-stone-800 uppercase text-xs md:text-base truncate">{item.name}</p>
-                            <p className="text-[9px] md:text-[10px] font-bold text-stone-400 uppercase tracking-widest">{item.code} | {item.weight} gr</p>
+
+                          {/* Müştərinin Aldığı Qiymət (Bizim Yazdığımız Qiymət) */}
+                          <div className="md:col-span-5 space-y-1.5 bg-amber-50/70 p-2.5 rounded-xl border border-amber-300/80 shadow-2xs">
+                            <label className="text-[10px] font-black text-amber-950 uppercase flex items-center justify-between">
+                              <span className="flex items-center gap-1 text-amber-900">💰 MÜŞTƏRİNİN ALDIĞI QİYMƏT</span>
+                              <span className="text-[9px] text-amber-700 font-bold bg-amber-100/80 px-1.5 py-0.2 rounded border border-amber-200">İlkin: {originalPriceVal.toLocaleString()} ₼</span>
+                            </label>
+                            <div className="relative">
+                              <input 
+                                type="number" 
+                                min="0"
+                                step="1"
+                                value={item.customSalePrice !== undefined ? item.customSalePrice : (Number(item.price) || '')}
+                                onChange={(e) => updateCartItemPrice(item.id, e.target.value === '' ? '' : Number(e.target.value))}
+                                placeholder="0"
+                                className="w-full bg-white border border-amber-400 focus:border-amber-600 rounded-lg py-1.5 pl-3 pr-8 text-sm md:text-base font-black text-amber-900 outline-none transition-all shadow-2xs focus:ring-2 focus:ring-amber-500/30"
+                              />
+                              <span className="absolute right-3 top-1/2 -translate-y-1/2 font-black text-xs text-amber-700">₼</span>
+                            </div>
                           </div>
-                       </div>
-                       <div className="flex items-center space-x-3 md:space-x-6">
-                          <p className="text-lg md:text-2xl font-black text-stone-900 tracking-tighter">{(Number(item.price) || 0).toLocaleString()} ₼</p>
-                          <button onClick={() => removeFromCart(item.id)} className="text-stone-300 hover:text-red-500 transition-colors"><Trash2 size={20}/></button>
-                       </div>
-                    </div>
-                  ))}
+                        </div>
+                      </div>
+                    );
+                  })}
                   {cart.length === 0 && <p className="text-center py-10 text-stone-400 font-bold uppercase tracking-widest text-xs">Səbət boşdur</p>}
                </div>
 
@@ -1066,23 +1271,132 @@ const SalesModule: React.FC<SalesProps> = ({ products, setProducts, sales, setSa
       )}
 
       {step === 4 && (
-        <div className="flex-1 flex flex-col items-center justify-center p-4 md:p-12 animate-in zoom-in-95 duration-1000 no-print">
-          <div className="w-32 h-32 md:w-56 md:h-56 bg-green-100 text-green-500 rounded-full flex items-center justify-center border-8 md:border-[12px] border-white shadow-2xl mb-6 md:mb-10">
-            <CheckCircle2 className="w-20 h-20 md:w-32 md:h-32" />
+        <div className="flex-1 flex flex-col items-center justify-start p-2 sm:p-4 md:p-8 animate-in zoom-in-95 duration-500 no-print overflow-y-auto">
+          <div className="w-16 h-16 md:w-20 md:h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center border-4 border-white shadow-xl mb-3 flex-shrink-0">
+            <CheckCircle2 className="w-10 h-10 md:w-12 md:h-12" />
           </div>
-          <h2 className="text-3xl md:text-5xl font-black text-stone-900 mb-2 md:mb-3 tracking-tighter uppercase">SATIŞ BİTDİ!</h2>
-          <p className="text-stone-400 font-bold uppercase tracking-widest text-[10px] md:text-xs mb-10 md:mb-16">UĞURLA YADDA SAXLANILDI</p>
+          <h2 className="text-2xl md:text-3xl font-black text-stone-900 tracking-tighter uppercase">SATIŞ UĞURLA TAMAMLANDI!</h2>
+          <p className="text-stone-400 font-bold uppercase tracking-widest text-[9px] md:text-[10px] mb-4">ÇEK HAZIRDIR VƏ ÇAP EDİLƏ BİLƏR</p>
           
-          <div className="flex flex-col sm:flex-row gap-4 md:gap-8 w-full max-w-3xl">
+          {/* Çek Önbaxış Kartı (Lüks Zərgərlik Çeki Dizaynı) */}
+          {lastTransaction && (
+            <div className="w-full max-w-md bg-white rounded-3xl p-5 md:p-6 shadow-2xl border-2 border-stone-200 text-stone-900 mb-6 text-left">
+              <div className="w-full bg-white text-black font-sans">
+                
+                {/* 1. Başlıq */}
+                <div className="text-center border-b-2 border-stone-900 pb-2 mb-2">
+                  <h3 className="font-black text-xl uppercase tracking-wider">{settings.shopName || 'NEKO GOLD'}</h3>
+                  <p className="text-[10px] uppercase font-bold text-stone-600">Zərgərlik Satış Mərkəzi</p>
+                  <p className="text-[9px] italic text-stone-500">« Qızıl & Zinət Əşyaları »</p>
+                </div>
+
+                {/* Sənəd & Müştəri */}
+                <div className="border-b border-stone-900 pb-2 mb-2 text-[11px] leading-tight space-y-1">
+                  <div className="flex justify-between font-bold">
+                    <span>Sənəd №: #{lastTransaction.sales[0]?.id || '849201'}</span>
+                    <span>Tarix: {new Date(lastTransaction.date).toLocaleDateString('az-AZ')} {new Date(lastTransaction.date).toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Müştəri: <strong>{lastTransaction.customer.fullName || 'Anonim Müştəri'}</strong></span>
+                    {lastTransaction.customer.phone && <span>Tel: {lastTransaction.customer.phone}</span>}
+                  </div>
+                  <div className="text-[10px]">
+                    <span>Satıcı: <strong>{getReceiptSeller()}</strong></span>
+                  </div>
+                </div>
+
+                {/* 2. Məhsullar Cədvəli */}
+                <table className="w-full text-xs border-collapse border-2 border-stone-900 table-fixed my-2">
+                  <colgroup>
+                    <col style={{ width: '15%' }} />
+                    <col style={{ width: '31%' }} />
+                    <col style={{ width: '12%' }} />
+                    <col style={{ width: '11%' }} />
+                    <col style={{ width: '14%' }} />
+                    <col style={{ width: '17%' }} />
+                  </colgroup>
+                  <thead>
+                    <tr className="bg-stone-100 text-[9px] font-black uppercase text-stone-900 border-b border-stone-900">
+                      <th className="p-1 text-center border-r border-stone-400">KOD</th>
+                      <th className="p-1 text-left border-r border-stone-400">MƏHSULUN ADI</th>
+                      <th className="p-1 text-center border-r border-stone-400">ÇƏKİ</th>
+                      <th className="p-1 text-center border-r border-stone-400">ƏYAR</th>
+                      <th className="p-1 text-right border-r border-stone-400">İLKİN</th>
+                      <th className="p-1 text-right">QİYMƏT</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lastTransaction.sales.map((s, idx) => {
+                      const origP = Number(s.originalPrice !== undefined ? s.originalPrice : (s.price || s.total)) || 0;
+                      const finalP = Number(s.total) || 0;
+                      const caratStr = s.carat ? (String(s.carat).toUpperCase().includes('K') || String(s.carat).length === 3 ? String(s.carat) : `${s.carat}K`) : '-';
+                      const weightVal = Number(s.weight) || 0;
+                      const prodDisplayName = s.isPartial ? `${s.productName} (${s.partialName})` : s.productName;
+
+                      return (
+                        <tr key={idx} className="text-[10px] border-b border-stone-300 last:border-b-0 hover:bg-stone-50">
+                          <td className="p-1 font-mono font-bold text-center text-stone-800 border-r border-stone-200 whitespace-nowrap">{s.productCode}</td>
+                          <td title={prodDisplayName} className="p-1 font-black uppercase text-left text-stone-900 truncate whitespace-nowrap max-w-0 border-r border-stone-200">
+                            {prodDisplayName}
+                          </td>
+                          <td className="p-1 text-center font-bold text-stone-800 border-r border-stone-200 whitespace-nowrap">{weightVal > 0 ? `${weightVal}g` : '-'}</td>
+                          <td className="p-1 text-center font-bold text-stone-800 border-r border-stone-200 whitespace-nowrap">{caratStr}</td>
+                          <td className="p-1 text-right text-stone-600 border-r border-stone-200 whitespace-nowrap">{origP > 0 ? `${origP.toLocaleString()} ₼` : '-'}</td>
+                          <td className="p-1 text-right font-black text-stone-950 whitespace-nowrap">{finalP.toLocaleString()} ₼</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+
+                {/* 3. DƏRHAL YEKUN ÖDƏNİŞ (ARALIQ MƏBLƏĞ VƏ ÇƏKİ GÖTÜRÜLDÜ) */}
+                <div className="border-t-2 border-b-2 border-stone-900 py-2 px-1 my-2 flex justify-between items-center">
+                  <span className="text-sm font-black tracking-wider text-stone-900">YEKUN ÖDƏNİŞ:</span>
+                  <span className="text-xl font-black text-amber-700 font-mono">{lastTransaction.total.toLocaleString()} ₼</span>
+                </div>
+
+                {/* 4. Əlaqə Bölməsi */}
+                <div className="border-b border-stone-900 pb-2 mb-2 text-[10.5px] leading-tight space-y-0.5">
+                  <div className="font-black text-stone-900 uppercase text-[10px]">📞 ƏLAQƏ VƏ MƏLUMAT:</div>
+                  <div className="flex justify-between">
+                    <span>👑 Müdir: <strong>Etibar</strong></span>
+                    <span className="font-black text-stone-900">050-741-2222</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>🏬 Mağaza: <strong>NEKO GOLD</strong></span>
+                    <span className="font-black text-stone-900">050-604-91-31</span>
+                  </div>
+                </div>
+
+                {/* 5. İmzalar */}
+                <div className="grid grid-cols-2 text-center text-[9px] font-bold uppercase text-stone-600 py-2">
+                  <div className="pr-2">
+                    <div className="border-b border-stone-900 w-24 mx-auto mb-1"></div>
+                    <span>Təhvil verdi (Mağaza)</span>
+                  </div>
+                  <div className="pl-2">
+                    <div className="border-b border-stone-900 w-24 mx-auto mb-1"></div>
+                    <span>Təhvil aldı (Müştəri)</span>
+                  </div>
+                </div>
+
+                <div className="text-center mt-2 pt-2 border-t border-stone-100 text-[9.5px] font-bold text-stone-400">
+                  Bizi seçdiyiniz üçün təşəkkür edirik!
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <div className="flex flex-col sm:flex-row gap-3 md:gap-6 w-full max-w-lg">
             <button 
               onClick={handlePrint} 
-              className="flex-1 bg-white border-4 border-amber-500 text-amber-600 py-5 md:py-8 rounded-2xl md:rounded-[2rem] font-black hover:bg-amber-50 transition-all flex items-center justify-center text-lg md:text-2xl shadow-2xl active:scale-95 uppercase tracking-widest"
+              className="flex-1 bg-amber-500 text-amber-950 py-4 md:py-5 rounded-2xl font-black hover:bg-amber-400 transition-all flex items-center justify-center text-base md:text-lg shadow-xl active:scale-95 uppercase tracking-widest"
             >
-              <Printer className="mr-3 md:mr-6 w-6 h-6 md:w-10 md:h-10" /> QƏBZ
+              <Printer className="mr-2.5 w-5 h-5 md:w-6 md:h-6" /> QƏBZİ ÇAP ET
             </button>
             <button 
               onClick={resetForm} 
-              className="flex-1 bg-stone-900 text-white py-5 md:py-8 rounded-2xl md:rounded-[2rem] font-black hover:bg-black transition-all text-lg md:text-2xl shadow-2xl active:scale-95 uppercase tracking-widest"
+              className="flex-1 bg-stone-900 text-white py-4 md:py-5 rounded-2xl font-black hover:bg-black transition-all text-base md:text-lg shadow-xl active:scale-95 uppercase tracking-widest"
             >
               YENİ SATIŞ
             </button>

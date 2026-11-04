@@ -17,7 +17,7 @@ import {
   Wallet,
   Bell
 } from 'lucide-react';
-import { Page, Product, Sale, Customer, ScrapGold, Expense, AppSettings, SystemLog, Reminder } from '@/types';
+import { Page, Product, Sale, Customer, ScrapGold, Expense, AppSettings, SystemLog, Reminder, AuthUser, ApprovalRequest } from '@/types';
 import SalesModule from '@/modules/Sales';
 import StockModule from '@/modules/Stock';
 import CustomersModule from '@/modules/Customers';
@@ -31,14 +31,20 @@ import DebtModule from '@/modules/Debt';
 import LogsModule from '@/modules/Logs';
 import { RemindersModule } from '@/modules/Reminders';
 import Login from '@/modules/Login';
-import { LogOut } from 'lucide-react';
+import { PatronDashboard } from '@/modules/PatronDashboard';
+import { ManagerDashboard } from '@/modules/ManagerDashboard';
+import { ApprovalsModule } from '@/modules/ApprovalsModule';
+import { FirstTimePasswordModal } from '@/modules/FirstTimePasswordModal';
+import { LogOut, Crown, Briefcase, Store } from 'lucide-react';
 
 import { createPortal } from 'react-dom';
 import { LabelPrint } from '@/components/LabelPrint';
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [user, setUser] = useState<{ username: string } | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [pendingApprovals, setPendingApprovals] = useState<ApprovalRequest[]>([]);
+  const [patronActiveTab, setPatronActiveTab] = useState<'overview' | 'staff' | 'shop' | 'sold' | 'added' | 'approvals'>('overview');
   const [currentPage, setCurrentPage] = useState<Page>(Page.Sales);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -70,7 +76,7 @@ const App: React.FC = () => {
   const lastSyncedSettings = React.useRef<string>('');
   const [settings, setSettings] = useState<AppSettings>({
     deleteCode: '1234',
-    adminPassword: 'admin',
+    adminPassword: 'nekogold222+',
     printerName: 'Epson POS-80',
     shopName: 'NEKO GOLD',
     productGroups: [
@@ -113,7 +119,9 @@ const App: React.FC = () => {
     labelFontWeight: '600',
     isPrintStation: false,
     remotePrintEnabled: true,
-    telegramChatIds: []
+    telegramChatIds: [],
+    telegramSalesChatIds: [],
+    telegramProductChatIds: []
   });
 
   // Central Heartbeat / Pulse for real-time updates
@@ -212,6 +220,11 @@ const App: React.FC = () => {
             return nextQueue;
           });
         }
+
+        // 4. Handle Pending Approvals
+        if (Array.isArray(data.pendingApprovals)) {
+          setPendingApprovals(data.pendingApprovals);
+        }
       } catch (err: any) {
         if (!active) return;
         if (err.name === 'AbortError') {
@@ -243,11 +256,35 @@ const App: React.FC = () => {
   // Session check
   useEffect(() => {
     const token = localStorage.getItem('nekogold_token');
-    const username = localStorage.getItem('nekogold_username');
+    const userStr = localStorage.getItem('nekogold_user');
+    const legacyUsername = localStorage.getItem('nekogold_username');
     
-    if (token && username) {
-      setIsAuthenticated(true);
-      setUser({ username });
+    if (token) {
+      if (userStr) {
+        try {
+          const parsed: AuthUser = JSON.parse(userStr);
+          setIsAuthenticated(true);
+          setUser(parsed);
+          if (parsed.role === 'patron' || parsed.role === 'mudir' || (parsed.role as string) === 'manager') {
+            setCurrentPage(Page.PatronDashboard);
+          }
+          return;
+        } catch (e) {}
+      }
+
+      if (legacyUsername) {
+        setIsAuthenticated(true);
+        const legacyRole = (legacyUsername === 'patron' || legacyUsername === 'mudir' || legacyUsername === 'menecer')
+          ? 'patron'
+          : legacyUsername === 'magaza'
+          ? 'shop'
+          : 'staff';
+        setUser({
+          username: legacyUsername,
+          fullName: (legacyUsername === 'patron' || legacyUsername === 'mudir' || legacyUsername === 'menecer') ? 'Etibar Nuriyev' : legacyUsername,
+          role: legacyRole
+        });
+      }
     }
   }, []);
 
@@ -356,7 +393,7 @@ const App: React.FC = () => {
         } else {
           const defaultSettings: AppSettings = {
             deleteCode: '1234',
-            adminPassword: 'admin',
+            adminPassword: 'nekogold222+',
             printerName: 'Epson POS-80',
             shopName: 'NEKO GOLD',
             productGroups: [
@@ -543,18 +580,34 @@ const App: React.FC = () => {
     fetchData();
   }, []);
 
-  const handleLogin = (token: string, username: string) => {
+
+  const handleLogin = (token: string, authUser: AuthUser) => {
     localStorage.setItem('nekogold_token', token);
-    localStorage.setItem('nekogold_username', username);
+    localStorage.setItem('nekogold_user', JSON.stringify(authUser));
     setIsAuthenticated(true);
-    setUser({ username });
+    setUser(authUser);
+    if (authUser.role === 'patron' || authUser.role === 'mudir' || (authUser.role as string) === 'manager') {
+      setCurrentPage(Page.PatronDashboard);
+    } else {
+      setCurrentPage(Page.Sales);
+    }
   };
 
   const handleLogout = () => {
     localStorage.removeItem('nekogold_token');
-    localStorage.removeItem('nekogold_username');
+    localStorage.removeItem('nekogold_user');
     setIsAuthenticated(false);
     setUser(null);
+  };
+
+  const refreshApprovals = async () => {
+    try {
+      const res = await fetch('/api/approvals');
+      if (res.ok) {
+        const data = await res.json();
+        setPendingApprovals(data.filter((a: any) => a.status === 'pending'));
+      }
+    } catch (e) {}
   };
 
   // Remote Print Queue Polling (REMOVED - Consolidated into Pulse)
@@ -663,10 +716,14 @@ const App: React.FC = () => {
   }, [reminders, isLoaded]);
 
   const addLog = async (action: string, category: SystemLog['category'], details?: string) => {
+    const actorUser = (user?.username?.toLowerCase().replace(/^@/, '') === 'magaza' || user?.role === 'shop')
+      ? '@magaza'
+      : (user?.username ? (user.username.startsWith('@') ? user.username : `@${user.username}`) : 'Sistem');
+
     const newLog: SystemLog = {
       id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
       date: new Date().toISOString(),
-      user: user?.username || 'Sistem',
+      user: actorUser,
       action,
       category,
       details
@@ -685,19 +742,165 @@ const App: React.FC = () => {
     }
   };
 
-  const navItems = [
-    { id: Page.Sales, icon: <ShoppingBag size={24} />, label: 'Satış' },
-    { id: Page.Stock, icon: <Package size={24} />, label: 'Stok' },
-    { id: Page.Reminders, icon: <Bell size={24} />, label: 'Xatırlatmalar', badge: reminders.filter(r => !r.isCompleted).length },
-    { id: Page.Customers, icon: <UserSquare2 size={24} />, label: 'Müştərilər' },
-    { id: Page.SoldProducts, icon: <History size={24} />, label: 'Satılan Mallar' },
-    { id: Page.Return, icon: <RotateCcw size={24} />, label: 'Qaytarma' },
-    { id: Page.Scrap, icon: <Flame size={24} />, label: 'Lom' },
-    { id: Page.Expenses, icon: <Wallet size={24} />, label: 'Xərclər' },
-    { id: Page.Debt, icon: <Wallet size={24} />, label: 'Borclar' },
-    { id: Page.Reports, icon: <BarChart3 size={24} />, label: 'Hesabat' },
-    { id: Page.Logs, icon: <History size={24} />, label: 'Loglar' },
-    { id: Page.Settings, icon: <SettingsIcon size={24} />, label: 'Ayarlar' },
+  const isMudir = user?.role === 'patron' || user?.role === 'mudir' || (user?.role as string) === 'manager';
+
+  const navItems = isMudir ? [
+    {
+      id: Page.PatronDashboard,
+      icon: <Crown size={24} className="text-amber-400" />,
+      label: 'Müdir Paneli',
+      badge: 0,
+      onClick: () => {
+        setCurrentPage(Page.PatronDashboard);
+        setPatronActiveTab('overview');
+      },
+      isActive: currentPage === Page.PatronDashboard
+    },
+    {
+      id: Page.Sales,
+      icon: <Store size={24} />,
+      label: 'Mağaza',
+      onClick: () => setCurrentPage(Page.Sales),
+      isActive: currentPage === Page.Sales
+    },
+    // AŞAĞIDA STOKUN YERİNDƏ BİLDİRİŞ BÖLMƏSİ (PERSONALIN İSTƏKLƏRİNİ TƏSDİQLƏMƏK ÜÇÜN)
+    {
+      id: Page.Approvals,
+      icon: <Bell size={24} className={pendingApprovals.length > 0 ? "text-amber-400 animate-bounce" : "text-amber-400/80"} />,
+      label: 'Bildirişlər',
+      badge: pendingApprovals.length,
+      onClick: () => setCurrentPage(Page.Approvals),
+      isActive: currentPage === Page.Approvals
+    },
+    {
+      id: Page.SoldProducts,
+      icon: <History size={24} />,
+      label: 'Satılan Mallar',
+      onClick: () => setCurrentPage(Page.SoldProducts),
+      isActive: currentPage === Page.SoldProducts
+    },
+    {
+      id: Page.Stock,
+      icon: <Package size={24} />,
+      label: 'Stok',
+      onClick: () => setCurrentPage(Page.Stock),
+      isActive: currentPage === Page.Stock
+    },
+    {
+      id: Page.Return,
+      icon: <RotateCcw size={24} />,
+      label: 'Qaytarma',
+      onClick: () => setCurrentPage(Page.Return),
+      isActive: currentPage === Page.Return
+    },
+    {
+      id: Page.Reminders,
+      icon: <Bell size={24} />,
+      label: 'Xatırlatmalar',
+      badge: reminders.filter(r => !r.isCompleted).length,
+      onClick: () => setCurrentPage(Page.Reminders),
+      isActive: currentPage === Page.Reminders
+    },
+    {
+      id: Page.Customers,
+      icon: <UserSquare2 size={24} />,
+      label: 'Müştərilər',
+      onClick: () => setCurrentPage(Page.Customers),
+      isActive: currentPage === Page.Customers
+    },
+    {
+      id: Page.Reports,
+      icon: <BarChart3 size={24} />,
+      label: 'Hesabat',
+      onClick: () => setCurrentPage(Page.Reports),
+      isActive: currentPage === Page.Reports
+    },
+    {
+      id: Page.Scrap,
+      icon: <Flame size={24} />,
+      label: 'Lom',
+      onClick: () => setCurrentPage(Page.Scrap),
+      isActive: currentPage === Page.Scrap
+    },
+    {
+      id: Page.Expenses,
+      icon: <Wallet size={24} />,
+      label: 'Xərclər',
+      onClick: () => setCurrentPage(Page.Expenses),
+      isActive: currentPage === Page.Expenses
+    },
+    {
+      id: Page.Debt,
+      icon: <Wallet size={24} />,
+      label: 'Borclar',
+      onClick: () => setCurrentPage(Page.Debt),
+      isActive: currentPage === Page.Debt
+    },
+    {
+      id: Page.Logs,
+      icon: <History size={24} />,
+      label: 'Loglar',
+      onClick: () => setCurrentPage(Page.Logs),
+      isActive: currentPage === Page.Logs
+    },
+    {
+      id: Page.Settings,
+      icon: <SettingsIcon size={24} />,
+      label: 'Ayarlar',
+      onClick: () => setCurrentPage(Page.Settings),
+      isActive: currentPage === Page.Settings
+    },
+  ] : [
+    {
+      id: Page.Sales,
+      icon: <Store size={24} />,
+      label: 'Mağaza',
+      onClick: () => setCurrentPage(Page.Sales),
+      isActive: currentPage === Page.Sales
+    },
+    {
+      id: Page.Stock,
+      icon: <Package size={24} />,
+      label: 'Stok',
+      onClick: () => setCurrentPage(Page.Stock),
+      isActive: currentPage === Page.Stock
+    },
+    {
+      id: Page.SoldProducts,
+      icon: <History size={24} />,
+      label: 'Satılan Mallar',
+      onClick: () => setCurrentPage(Page.SoldProducts),
+      isActive: currentPage === Page.SoldProducts
+    },
+    {
+      id: Page.Return,
+      icon: <RotateCcw size={24} />,
+      label: 'Qaytarma',
+      onClick: () => setCurrentPage(Page.Return),
+      isActive: currentPage === Page.Return
+    },
+    {
+      id: Page.Reminders,
+      icon: <Bell size={24} />,
+      label: 'Xatırlatmalar',
+      badge: reminders.filter(r => !r.isCompleted).length,
+      onClick: () => setCurrentPage(Page.Reminders),
+      isActive: currentPage === Page.Reminders
+    },
+    {
+      id: Page.Customers,
+      icon: <UserSquare2 size={24} />,
+      label: 'Müştərilər',
+      onClick: () => setCurrentPage(Page.Customers),
+      isActive: currentPage === Page.Customers
+    },
+    {
+      id: Page.Reports,
+      icon: <BarChart3 size={24} />,
+      label: 'Hesabat',
+      onClick: () => setCurrentPage(Page.Reports),
+      isActive: currentPage === Page.Reports
+    },
   ];
 
   const renderModule = () => {
@@ -745,11 +948,44 @@ const App: React.FC = () => {
     }
 
     switch (currentPage) {
+      case Page.Approvals:
+        return (
+          <ApprovalsModule
+            setCurrentPage={setCurrentPage}
+            pendingApprovals={pendingApprovals}
+            onRefreshApprovals={refreshApprovals}
+            user={user}
+          />
+        );
+      case Page.PatronDashboard:
+        return (
+          <PatronDashboard
+            products={products}
+            sales={sales}
+            setCurrentPage={setCurrentPage}
+            pendingApprovals={pendingApprovals}
+            onRefreshApprovals={refreshApprovals}
+            initialTab={patronActiveTab}
+            onTabChange={setPatronActiveTab}
+            logs={logs}
+          />
+        );
+      case Page.ManagerDashboard:
+        return (
+          <ManagerDashboard
+            sales={sales}
+            products={products}
+            customers={customers}
+            expenses={expenses}
+            setCurrentPage={setCurrentPage}
+            pendingApprovals={pendingApprovals}
+          />
+        );
       case Page.Sales: return <SalesModule products={products} setProducts={setProducts} sales={sales} setSales={setSales} customers={customers} setCustomers={setCustomers} settings={settings} cart={cart} setCart={setCart} addLog={addLog} user={user} />;
       case Page.Stock: return <StockModule products={products} setProducts={setProducts} settings={settings} sales={sales} cart={cart} setCart={setCart} setCurrentPage={setCurrentPage} addLog={addLog} user={user} isBackgroundLoading={isBackgroundLoading} />;
       case Page.Customers: return <CustomersModule customers={customers} setCustomers={setCustomers} sales={sales} addLog={addLog} />;
       case Page.SoldProducts: return <SoldProductsModule sales={sales} setSales={setSales} products={products} setProducts={setProducts} addLog={addLog} settings={settings} />;
-      case Page.Return: return <ReturnsModule sales={sales} setSales={setSales} products={products} setProducts={setProducts} addLog={addLog} />;
+      case Page.Return: return <ReturnsModule sales={sales} setSales={setSales} products={products} setProducts={setProducts} addLog={addLog} user={user} />;
       case Page.Scrap: return <ScrapModule scraps={scraps} setScraps={setScraps} settings={settings} addLog={addLog} />;
       case Page.Expenses: return <ExpensesModule expenses={expenses} setExpenses={setExpenses} sales={sales} addLog={addLog} />;
       case Page.Debt: return <DebtModule customers={customers} setCustomers={setCustomers} addLog={addLog} />;
@@ -769,7 +1005,21 @@ const App: React.FC = () => {
         setScraps={setScraps}
         addLog={addLog}
       />;
-      default: return <SalesModule products={products} setProducts={setProducts} sales={sales} setSales={setSales} customers={customers} setCustomers={setCustomers} settings={settings} cart={cart} setCart={setCart} addLog={addLog} user={user} />;
+      default:
+        if (user?.role === 'patron' || user?.role === 'mudir' || (user?.role as string) === 'manager') {
+          return (
+            <PatronDashboard
+              products={products}
+              sales={sales}
+              setCurrentPage={setCurrentPage}
+              pendingApprovals={pendingApprovals}
+              onRefreshApprovals={refreshApprovals}
+              initialTab={patronActiveTab}
+              onTabChange={setPatronActiveTab}
+            />
+          );
+        }
+        return <SalesModule products={products} setProducts={setProducts} sales={sales} setSales={setSales} customers={customers} setCustomers={setCustomers} settings={settings} cart={cart} setCart={setCart} addLog={addLog} user={user} />;
     }
   };
 
@@ -779,6 +1029,19 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col md:flex-row h-screen w-full bg-stone-100 font-sans overflow-hidden no-print">
+      {/* FORCE PASSWORD CHANGE ON FIRST LOGIN */}
+      {user?.mustChangePassword && (
+        <FirstTimePasswordModal
+          username={user.username}
+          fullName={user.fullName}
+          onSuccess={() => {
+            const updated: AuthUser = { ...user, mustChangePassword: false };
+            setUser(updated);
+            localStorage.setItem('nekogold_user', JSON.stringify(updated));
+          }}
+        />
+      )}
+
       {/* DESKTOP SIDEBAR */}
       <aside className={`${isSidebarOpen ? 'w-64' : 'w-20'} bg-stone-900 hidden md:flex flex-col items-center py-6 text-stone-400 transition-all duration-300 relative no-print shadow-2xl`}>
         <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="absolute -right-3 top-20 bg-amber-500 text-amber-950 w-6 h-6 rounded-full flex items-center justify-center shadow-lg hover:bg-amber-400 z-20">
@@ -792,33 +1055,65 @@ const App: React.FC = () => {
           )}
         </div>
         <nav className="flex-1 w-full px-3 space-y-2 overflow-y-auto scrollbar-hide">
-          {navItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setCurrentPage(item.id)}
-              className={`w-full flex items-center rounded-2xl transition-all relative ${currentPage === item.id ? 'bg-amber-600 text-white shadow-lg shadow-amber-900/40' : 'hover:bg-stone-800 text-stone-500'} ${isSidebarOpen ? 'px-4 py-3.5 space-x-4' : 'p-3.5 justify-center'}`}
-            >
-              <div className="relative">
-                {item.icon}
-                {item.badge && item.badge > 0 ? (
-                  <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center animate-pulse">
-                    {item.badge > 9 ? '9+' : item.badge}
-                  </span>
-                ) : null}
-              </div>
-              {isSidebarOpen && (
-                <div className="flex-1 flex items-center justify-between min-w-0">
-                  <span className="text-sm font-bold truncate">{item.label}</span>
-                  {item.badge && item.badge > 0 ? (
-                    <span className="bg-rose-500/20 text-rose-400 text-[10px] font-black px-2 py-0.5 rounded-full ml-2">
-                      {item.badge}
+          {navItems.map((item) => {
+            const active = item.isActive !== undefined ? item.isActive : currentPage === item.id;
+            return (
+              <button
+                key={String(item.id)}
+                onClick={() => {
+                  if (item.onClick) item.onClick();
+                  else setCurrentPage(item.id as Page);
+                }}
+                className={`w-full flex items-center rounded-2xl transition-all relative ${active ? 'bg-amber-600 text-white shadow-lg shadow-amber-900/40' : 'hover:bg-stone-800 text-stone-500'} ${isSidebarOpen ? 'px-4 py-3.5 space-x-4' : 'p-3.5 justify-center'}`}
+              >
+                <div className="relative">
+                  {item.icon}
+                  {item.badge !== undefined && item.badge > 0 ? (
+                    <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center animate-pulse">
+                      {item.badge > 9 ? '9+' : item.badge}
                     </span>
                   ) : null}
                 </div>
-              )}
-            </button>
-          ))}
+                {isSidebarOpen && (
+                  <div className="flex-1 flex items-center justify-between min-w-0">
+                    <span className="text-sm font-bold truncate">{item.label}</span>
+                    {item.badge !== undefined && item.badge > 0 ? (
+                      <span className="bg-rose-500/20 text-rose-400 text-[10px] font-black px-2 py-0.5 rounded-full ml-2">
+                        {item.badge}
+                      </span>
+                    ) : null}
+                  </div>
+                )}
+              </button>
+            );
+          })}
         </nav>
+
+        {/* CURRENT USER BADGE IN SIDEBAR */}
+        {user && (
+          <div className={`w-full px-3 mb-4 transition-all ${isSidebarOpen ? '' : 'flex justify-center'}`}>
+            {isSidebarOpen ? (
+              <div className="bg-stone-800/80 border border-stone-700/60 rounded-2xl p-3 text-left">
+                <div className="flex items-center gap-2 mb-1">
+                  {(user.role === 'patron' || user.role === 'mudir' || (user.role as string) === 'manager') && <Crown size={14} className="text-amber-400" />}
+                  {user.role === 'shop' && <Store size={14} className="text-emerald-400" />}
+                  {(user.role === 'staff' || user.role === 'admin') && <Users size={14} className="text-rose-400" />}
+                  <span className={`text-[10px] font-black uppercase tracking-wider ${
+                    (user.role === 'patron' || user.role === 'mudir' || (user.role as string) === 'manager') ? 'text-amber-400' : user.role === 'shop' ? 'text-emerald-400' : 'text-rose-400'
+                  }`}>
+                    {(user.role === 'patron' || user.role === 'mudir' || (user.role as string) === 'manager') ? 'Müdir' : user.role === 'shop' ? 'Mağaza' : 'İşçi'}
+                  </span>
+                </div>
+                <p className="text-xs font-bold text-white truncate">{user.fullName || user.username}</p>
+                <p className="text-[10px] text-stone-500 font-mono truncate">@{user.username}</p>
+              </div>
+            ) : (
+              <div className="w-10 h-10 rounded-xl bg-stone-800 text-amber-400 font-black flex items-center justify-center text-xs shadow">
+                {(user.fullName || user.username).slice(0, 1).toUpperCase()}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="w-full px-3 mt-auto mb-6">
           <button
@@ -833,16 +1128,30 @@ const App: React.FC = () => {
 
       {/* MOBILE BOTTOM NAV */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-stone-900 border-t border-white/10 z-50 flex justify-around items-center py-2 px-1 no-print safe-bottom-padding">
-        {navItems.filter(item => [Page.Sales, Page.Stock, Page.Return, Page.Reports].includes(item.id)).map((item) => (
-          <button
-            key={item.id}
-            onClick={() => { setCurrentPage(item.id); setIsMobileMenuOpen(false); }}
-            className={`flex flex-col items-center p-2 rounded-xl transition-all ${currentPage === item.id ? 'text-amber-500 bg-white/5 shadow-inner' : 'text-stone-400'}`}
-          >
-            {React.cloneElement(item.icon as any, { size: 22 })}
-            <span className="text-[8px] font-black mt-1 uppercase tracking-wider">{item.label}</span>
-          </button>
-        ))}
+        {navItems.slice(0, 4).map((item) => {
+          const active = item.isActive !== undefined ? item.isActive : currentPage === item.id;
+          return (
+            <button
+              key={String(item.id)}
+              onClick={() => {
+                if (item.onClick) item.onClick();
+                else setCurrentPage(item.id as Page);
+                setIsMobileMenuOpen(false);
+              }}
+              className={`flex flex-col items-center p-2 rounded-xl transition-all relative ${active ? 'text-amber-500 bg-white/5 shadow-inner' : 'text-stone-400'}`}
+            >
+              <div className="relative">
+                {React.cloneElement(item.icon as any, { size: 22 })}
+                {item.badge !== undefined && item.badge > 0 && (
+                  <span className="absolute -top-1.5 -right-2 bg-rose-500 text-white text-[9px] font-black min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center animate-pulse shadow-md">
+                    {item.badge > 9 ? '9+' : item.badge}
+                  </span>
+                )}
+              </div>
+              <span className="text-[8px] font-black mt-1 uppercase tracking-wider">{item.label}</span>
+            </button>
+          );
+        })}
         <button
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           className={`flex flex-col items-center p-2 rounded-xl transition-all ${isMobileMenuOpen ? 'text-amber-500 bg-white/5' : 'text-stone-400'}`}
@@ -867,16 +1176,30 @@ const App: React.FC = () => {
               </button>
             </div>
             <div className="grid grid-cols-3 gap-3 max-h-[60vh] overflow-y-auto scrollbar-hide py-2">
-              {navItems.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => { setCurrentPage(item.id); setIsMobileMenuOpen(false); }}
-                  className={`flex flex-col items-center justify-center p-4 rounded-2xl transition-all border ${currentPage === item.id ? 'bg-amber-500 border-amber-600 text-amber-950' : 'bg-white/5 border-transparent text-stone-400'}`}
-                >
-                  {item.icon}
-                  <span className="text-[9px] font-black mt-2 text-center leading-tight uppercase">{item.label}</span>
-                </button>
-              ))}
+              {navItems.map((item) => {
+                const active = item.isActive !== undefined ? item.isActive : currentPage === item.id;
+                return (
+                  <button
+                    key={String(item.id)}
+                    onClick={() => {
+                      if (item.onClick) item.onClick();
+                      else setCurrentPage(item.id as Page);
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className={`flex flex-col items-center justify-center p-4 rounded-2xl transition-all border relative ${active ? 'bg-amber-500 border-amber-600 text-amber-950 font-bold' : 'bg-white/5 border-transparent text-stone-400'}`}
+                  >
+                    <div className="relative">
+                      {item.icon}
+                      {item.badge !== undefined && item.badge > 0 && (
+                        <span className="absolute -top-1.5 -right-2 bg-rose-500 text-white text-[9px] font-black min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center animate-pulse">
+                          {item.badge}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[9px] font-black mt-2 text-center leading-tight uppercase">{item.label}</span>
+                  </button>
+                );
+              })}
             </div>
             <div className="mt-6 pt-6 border-t border-white/10">
               <button

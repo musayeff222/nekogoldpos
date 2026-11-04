@@ -26,7 +26,8 @@ import {
   History,
   ChevronLeft,
   ChevronRight,
-  Maximize2
+  Maximize2,
+  Check
 } from 'lucide-react';
 import { Sale, Product, SystemLog, AppSettings } from '@/types';
 
@@ -45,6 +46,38 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales, setSales, prod
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [zoomedProductIndex, setZoomedProductIndex] = useState<number | null>(null);
+
+  const formatSellerName = (seller?: string) => {
+    if (!seller) return 'Admin';
+    const clean = seller.trim();
+    const lower = clean.toLowerCase().replace(/^@/, '');
+    if (lower === 'magaza' || lower.includes('mağaza')) return '@magaza';
+    if (lower === 'admin' || lower === 'sistem') return 'Admin';
+    if (lower.includes('etibar') || lower === 'mudir' || lower === 'patron') return 'Etibar Nuriyev';
+    return clean.startsWith('@') ? clean : `@${clean}`;
+  };
+
+  // Checkbox (Boş quş işarəsi) və Fərdi Qəbz Çapı üçün state-lər
+  const [checkedSaleIds, setCheckedSaleIds] = useState<Record<string, boolean>>({});
+  const [receiptSale, setReceiptSale] = useState<Sale | null>(null);
+
+  const toggleCheckSale = (id: string) => {
+    setCheckedSaleIds(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
+
+  const handlePrintSingleReceipt = () => {
+    document.body.classList.add('printing');
+    window.focus();
+    setTimeout(() => {
+      window.print();
+      setTimeout(() => {
+        document.body.classList.remove('printing');
+      }, 500);
+    }, 250);
+  };
 
   // Print List States
   const [printDate, setPrintDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -299,7 +332,7 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales, setSales, prod
                 {[
                   { label: 'MƏHSUL ÇƏKİSİ', val: `${selectedSale.weight} GR`, icon: Scale },
                   { label: 'QIZIL ƏYARI', val: `${selectedSale.carat} K`, icon: Tag },
-                  { label: 'SATIŞI EDƏN', val: selectedSale.sellerName || 'SİSTEM', icon: User },
+                  { label: 'SATIŞI EDƏN', val: formatSellerName(selectedSale.sellerName), icon: User },
                   { label: 'TƏDARÜKÇÜ', val: selectedSale.supplier || 'N/A', icon: Truck },
                 ].map((item, idx) => (
                   <div key={idx} className="bg-white p-6 rounded-3xl border border-stone-200 shadow-md flex flex-col justify-between group hover:border-amber-500 transition-all duration-300"><div className="flex justify-between items-center mb-6"><div className="p-3 bg-stone-50 rounded-2xl text-amber-600 group-hover:bg-amber-50 transition-all"><item.icon size={20} strokeWidth={2.5} /></div><span className="text-[9px] font-black text-stone-500 uppercase tracking-widest leading-none text-right">{item.label}</span></div><p className="text-lg font-black text-stone-900 uppercase truncate">{item.val}</p></div>
@@ -307,6 +340,13 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales, setSales, prod
               </div>
               <div className="mt-auto bg-stone-900 rounded-[2.5rem] p-6 md:p-8 shadow-2xl relative overflow-hidden group border border-white/10"><div className="absolute top-0 right-0 w-full h-full gold-gradient opacity-[0.03] rounded-full blur-[100px] -mr-1/2 -mt-1/2"></div><div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6"><div><p className="text-[10px] font-black text-stone-400 uppercase tracking-[0.4em] mb-2">YEKUN SATIŞ MƏBLƏĞİ</p><div className="flex items-baseline space-x-2"><h3 className="text-4xl md:text-5xl font-black text-amber-500 tracking-tighter leading-none">{selectedSale.total.toLocaleString()}</h3><span className="text-2xl font-bold text-amber-700">₼</span></div>{selectedSale.discount > 0 && <div className="inline-flex items-center bg-white/5 px-3 py-1.5 rounded-xl border border-white/5 mt-4"><CheckCircle2 size={10} className="mr-2 text-green-500" /><span className="text-stone-400 font-bold text-[10px] uppercase tracking-widest">{selectedSale.discount.toLocaleString()} ₼ ENDİRİM</span></div>}</div><div className="flex flex-col md:items-end space-y-2 bg-white/5 p-4 rounded-[1.5rem] border border-white/5"><div className="flex items-center space-x-2 text-[10px] font-black text-stone-300 uppercase tracking-widest"><Calendar size={14} className="text-stone-500" /><span>{formatDate(selectedSale.date)}</span></div><div className="flex items-center space-x-2 text-[10px] font-black text-stone-400 uppercase tracking-widest"><Clock size={14} className="text-stone-500" /><span>{formatTime(selectedSale.date)}</span></div></div></div></div>
               <div className="flex flex-col md:flex-row justify-center gap-4 pt-6">
+                <button 
+                  onClick={() => setReceiptSale(selectedSale)} 
+                  className="px-10 py-4 bg-stone-900 text-amber-500 hover:bg-black rounded-2xl font-black text-[11px] uppercase tracking-[0.2em] transition-all shadow-lg active:scale-95 flex items-center justify-center space-x-2 border-b-2 border-amber-600"
+                >
+                  <Printer size={18} />
+                  <span>QƏBZİ ÇAP ET</span>
+                </button>
                 {selectedSale.status !== 'returned' && (
                   <button 
                     onClick={() => handleCustomerReturn(selectedSale)} 
@@ -399,7 +439,7 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales, setSales, prod
       </div>
 
       {/* GÜNLÜK SATIŞ HESABATI (Yalnız Çap üçün) - PORTAL */}
-      {viewMode === 'dailyReport' && createPortal(
+      {viewMode === 'dailyReport' && !receiptSale && createPortal(
         <div id="daily-report-print">
             <header className="text-center mb-4 border-b-2 border-black pb-2">
                 <h1 className="brand-font text-2xl font-black mb-1">{settings.shopName || 'NEKO GOLD'}</h1>
@@ -446,6 +486,297 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales, setSales, prod
             </div>
         </div>,
         document.body
+      )}
+
+      {/* TƏK SATIŞ ÜÇÜN QƏBZ ÇAPI (80mm QƏBZ) - PORTAL */}
+      {receiptSale && createPortal(
+        <div id="receipt-print" className="receipt-80mm" style={{ fontFamily: 'Inter, sans-serif' }}>
+          <div className="receipt-luxury-container" style={{ background: '#ffffff', color: '#000000', padding: '0', boxSizing: 'border-box', width: '100%', fontWeight: settings.receiptFontWeight || 'normal' }}>
+            
+            {/* 1. BAŞLIQ */}
+            <div style={{ textAlign: 'center', borderBottom: '2px solid #000000', paddingBottom: '5px', marginBottom: '5px' }}>
+              <h1 style={{ fontSize: '21px', fontWeight: '900', margin: '0', letterSpacing: '0.04em', color: '#000000', textTransform: 'uppercase' }}>
+                {settings.shopName || 'NEKO GOLD'}
+              </h1>
+              <p style={{ margin: '1px 0', fontSize: '10.5px', textTransform: 'uppercase', fontWeight: 'bold', color: '#000000' }}>
+                Zərgərlik Satış Mərkəzi
+              </p>
+              <p style={{ margin: '0', fontSize: '9px', fontStyle: 'italic', color: '#000000' }}>
+                « Qızıl & Zinət Əşyaları »
+              </p>
+            </div>
+
+            {/* SƏNƏD & MÜŞTƏRİ MƏLUMATLARI */}
+            <div style={{ borderBottom: '1px solid #000000', paddingBottom: '4px', marginBottom: '4px', fontSize: '10.5px', lineHeight: '1.4', color: '#000000' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
+                <span>Sənəd №: #{receiptSale.id}</span>
+                <span>TARİX: {formatDate(receiptSale.date)} - {formatTime(receiptSale.date)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Müştəri: <strong>{receiptSale.customerName || 'Anonim Müştəri'}</strong></span>
+              </div>
+              <div style={{ fontSize: '10px' }}>
+                <span>Satıcı: <strong>{formatSellerName(receiptSale.sellerName)}</strong></span>
+              </div>
+            </div>
+
+            {/* 2. MƏHSULLAR CƏDVƏLİ */}
+            {(() => {
+              const origP = Number(receiptSale.originalPrice !== undefined ? receiptSale.originalPrice : (receiptSale.price || receiptSale.total)) || 0;
+              const finalP = Number(receiptSale.total) || 0;
+              const caratStr = receiptSale.carat ? (String(receiptSale.carat).toUpperCase().includes('K') || String(receiptSale.carat).length === 3 ? String(receiptSale.carat) : `${receiptSale.carat}K`) : '-';
+              const weightVal = Number(receiptSale.weight) || 0;
+              const prodDisplayName = receiptSale.isPartial ? `${receiptSale.productName} (${receiptSale.partialName})` : receiptSale.productName;
+
+              return (
+                <table className="receipt-luxury-table" style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', borderTop: '1.5px solid #000000', borderBottom: '1.5px solid #000000', margin: '4px 0', fontSize: '10px', color: '#000000' }}>
+                  <colgroup>
+                    <col style={{ width: '15%' }} />
+                    <col style={{ width: '36%' }} />
+                    <col style={{ width: '12%' }} />
+                    <col style={{ width: '11%' }} />
+                    <col style={{ width: '13%' }} />
+                    <col style={{ width: '13%' }} />
+                  </colgroup>
+                  <thead>
+                    <tr style={{ background: '#f8fafc', color: '#000000', borderBottom: '1px solid #000000' }}>
+                      <th style={{ padding: '3.5px 1px', fontSize: '9px', fontWeight: '900', textAlign: 'center' }}>KOD</th>
+                      <th style={{ padding: '3.5px 2px', fontSize: '9px', fontWeight: '900', textAlign: 'left' }}>MƏHSULUN ADI</th>
+                      <th style={{ padding: '3.5px 1px', fontSize: '9px', fontWeight: '900', textAlign: 'center' }}>ÇƏKİ</th>
+                      <th style={{ padding: '3.5px 1px', fontSize: '9px', fontWeight: '900', textAlign: 'center' }}>ƏYAR</th>
+                      <th style={{ padding: '3.5px 1px', fontSize: '9px', fontWeight: '900', textAlign: 'right' }}>İLKİN</th>
+                      <th style={{ padding: '3.5px 1px', fontSize: '9px', fontWeight: '900', textAlign: 'right' }}>QİYMƏT</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td style={{ padding: '3.5px 1px', fontSize: '9.5px', fontWeight: 'bold', textAlign: 'center', fontFamily: 'monospace' }}>
+                        {receiptSale.productCode}
+                      </td>
+                      <td title={prodDisplayName} style={{ padding: '3.5px 2px', fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {prodDisplayName}
+                      </td>
+                      <td style={{ padding: '3.5px 1px', fontSize: '9.5px', fontWeight: 'bold', textAlign: 'center' }}>
+                        {weightVal > 0 ? `${weightVal}g` : '-'}
+                      </td>
+                      <td style={{ padding: '3.5px 1px', fontSize: '9.5px', fontWeight: 'bold', textAlign: 'center' }}>
+                        {caratStr}
+                      </td>
+                      <td style={{ padding: '3.5px 1px', fontSize: '9.5px', textAlign: 'right' }}>
+                        {origP > 0 ? `${origP.toLocaleString()} ₼` : '-'}
+                      </td>
+                      <td style={{ padding: '3.5px 1px', fontSize: '10.5px', fontWeight: '900', textAlign: 'right' }}>
+                        {finalP.toLocaleString()} ₼
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              );
+            })()}
+
+            {/* 3. DƏRHAL YEKUN ÖDƏNİŞ (ARALIQ MƏBLƏĞ VƏ ÇƏKİ GÖTÜRÜLDÜ) */}
+            <div style={{ borderTop: '2px solid #000000', borderBottom: '2px solid #000000', padding: '5px 4px', margin: '5px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '13px', fontWeight: '900', letterSpacing: '0.04em' }}>YEKUN ÖDƏNİŞ:</span>
+              <span style={{ fontSize: '17px', fontWeight: '900', fontFamily: 'monospace' }}>{receiptSale.total?.toLocaleString()} ₼</span>
+            </div>
+
+            {/* 4. ƏLAQƏ VƏ MƏLUMAT */}
+            <div style={{ borderBottom: '1px solid #000000', paddingBottom: '4px', marginBottom: '5px', fontSize: '10px', lineHeight: '1.4' }}>
+              <div style={{ fontWeight: '900', textTransform: 'uppercase', marginBottom: '1px' }}>📞 ƏLAQƏ VƏ MƏLUMAT:</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>👑 Müdir: <strong>Etibar</strong></span>
+                <span>Tel: <strong>050-741-2222</strong></span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>🏬 Mağaza: <strong>NEKO GOLD</strong></span>
+                <span>Tel: <strong>050-604-91-31</strong></span>
+              </div>
+            </div>
+
+            {/* 5. İMZALAR */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', textAlign: 'center', fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase', padding: '4px 0 2px' }}>
+              <div>
+                <div style={{ borderBottom: '1px solid #000000', width: '85px', margin: '0 auto 4px' }}></div>
+                <span>Təhvil verdi (Mağaza)</span>
+              </div>
+              <div>
+                <div style={{ borderBottom: '1px solid #000000', width: '85px', margin: '0 auto 4px' }}></div>
+                <span>Təhvil aldı (Müştəri)</span>
+              </div>
+            </div>
+
+            {/* 6. DİP QEYD */}
+            <div style={{ textAlign: 'center', marginTop: '4px', fontSize: '9.5px', color: '#000000', borderTop: '1px solid #e5e7eb', paddingTop: '3px' }}>
+              <p style={{ margin: '1px 0', fontWeight: 'bold' }}>Bizi seçdiyiniz üçün təşəkkür edirik!</p>
+              <p style={{ margin: '0' }}>{settings.shopName || 'NEKO GOLD'} Zərgərlik Satış Mərkəzi</p>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* QƏBZ ÖN BAXIŞ MODALI (NO-PRINT) */}
+      {receiptSale && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 no-print animate-in fade-in duration-300">
+          <div className="bg-white rounded-[2rem] max-w-md w-full shadow-2xl border-2 border-stone-200 overflow-hidden flex flex-col max-h-[92vh]">
+            {/* Modal Başlığı */}
+            <div className="p-5 border-b border-stone-100 flex items-center justify-between bg-stone-900 text-white">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-amber-500 text-stone-950 rounded-xl flex items-center justify-center shadow">
+                  <Printer size={20} />
+                </div>
+                <div>
+                  <h4 className="font-black text-amber-500 text-sm uppercase tracking-tight">Satış Qəbzi</h4>
+                  <p className="text-[10px] font-bold text-stone-400 uppercase">Sənəd № {receiptSale.id}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setReceiptSale(null)} 
+                className="p-2 text-stone-400 hover:text-white rounded-xl hover:bg-white/10 transition-all"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Qəbz İçəriyi */}
+            <div className="p-4 md:p-6 overflow-y-auto space-y-4 bg-stone-100 flex justify-center">
+              <div className="w-full max-w-sm bg-white p-3 md:p-4 rounded-2xl shadow-sm border border-stone-200">
+                
+                {/* VAHİD MASTER ÇƏRÇİVƏ */}
+                <div className="w-full border-2 border-stone-900 bg-white overflow-hidden text-black font-sans">
+                  
+                  {/* 1. Başlıq */}
+                  <div className="text-center p-3 border-b-2 border-stone-900 bg-stone-50">
+                    <h3 className="font-black text-xl uppercase tracking-wider">{settings.shopName || 'NEKO GOLD'}</h3>
+                    <p className="text-[10px] uppercase font-bold text-stone-600">Zərgərlik Satış Mərkəzi</p>
+                    <div className="inline-block border border-stone-900 bg-white text-stone-900 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-sm my-1 tracking-wider">
+                      SATIŞ QƏBZİ (ÇEK)
+                    </div>
+                    <div className="flex justify-between items-center text-[10.5px] font-bold text-stone-700 mt-1 pt-1 border-t border-stone-300 px-1">
+                      <span>Sənəd №: {receiptSale.id}</span>
+                      <span>{formatDate(receiptSale.date)} - {formatTime(receiptSale.date)}</span>
+                    </div>
+                  </div>
+
+                  {/* 2. Alıcı & Satıcı (Dəqiq 50% / 50% Eyni Ölçüdə 2 Sütun) */}
+                  <div className="grid grid-cols-2 border-b-2 border-stone-900 text-[11px] bg-stone-50/50">
+                    <div className="p-2 border-r-2 border-stone-900">
+                      <span className="text-[9px] font-black text-stone-500 uppercase block">Alıcı:</span>
+                      <span className="font-black uppercase text-stone-900">{receiptSale.customerName || 'Anonim Müştəri'}</span>
+                    </div>
+                    <div className="p-2 text-right">
+                      <span className="text-[9px] font-black text-stone-500 uppercase block">Satıcı:</span>
+                      <span className="font-bold text-stone-800 uppercase">{formatSellerName(receiptSale.sellerName)}</span>
+                    </div>
+                  </div>
+
+                  {/* 3. Məhsul Cədvəli (Dəqiq 6 Eyni Ölçülü Sütun - Hər biri 16.666%) */}
+                  {(() => {
+                    const origP = Number(receiptSale.originalPrice !== undefined ? receiptSale.originalPrice : (receiptSale.price || receiptSale.total)) || 0;
+                    const finalP = Number(receiptSale.total) || 0;
+                    const caratStr = receiptSale.carat ? (String(receiptSale.carat).toUpperCase().includes('K') || String(receiptSale.carat).length === 3 ? String(receiptSale.carat) : `${receiptSale.carat}K`) : '-';
+                    const weightVal = Number(receiptSale.weight) || 0;
+
+                    return (
+                      <table className="w-full text-xs border-collapse border-b-2 border-stone-900 table-fixed">
+                        <colgroup>
+                          <col style={{ width: '16.666%' }} />
+                          <col style={{ width: '16.666%' }} />
+                          <col style={{ width: '16.666%' }} />
+                          <col style={{ width: '16.666%' }} />
+                          <col style={{ width: '16.666%' }} />
+                          <col style={{ width: '16.666%' }} />
+                        </colgroup>
+                        <thead>
+                          <tr className="bg-stone-100 text-[9.5px] font-black uppercase text-stone-900 border-b border-stone-900">
+                            <th className="border-r border-stone-900 p-1 text-center truncate whitespace-nowrap">Kod</th>
+                            <th className="border-r border-stone-900 p-1 text-center truncate whitespace-nowrap">Ad</th>
+                            <th className="border-r border-stone-900 p-1 text-center truncate whitespace-nowrap">Çəki</th>
+                            <th className="border-r border-stone-900 p-1 text-center truncate whitespace-nowrap">Əyar</th>
+                            <th className="border-r border-stone-900 p-1 text-center truncate whitespace-nowrap">Qiy</th>
+                            <th className="p-1 text-center truncate whitespace-nowrap text-[8px] tracking-tighter">Endirim Qiy</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr className="text-[10px] border-b border-stone-300 last:border-b-0 hover:bg-stone-50">
+                            <td className="border-r border-stone-900 p-1 font-mono font-bold text-center text-stone-800 truncate whitespace-nowrap">{receiptSale.productCode}</td>
+                            <td title={receiptSale.isPartial ? `${receiptSale.productName} (${receiptSale.partialName})` : receiptSale.productName} className="border-r border-stone-900 p-1 font-black uppercase text-center text-stone-900 truncate whitespace-nowrap max-w-0">
+                              {receiptSale.isPartial ? `${receiptSale.productName} (${receiptSale.partialName})` : receiptSale.productName}
+                            </td>
+                            <td className="border-r border-stone-900 p-1 text-center font-bold text-stone-800 truncate whitespace-nowrap">{weightVal > 0 ? `${weightVal}g` : '-'}</td>
+                            <td className="border-r border-stone-900 p-1 text-center font-bold text-stone-800 truncate whitespace-nowrap">{caratStr}</td>
+                            <td className="border-r border-stone-900 p-1 text-center text-stone-600 truncate whitespace-nowrap">{origP > 0 ? `${origP.toLocaleString()} ₼` : '-'}</td>
+                            <td className="p-1 text-center font-black text-stone-900 truncate whitespace-nowrap">{finalP.toLocaleString()} ₼</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    );
+                  })()}
+
+                  {/* 4. Yekun Məbləğ (Aralıq məbləğ və endirim hissələri çıxarıldı, birbaşa Yekun Ödəniş) */}
+                  <div className="p-3 border-b-2 border-stone-900 bg-white">
+                    <div className="flex justify-between items-center text-sm font-black text-stone-900">
+                      <span>YEKUN ÖDƏNİŞ:</span>
+                      <span className="text-lg text-amber-700 font-mono">{receiptSale.total?.toLocaleString()} ₼</span>
+                    </div>
+                    <div className="flex justify-between text-[10px] text-stone-500 pt-1">
+                      <span>Status:</span>
+                      <span className="font-bold text-stone-800 uppercase">{receiptSale.status === 'returned' ? 'İADƏ OLUNDU' : receiptSale.status === 'exchanged' ? 'DƏYİŞDİRİLDİ' : 'TAM ÖDƏNİLDİ'}</span>
+                    </div>
+                  </div>
+
+                  {/* 5. Mağaza Əlaqə Bölməsi (Dəqiq 50% / 50% Eyni Ölçüdə 2 Sütun) */}
+                  <div className="grid grid-cols-2 border-b-2 border-stone-900 text-[10.5px] bg-stone-50">
+                    <div className="p-2 border-r-2 border-stone-900">
+                      <span className="text-[9px] font-black text-stone-500 uppercase block">Müdir:</span>
+                      <p className="font-bold text-stone-800">Etibar</p>
+                      <p className="font-black text-stone-900 text-[11px]">050-741-2222</p>
+                    </div>
+                    <div className="p-2 text-right">
+                      <span className="text-[9px] font-black text-stone-500 uppercase block">Mağaza:</span>
+                      <p className="font-bold text-stone-800">NEKO GOLD</p>
+                      <p className="font-black text-stone-900 text-[11px]">050-604-91-31</p>
+                    </div>
+                  </div>
+
+                  {/* 6. İmzalar (Dəqiq 50% / 50% Eyni Ölçüdə 2 Sütun) */}
+                  <div className="grid grid-cols-2 text-center text-[9px] font-bold uppercase text-stone-600 p-3 bg-white">
+                    <div className="border-r-2 border-stone-900 pr-2">
+                      <div className="border-b border-stone-900 w-20 mx-auto mb-1"></div>
+                      <span>Təhvil verdi (Mağaza)</span>
+                    </div>
+                    <div className="pl-2">
+                      <div className="border-b border-stone-900 w-20 mx-auto mb-1"></div>
+                      <span>Təhvil aldı (Alıcı)</span>
+                    </div>
+                  </div>
+
+                </div>
+                
+                <div className="text-center mt-2 text-[9.5px] font-bold text-stone-400">
+                  Bizi seçdiyiniz üçün təşəkkür edirik!
+                </div>
+              </div>
+            </div>
+
+            {/* Düymələr */}
+            <div className="p-4 border-t border-stone-100 bg-white flex space-x-3">
+              <button
+                onClick={() => setReceiptSale(null)}
+                className="flex-1 py-3.5 px-4 rounded-xl border-2 border-stone-200 text-stone-700 font-black uppercase text-xs hover:bg-stone-50 transition-all active:scale-95"
+              >
+                Bağla
+              </button>
+              <button
+                onClick={handlePrintSingleReceipt}
+                className="flex-1 py-3.5 px-4 rounded-xl bg-stone-900 text-amber-500 font-black uppercase text-xs hover:bg-black transition-all flex items-center justify-center shadow-xl active:scale-95 space-x-2 border-b-2 border-amber-600"
+              >
+                <Printer size={16} />
+                <span>Qəbzi Çap Et</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ÜST TABLAR (NO-PRINT) */}
@@ -519,6 +850,8 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales, setSales, prod
               <table className="w-full text-left border-collapse min-w-[800px]">
                 <thead>
                   <tr className="bg-stone-100 border-b-2 border-stone-200">
+                    <th className="px-4 py-6 text-[10px] font-black text-stone-600 uppercase tracking-widest text-center w-12">Seç</th>
+                    <th className="px-4 py-6 text-[10px] font-black text-stone-600 uppercase tracking-widest text-center w-20">Qəbz</th>
                     <th className="px-8 py-6 text-[10px] font-black text-stone-600 uppercase tracking-widest">Məhsul</th>
                     <th className="px-8 py-6 text-[10px] font-black text-stone-600 uppercase tracking-widest text-center">Tarix</th>
                     <th className="px-8 py-6 text-[10px] font-black text-stone-600 uppercase tracking-widest text-right">Məbləğ</th>
@@ -528,6 +861,31 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales, setSales, prod
                 <tbody className="divide-y-2 divide-stone-50">
                   {filteredSales.map((s) => (
                     <tr key={s.id} onClick={() => setSelectedSale(s)} className="hover:bg-amber-50/40 transition-all group cursor-pointer">
+                      <td className="px-4 py-5 text-center" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => toggleCheckSale(s.id)}
+                          className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all mx-auto ${
+                            checkedSaleIds[s.id]
+                              ? 'bg-amber-500 border-amber-600 text-stone-950 shadow-sm'
+                              : 'bg-white border-stone-300 hover:border-amber-400 text-transparent'
+                          }`}
+                          title={checkedSaleIds[s.id] ? "Quşu qaldır" : "Quş qoy"}
+                        >
+                          <Check size={14} strokeWidth={3.5} className={checkedSaleIds[s.id] ? 'opacity-100' : 'opacity-0'} />
+                        </button>
+                      </td>
+                      <td className="px-4 py-5 text-center" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => setReceiptSale(s)}
+                          className="px-2.5 py-1.5 bg-stone-900 text-amber-500 hover:bg-black rounded-xl transition-all shadow-sm active:scale-95 inline-flex items-center space-x-1 border border-stone-800"
+                          title="Qəbz Çap Et"
+                        >
+                          <Printer size={13} />
+                          <span className="text-[10px] font-black uppercase tracking-wider">ÇAP</span>
+                        </button>
+                      </td>
                       <td className="px-8 py-5">
                         <div className="flex items-center space-x-4">
                           <div 
@@ -589,7 +947,7 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales, setSales, prod
                     </tr>
                   ))}
                   {filteredSales.length === 0 && (
-                    <tr><td colSpan={4} className="px-10 py-20 text-center opacity-40"><div className="flex flex-col items-center space-y-4"><ShoppingBag className="w-12 h-12 text-stone-300" /><p className="text-stone-500 font-black uppercase text-xs tracking-widest">Satış tapılmadı</p></div></td></tr>
+                    <tr><td colSpan={6} className="px-10 py-20 text-center opacity-40"><div className="flex flex-col items-center space-y-4"><ShoppingBag className="w-12 h-12 text-stone-300" /><p className="text-stone-500 font-black uppercase text-xs tracking-widest">Satış tapılmadı</p></div></td></tr>
                   )}
                 </tbody>
               </table>
@@ -640,6 +998,8 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales, setSales, prod
                     <table className="w-full text-left">
                         <thead>
                             <tr className="bg-stone-50 border-b border-stone-100">
+                                <th className="px-4 py-4 text-[9px] font-black text-stone-500 uppercase tracking-widest text-center w-12">SEÇ</th>
+                                <th className="px-4 py-4 text-[9px] font-black text-stone-500 uppercase tracking-widest text-center w-20">QƏBZ</th>
                                 <th className="px-6 py-4 text-[9px] font-black text-stone-500 uppercase tracking-widest">SAAT</th>
                                 <th className="px-6 py-4 text-[9px] font-black text-stone-500 uppercase tracking-widest">KOD</th>
                                 <th className="px-6 py-4 text-[9px] font-black text-stone-500 uppercase tracking-widest">MƏHSUL</th>
@@ -651,14 +1011,46 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales, setSales, prod
                         <tbody className="divide-y divide-stone-50">
                             {dailyReportData.map((s) => (
                                 <tr key={s.id} className="hover:bg-amber-50/20 transition-all">
+                                    <td className="px-4 py-4 text-center">
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleCheckSale(s.id)}
+                                            className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all mx-auto ${
+                                                checkedSaleIds[s.id]
+                                                    ? 'bg-amber-500 border-amber-600 text-stone-950 shadow-sm'
+                                                    : 'bg-white border-stone-300 hover:border-amber-400 text-transparent'
+                                            }`}
+                                            title={checkedSaleIds[s.id] ? "Quşu qaldır" : "Quş qoy"}
+                                        >
+                                            <Check size={14} strokeWidth={3.5} className={checkedSaleIds[s.id] ? 'opacity-100' : 'opacity-0'} />
+                                        </button>
+                                    </td>
+                                    <td className="px-4 py-4 text-center">
+                                        <button
+                                            type="button"
+                                            onClick={() => setReceiptSale(s)}
+                                            className="px-2.5 py-1.5 bg-stone-900 text-amber-500 hover:bg-black rounded-xl transition-all shadow-sm active:scale-95 inline-flex items-center space-x-1 border border-stone-800"
+                                            title="Qəbz Çap Et"
+                                        >
+                                            <Printer size={13} />
+                                            <span className="text-[10px] font-black uppercase tracking-wider">ÇAP</span>
+                                        </button>
+                                    </td>
                                     <td className="px-6 py-4 text-xs font-bold text-stone-400">{formatTime(s.date)}</td>
                                     <td className="px-6 py-4 text-xs font-black text-stone-600 uppercase">{s.productCode}</td>
                                     <td className="px-6 py-4 font-black text-stone-900 uppercase text-xs">{s.productName} ({s.weight}g)</td>
                                     <td className="px-6 py-4 text-[10px] font-black text-stone-800 uppercase">{s.customerName}</td>
-                                    <td className="px-6 py-4 text-[10px] font-black text-stone-500 uppercase">{s.sellerName || 'SİSTEM'}</td>
+                                    <td className="px-6 py-4 text-[10px] font-black text-stone-500 uppercase">{formatSellerName(s.sellerName)}</td>
                                     <td className="px-6 py-4 text-right font-black text-stone-900">{s.total.toLocaleString()} ₼</td>
                                 </tr>
                             ))}
+                            {dailyReportData.length === 0 && (
+                                <tr>
+                                    <td colSpan={8} className="px-6 py-12 text-center text-stone-400 font-bold uppercase text-xs">
+                                        Bu tarix üçün satış qeydi yoxdur
+                                    </td>
+                                </tr>
+                            )}
                         </tbody>
                     </table>
                 </div>

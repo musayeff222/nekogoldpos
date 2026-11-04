@@ -78,39 +78,96 @@ body {
     margin: 0 !important;
   }
 
-  /* 80mm THERMAL PRINTER SETTINGS FOR LISTS */
+  /* 80mm THERMAL PRINTER SETTINGS FOR LISTS & RECEIPTS */
   #receipt-print.receipt-80mm {
-    width: 80mm !important;
-    max-width: 80mm !important;
-    padding: 3mm !important;
-    margin: 0 !important;
+    width: 78mm !important;
+    max-width: 78mm !important;
+    padding: 1.5mm !important;
+    margin: 0 auto !important;
+    color: #000 !important;
+    box-sizing: border-box !important;
+  }
+
+  #receipt-print.receipt-80mm * {
+    box-sizing: border-box !important;
   }
 
   #receipt-print.receipt-80mm h1 {
-    font-size: 18px !important;
+    font-size: 21px !important;
+    color: #000 !important;
   }
 
   #receipt-print.receipt-80mm h2 {
     font-size: 11px !important;
-    margin-bottom: 8px !important;
+    margin-bottom: 4px !important;
+    color: #000 !important;
   }
 
-  #receipt-print.receipt-80mm .text-xs,
-  #receipt-print.receipt-80mm span,
-  #receipt-print.receipt-80mm p,
-  #receipt-print.receipt-80mm div,
-  #receipt-print.receipt-80mm footer {
-    font-size: 9px !important;
+  /* ELEGANT JEWELRY RECEIPT STYLES */
+  .receipt-luxury-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    background: #fff !important;
+    color: #000 !important;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+    padding: 0 !important;
+    margin: 0 !important;
   }
 
-  #receipt-print.receipt-80mm .receipt-table th, 
-  #receipt-print.receipt-80mm .receipt-table td {
-    font-size: 9px !important;
-    padding: 3px 1px !important;
+  .receipt-luxury-table {
+    width: 100% !important;
+    table-layout: fixed !important;
+    box-sizing: border-box !important;
+    border-collapse: collapse !important;
+    border-top: 1.5px solid #000 !important;
+    border-bottom: 1.5px solid #000 !important;
+    margin: 4px 0 !important;
+    color: #000 !important;
+    background: #fff !important;
   }
 
-  /* A4 DOCUMENT SETTINGS */
-  #receipt-print {
+  .receipt-luxury-table th {
+    background-color: #f8fafc !important;
+    font-weight: 900 !important;
+    font-size: 9.5px !important;
+    padding: 4px 1px !important;
+    text-transform: uppercase !important;
+    color: #000 !important;
+    border-bottom: 1px solid #000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    white-space: nowrap !important;
+  }
+
+  .receipt-luxury-table td {
+    padding: 4px 1px !important;
+    font-size: 10px !important;
+    line-height: 1.25 !important;
+    color: #000 !important;
+    border-bottom: 1px dashed #d1d5db !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .receipt-luxury-table tr:last-child td {
+    border-bottom: none !important;
+  }
+
+  .receipt-total-banner {
+    border-top: 2px solid #000 !important;
+    border-bottom: 2px solid #000 !important;
+    padding: 6px 4px !important;
+    margin: 6px 0 !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  /* A4 DOCUMENT SETTINGS (Non-80mm) */
+  #receipt-print:not(.receipt-80mm) {
     width: 210mm !important;
     max-width: 210mm !important;
     padding: 15mm !important;

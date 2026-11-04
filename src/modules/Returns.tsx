@@ -17,7 +17,7 @@ import {
   Tag,
   User
 } from 'lucide-react';
-import { Sale, Product, SystemLog } from '@/types';
+import { Sale, Product, SystemLog, AuthUser } from '@/types';
 
 interface ReturnsProps {
   sales: Sale[];
@@ -25,9 +25,10 @@ interface ReturnsProps {
   products: Product[];
   setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
   addLog: (action: string, category: SystemLog['category'], details?: string) => void;
+  user?: AuthUser | null;
 }
 
-const ReturnsModule: React.FC<ReturnsProps> = ({ sales, setSales, products, setProducts, addLog }) => {
+const ReturnsModule: React.FC<ReturnsProps> = ({ sales, setSales, products, setProducts, addLog, user }) => {
   const [activeTab, setActiveTab] = useState<'customer' | 'warehouse' | 'list'>('customer');
   const [searchTerm, setSearchTerm] = useState('');
   const [warehouseSearchTerm, setWarehouseSearchTerm] = useState('');
@@ -72,6 +73,48 @@ const ReturnsModule: React.FC<ReturnsProps> = ({ sales, setSales, products, setP
 
     const actionText = isExchange ? 'DƏYİŞİLMƏ' : 'GERİ QAYTARMA';
     const finalStatus = isExchange ? 'exchanged' : 'returned';
+
+    // REQUIRE PATRON APPROVAL IF NOT PATRON
+    if (user?.role !== 'patron') {
+      const confirmSend = confirm(`Diqqət: Qaydalara əsasən məhsulun geri qaytarılması üçün Patronun təsdiqi tələb olunur.\n\nSəbəb: ${note}\n\nPatrona veb-sayt üzərindən təsdiq sorğusu göndərilsin?`);
+      if (!confirmSend) return;
+
+      const payload = {
+        saleId: selectedSale.id,
+        productId: selectedSale.productId,
+        updatedProduct: {
+          stockCount: 1,
+          isReturned: true,
+          returnReason: note,
+          code: finalCode
+        }
+      };
+
+      fetch('/api/approvals/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'return',
+          employee_name: user?.fullName || user?.username || 'Personal',
+          employee_username: user?.username || 'personal',
+          product_id: selectedSale.productId,
+          product_name: selectedSale.productName,
+          product_code: selectedSale.productCode,
+          product_quantity: selectedSale.soldWeight ? `${selectedSale.soldWeight} gr` : '1 ədəd',
+          reason: note,
+          payload
+        })
+      })
+        .then(res => res.json())
+        .then(() => {
+          alert('Təsdiq sorğusu Patrona göndərildi. Patron veb-sayt üzərindən "Hə / Təsdiq et" seçdikdə əməliyyat icra olunacaq.');
+          setShowRefundOptions(false);
+          setSelectedSale(null);
+          setSearchTerm('');
+        })
+        .catch(() => alert('Sorğu göndərilərkən xəta baş verdi'));
+      return;
+    }
 
     addLog(`${actionText}: ${selectedSale.productCode}`, 'SALE', `Müştəri: ${selectedSale.customerName}, Məbləğ: ${selectedSale.total} AZN, Səbəb: ${note}`);
 

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Shield, Key, Save, List, Star, Calculator, Plus, X, User, Tag, Move, Type as TypeIcon, Eye, EyeOff, Bold, ChevronUp, ChevronDown, Printer, Download, Upload, Settings2, Layers, Database, RefreshCw } from 'lucide-react';
+import { Shield, Key, Save, List, Star, Calculator, Plus, X, User, Tag, Move, Type as TypeIcon, Eye, EyeOff, Bold, ChevronUp, ChevronDown, Printer, Download, Upload, Settings2, Layers, Database, RefreshCw, Send, ShoppingCart, Package, MessageSquare, Info, CheckCircle2 } from 'lucide-react';
 import { AppSettings, LabelElement, Product, SystemLog } from '@/types';
 import { LabelPrint } from '@/components/LabelPrint';
 
@@ -37,7 +37,10 @@ const SettingsModule: React.FC<SettingsProps> = ({
   const [newGroupPrefix, setNewGroupPrefix] = useState('');
   const [newSupplier, setNewSupplier] = useState('');
   const [newCarat, setNewCarat] = useState('');
-  const [newChatId, setNewChatId] = useState('');
+  const [newSalesChatId, setNewSalesChatId] = useState('');
+  const [newProductChatId, setNewProductChatId] = useState('');
+  const [isTestingSales, setIsTestingSales] = useState(false);
+  const [isTestingProduct, setIsTestingProduct] = useState(false);
   const [editingGroup, setEditingGroup] = useState<{ index: number, name: string, prefix: string } | null>(null);
   const [editingType, setEditingType] = useState<{ index: number, value: string } | null>(null);
   const [editingSupplier, setEditingSupplier] = useState<{ index: number, value: string } | null>(null);
@@ -327,13 +330,79 @@ const SettingsModule: React.FC<SettingsProps> = ({
     setNewCarat('');
   };
   
-  const addTelegramChatId = () => {
-    const val = newChatId.trim();
+  const addTelegramSalesChatId = () => {
+    const val = newSalesChatId.trim();
     if (!val) return;
-    const currentIds = localSettings.telegramChatIds || [];
+    const currentIds = localSettings.telegramSalesChatIds || localSettings.telegramChatIds || [];
     if (currentIds.includes(val)) return;
-    setLocalSettings({ ...localSettings, telegramChatIds: [...currentIds, val] });
-    setNewChatId('');
+    setLocalSettings({ 
+      ...localSettings, 
+      telegramSalesChatIds: [...currentIds, val],
+      telegramChatIds: [...currentIds, val]
+    });
+    setNewSalesChatId('');
+  };
+
+  const addTelegramProductChatId = () => {
+    const val = newProductChatId.trim();
+    if (!val) return;
+    const currentIds = localSettings.telegramProductChatIds || [];
+    if (currentIds.includes(val)) return;
+    setLocalSettings({ 
+      ...localSettings, 
+      telegramProductChatIds: [...currentIds, val] 
+    });
+    setNewProductChatId('');
+  };
+
+  const testTelegramNotification = async (type: 'sale' | 'product') => {
+    const targets = type === 'sale' 
+      ? (localSettings.telegramSalesChatIds?.length ? localSettings.telegramSalesChatIds : localSettings.telegramChatIds || [])
+      : (localSettings.telegramProductChatIds || []);
+
+    if (targets.length === 0) {
+      alert(`⚠️ Test mesajı göndərmək üçün əvvəlcə ən azı 1 ədəd Chat ID əlavə edin!`);
+      return;
+    }
+
+    if (type === 'sale') setIsTestingSales(true);
+    else setIsTestingProduct(true);
+
+    try {
+      const now = new Date().toLocaleString('az-AZ');
+      const testMsg = type === 'sale'
+        ? `🧪 <b>TEST SATIŞ BİLDİRİŞİ</b> 📢\n\n` +
+          `Bu mesaj <b>Neko Gold</b> Satış Bildirişləri kanalının sazlanmasını yoxlamaq üçün göndərilmişdir.\n` +
+          `✅ Satış bildirişləri bu söhbətə uğurla çatacaq.\n\n` +
+          `🕒 <b>Tarix:</b> ${now}`
+        : `🧪 <b>TEST MƏHSUL ƏLAVƏ BİLDİRİŞİ</b> 📦\n\n` +
+          `Bu mesaj <b>Neko Gold</b> Yeni Məhsul Əlavələri kanalının sazlanmasını yoxlamaq üçün göndərilmişdir.\n` +
+          `✅ Yeni məhsullar stoka daxil edildikdə bu söhbətə göndəriləcək.\n\n` +
+          `🕒 <b>Tarix:</b> ${now}`;
+
+      const res = await fetch('/api/notify/telegram', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: testMsg,
+          type,
+          chatIds: targets
+        })
+      });
+      const data = await res.json();
+      if (data.status === 'success') {
+        alert(`✅ Test mesajı uğurla göndərildi! Telegram söhbətinizi yoxlayın.`);
+      } else if (data.status === 'skipped') {
+        alert(`⚠️ Bildiriş göndərilmədi: ${data.reason === 'token_not_configured' ? 'Bot Token təyin edilməyib' : 'Chat ID tapılmadı'}`);
+      } else {
+        alert(`❌ Mesaj göndərilərkən xəta baş verdi: ${data.error || 'Naməlum xəta'}`);
+      }
+    } catch (err: any) {
+      alert(`❌ Əlaqə xətası: ${err.message}`);
+    } finally {
+      setIsTestingSales(false);
+      setIsTestingProduct(false);
+    }
   };
 
   const downloadKioskScript = () => {
@@ -397,9 +466,12 @@ const SettingsModule: React.FC<SettingsProps> = ({
     document.body.removeChild(a);
   };
 
-  const removeItem = (list: 'productTypes' | 'suppliers' | 'carats' | 'productGroups' | 'telegramChatIds', item: any) => {
+  const removeItem = (list: 'productTypes' | 'suppliers' | 'carats' | 'productGroups' | 'telegramChatIds' | 'telegramSalesChatIds' | 'telegramProductChatIds', item: any) => {
     if (list === 'productGroups') {
       setLocalSettings({ ...localSettings, productGroups: (localSettings.productGroups || []).filter(g => g !== item) });
+    } else if (list === 'telegramSalesChatIds') {
+      const updated = (localSettings.telegramSalesChatIds || localSettings.telegramChatIds || []).filter(i => i !== item);
+      setLocalSettings({ ...localSettings, telegramSalesChatIds: updated, telegramChatIds: updated });
     } else {
       setLocalSettings({ ...localSettings, [list]: (localSettings[list] as any[] || []).filter(i => i !== item) });
     }
@@ -755,44 +827,186 @@ const SettingsModule: React.FC<SettingsProps> = ({
           </div>
         </div>
 
-        {/* TELEGRAM BİLDİRİŞLƏRİ */}
-        <div className="bg-white rounded-[2rem] border border-slate-100 shadow-xl overflow-hidden flex flex-col min-h-[300px]">
-          <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
-            <h3 className="font-black text-slate-800 text-xs uppercase tracking-widest flex items-center">
-              <Plus size={18} className="mr-2 text-indigo-500"/> TELEGRAM BİLDİRİŞ (ID)
-            </h3>
-            <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
-              {(localSettings.telegramChatIds || []).length}
-            </span>
+      </div>
+
+      {/* TELEGRAM BİLDİRİŞ VƏ KANAL AYARLARI (AYRI-AYRI SÖHBƏTLƏR) */}
+      <div className="bg-white rounded-[2rem] border border-slate-100 shadow-2xl overflow-hidden p-8 md:p-10 space-y-8">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-6">
+          <div className="flex items-center space-x-4">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+              <MessageSquare size={24} />
+            </div>
+            <div>
+              <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Telegram Bildiriş Kanalları & Bot İnteqrasiyası</h3>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">Satış bildirişlərini və yeni məhsul əlavələrini tam fərqli Telegram söhbətlərinə və ya qruplarına yönləndirin.</p>
+            </div>
           </div>
-          <div className="p-6 space-y-4">
-            <p className="text-[9px] text-slate-400 font-bold leading-tight">
-              Botdan bildiriş almaq istədiyiniz Chat ID-ləri bura əlavə edin.
-            </p>
-            <div className="flex space-x-2">
-              <input 
-                type="text" 
-                placeholder="Chat ID (Məs: 1234567)" 
-                value={newChatId} 
-                onChange={(e) => setNewChatId(e.target.value)} 
-                className="flex-1 bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-2.5 text-xs font-bold" 
-              />
-              <button onClick={addTelegramChatId} className="bg-slate-900 text-indigo-500 p-2.5 rounded-xl">
-                <Plus size={20} />
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* 1. SATIŞ BİLDİRİŞLƏRİ */}
+          <div className="bg-slate-50/70 rounded-2xl border border-slate-200/80 p-6 flex flex-col justify-between space-y-5">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2.5 bg-emerald-100/80 text-emerald-700 rounded-xl">
+                    <ShoppingCart size={20} />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black text-slate-800 uppercase tracking-wide">1. Satış Bildirişləri Çatı</h4>
+                    <p className="text-[11px] text-slate-500 font-medium">Hər satış tamamlandıqda qəbz və məbləğ bura göndərilir</p>
+                  </div>
+                </div>
+                <span className="text-xs font-black text-emerald-700 bg-emerald-100/80 px-2.5 py-1 rounded-full border border-emerald-200">
+                  {((localSettings.telegramSalesChatIds && localSettings.telegramSalesChatIds.length > 0) 
+                    ? localSettings.telegramSalesChatIds 
+                    : (localSettings.telegramChatIds || [])).length} ID
+                </span>
+              </div>
+
+              <div className="flex space-x-2">
+                <input 
+                  type="text" 
+                  placeholder="Satış Chat ID (Məs: -1001234567 və ya 987654)" 
+                  value={newSalesChatId} 
+                  onChange={(e) => setNewSalesChatId(e.target.value)} 
+                  onKeyDown={(e) => e.key === 'Enter' && addTelegramSalesChatId()}
+                  className="flex-1 bg-white border-2 border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 focus:border-emerald-500 focus:outline-none transition-colors" 
+                />
+                <button 
+                  onClick={addTelegramSalesChatId} 
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl flex items-center space-x-1 transition-colors shadow-sm"
+                >
+                  <Plus size={18} />
+                  <span className="text-xs">Əlavə et</span>
+                </button>
+              </div>
+
+              <div className="flex flex-wrap gap-2 min-h-[48px] bg-white p-3 rounded-xl border border-slate-200">
+                {((localSettings.telegramSalesChatIds && localSettings.telegramSalesChatIds.length > 0) 
+                  ? localSettings.telegramSalesChatIds 
+                  : (localSettings.telegramChatIds || [])).map((id, idx) => (
+                  <div key={id + idx} className="bg-emerald-50 text-emerald-800 px-3 py-1.5 rounded-lg text-xs font-black border border-emerald-200 flex items-center group">
+                    <span className="font-mono">{id}</span>
+                    <button 
+                      onClick={() => removeItem('telegramSalesChatIds', id)} 
+                      className="ml-2 text-emerald-400 hover:text-red-500 transition-colors p-0.5 rounded"
+                      title="Sil"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+                {((localSettings.telegramSalesChatIds && localSettings.telegramSalesChatIds.length > 0) 
+                  ? localSettings.telegramSalesChatIds 
+                  : (localSettings.telegramChatIds || [])).length === 0 && (
+                  <div className="text-xs text-slate-400 italic flex items-center justify-center w-full py-2">
+                    Satışlar üçün heç bir Chat ID əlavə edilməyib.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-slate-200/60">
+              <button
+                onClick={() => testTelegramNotification('sale')}
+                disabled={isTestingSales}
+                className="w-full py-2.5 px-4 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-black flex items-center justify-center space-x-2 transition-all disabled:opacity-50"
+              >
+                {isTestingSales ? <RefreshCw className="animate-spin" size={16} /> : <Send size={16} />}
+                <span>{isTestingSales ? 'Göndərilir...' : '🧪 Test Satış Bildirişi Göndər'}</span>
               </button>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {(localSettings.telegramChatIds || []).map((id, idx) => (
-                <div key={id + idx} className="bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-lg text-[10px] font-black border border-emerald-100 flex items-center group">
-                  {id}
-                  <button onClick={() => removeItem('telegramChatIds', id)} className="ml-2 text-emerald-300 hover:text-red-500 transition-colors">
-                    <X size={12} />
-                  </button>
+          </div>
+
+          {/* 2. YENİ MƏHSUL ƏLAVƏLƏRİ */}
+          <div className="bg-slate-50/70 rounded-2xl border border-slate-200/80 p-6 flex flex-col justify-between space-y-5">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2.5 bg-indigo-100/80 text-indigo-700 rounded-xl">
+                    <Package size={20} />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black text-slate-800 uppercase tracking-wide">2. Yeni Məhsul Əlavələri Çatı</h4>
+                    <p className="text-[11px] text-slate-500 font-medium">Stoka yeni mal əlavə edildikdə foto və detallar bura göndərilir</p>
+                  </div>
                 </div>
-              ))}
-              {(localSettings.telegramChatIds || []).length === 0 && (
-                <div className="text-[10px] text-slate-300 italic py-4">Hələ ID əlavə edilməyib.</div>
-              )}
+                <span className="text-xs font-black text-indigo-700 bg-indigo-100/80 px-2.5 py-1 rounded-full border border-indigo-200">
+                  {(localSettings.telegramProductChatIds || []).length} ID
+                </span>
+              </div>
+
+              <div className="flex space-x-2">
+                <input 
+                  type="text" 
+                  placeholder="Məhsul Chat ID (Məs: -1009876543 və ya 123456)" 
+                  value={newProductChatId} 
+                  onChange={(e) => setNewProductChatId(e.target.value)} 
+                  onKeyDown={(e) => e.key === 'Enter' && addTelegramProductChatId()}
+                  className="flex-1 bg-white border-2 border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-800 focus:border-indigo-500 focus:outline-none transition-colors" 
+                />
+                <button 
+                  onClick={addTelegramProductChatId} 
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2.5 rounded-xl flex items-center space-x-1 transition-colors shadow-sm"
+                >
+                  <Plus size={18} />
+                  <span className="text-xs">Əlavə et</span>
+                </button>
+              </div>
+
+              <div className="flex flex-wrap gap-2 min-h-[48px] bg-white p-3 rounded-xl border border-slate-200">
+                {(localSettings.telegramProductChatIds || []).map((id, idx) => (
+                  <div key={id + idx} className="bg-indigo-50 text-indigo-800 px-3 py-1.5 rounded-lg text-xs font-black border border-indigo-200 flex items-center group">
+                    <span className="font-mono">{id}</span>
+                    <button 
+                      onClick={() => removeItem('telegramProductChatIds', id)} 
+                      className="ml-2 text-indigo-400 hover:text-red-500 transition-colors p-0.5 rounded"
+                      title="Sil"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+                {(localSettings.telegramProductChatIds || []).length === 0 && (
+                  <div className="text-xs text-slate-400 italic flex items-center justify-center w-full py-2">
+                    Yeni məhsullar üçün heç bir Chat ID əlavə edilməyib.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-slate-200/60">
+              <button
+                onClick={() => testTelegramNotification('product')}
+                disabled={isTestingProduct}
+                className="w-full py-2.5 px-4 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 rounded-xl text-xs font-black flex items-center justify-center space-x-2 transition-all disabled:opacity-50"
+              >
+                {isTestingProduct ? <RefreshCw className="animate-spin" size={16} /> : <Send size={16} />}
+                <span>{isTestingProduct ? 'Göndərilir...' : '🧪 Test Məhsul Bildirişi Göndər'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* TƏLİMAT VƏ KÖMƏKÇİ İZAH */}
+        <div className="bg-indigo-50/50 rounded-2xl border border-indigo-100 p-5 text-xs text-slate-700 space-y-3">
+          <div className="flex items-center space-x-2 font-black text-indigo-900 uppercase">
+            <Info size={18} className="text-indigo-600" />
+            <span>Chat ID Necə Öyrənilir və Ayırma Qaydası:</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-[11px] text-slate-600 font-medium">
+            <div className="bg-white p-3.5 rounded-xl border border-indigo-100 space-y-1">
+              <span className="font-bold text-slate-900 block">1. Şəxsi və ya Qrup ID-si:</span>
+              <span>Botunuza daxil olub və ya botu əlavə etdiyiniz qrupa yazıb <b><code>/id</code></b> göndərin. Bot dərhal həmin söhbətin ID nömrəsini təqdim edəcək.</span>
+            </div>
+            <div className="bg-white p-3.5 rounded-xl border border-indigo-100 space-y-1">
+              <span className="font-bold text-slate-900 block">2. Satış və Malları Ayırmaq:</span>
+              <span>Satışlar üçün olan qrupun ID-sini <b>Satış Bildirişləri</b> sahəsinə, anbar/məhsul qrupunun ID-sini isə <b>Yeni Məhsul Əlavələri</b> sahəsinə qeyd edin.</span>
+            </div>
+            <div className="bg-white p-3.5 rounded-xl border border-indigo-100 space-y-1">
+              <span className="font-bold text-slate-900 block">3. Yadda Saxla:</span>
+              <span>ID-ləri daxil etdikdən sonra səhifənin yuxarısındakı <b>"Ayarları Yadda Saxla"</b> düyməsini sıxmağı unutmayın.</span>
             </div>
           </div>
         </div>
@@ -1315,7 +1529,7 @@ const SettingsModule: React.FC<SettingsProps> = ({
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Silmə Təsdiq Kodu</label>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Təhlükəsizlik Kodu (Redaktə və Silmə)</label>
             <input 
               type="text" 
               value={localSettings.deleteCode}

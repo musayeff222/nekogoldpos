@@ -1,7 +1,10 @@
 {
-  "name": "NekoCRM",
+  "name": "Remix Remix NekoCRM",
   "description": "Satış prosesi, məhsul izləmə, borc idarəetməsi və ətraflı maliyyə hesabatlarını təmin edən hərtərəfli POS və CRM sistemi.",
   "requestFramePermissions": [
     "camera"
+  ],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
   ]
 }

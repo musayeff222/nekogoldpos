@@ -37,9 +37,11 @@ import {
   Archive,
   ArrowDownToLine,
   Package,
-  Check
+  Check,
+  Shield,
+  ShieldCheck
 } from 'lucide-react';
-import { Product, ProductType, AppSettings, ProductLog, Sale, SystemLog } from '@/types';
+import { Product, ProductType, AppSettings, ProductLog, Sale, SystemLog, AuthUser } from '@/types';
 import { LabelPrint } from '@/components/LabelPrint';
 
 interface StockProps {
@@ -51,7 +53,7 @@ interface StockProps {
   setCart: React.Dispatch<React.SetStateAction<Product[]>>;
   setCurrentPage: (page: any) => void;
   addLog: (action: string, category: SystemLog['category'], details?: string) => void;
-  user: { username: string } | null;
+  user: AuthUser | null;
   isBackgroundLoading?: boolean;
 }
 
@@ -128,7 +130,10 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     purchaseDate: new Date().toISOString().split('T')[0],
     allowPartialSale: false,
     saleType: undefined as 'weight' | 'count' | undefined,
-    stockCount: 1
+    stockCount: 1,
+    addedBy: (user?.username?.toLowerCase().replace(/^@/, '') === 'magaza' || user?.role === 'shop') 
+      ? '@magaza' 
+      : (user?.fullName || (user?.username ? `@${user.username.replace(/^@/, '')}` : 'Məlahət'))
   });
 
   const [autoPrint, setAutoPrint] = useState(true);
@@ -144,6 +149,11 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
   const [printCategory, setPrintCategory] = useState<string>('all');
 
   const [editForm, setEditForm] = useState<Partial<Product>>({});
+  const [showEditSecurityModal, setShowEditSecurityModal] = useState(false);
+  const [editSecurityCode, setEditSecurityCode] = useState('');
+  const [editSecurityError, setEditSecurityError] = useState('');
+  const [deleteSecurityCode, setDeleteSecurityCode] = useState('');
+  const [deleteSecurityError, setDeleteSecurityError] = useState('');
 
   // Clear selection when switching views
   useEffect(() => {
@@ -390,10 +400,12 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
       supplierPrice: 0, 
       stockCount: newProduct.saleType === 'count' ? (Number(newProduct.stockCount) || 1) : 1, 
       purchaseDate: newProduct.purchaseDate,
-      logs: [{ date: new Date().toISOString(), action: 'Sistemə əlavə edildi' }],
+      logs: [{ date: new Date().toISOString(), action: `${(user?.username?.toLowerCase().replace(/^@/, '') === 'magaza' || user?.role === 'shop') ? '@magaza' : (user?.fullName || (user?.username ? `@${user.username.replace(/^@/, '')}` : 'Məlahət'))} tərəfindən sistemə əlavə edildi` }],
       allowPartialSale: newProduct.allowPartialSale || newProduct.saleType === 'weight',
       soldWeight: 0,
-      saleType: newProduct.saleType || 'weight'
+      saleType: newProduct.saleType || 'weight',
+      addedBy: (user?.username?.toLowerCase().replace(/^@/, '') === 'magaza' || user?.role === 'shop') ? '@magaza' : (user?.fullName || (user?.username ? `@${user.username.replace(/^@/, '')}` : 'Məlahət')),
+      addedAt: new Date().toISOString()
     };
 
     // Save to server immediately
@@ -414,6 +426,34 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ product: productToAdd })
           }).catch(err => console.error('Remote print failed:', err));
+        }
+
+        // Notify Telegram Product Channel / Group
+        const productChatIds = (settings.telegramProductChatIds || []).filter(Boolean);
+        if (productChatIds.length > 0) {
+          const now = new Date();
+          const formattedDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+          const message = `✨ <b>YENİ MƏHSUL ƏLAVƏ EDİLDİ</b> 📦\n\n` +
+            `🏷️ <b>Kod:</b> <code>${productToAdd.code}</code>\n` +
+            `💎 <b>Ad:</b> ${productToAdd.name}\n` +
+            `📂 <b>Kateqoriya:</b> ${productToAdd.type}\n` +
+            `⚖️ <b>Çəki:</b> ${productToAdd.weight} ${productToAdd.saleType === 'weight' ? 'gr' : 'ədəd'}\n` +
+            `⭐ <b>Əyar:</b> ${productToAdd.carat}\n` +
+            `💰 <b>Satış Qiyməti:</b> ${productToAdd.price} AZN\n` +
+            (productToAdd.supplier ? `🏢 <b>Təchizatçı:</b> ${productToAdd.supplier}\n` : '') +
+            `👤 <b>Əlavə edən:</b> ${user?.username || 'Admin'}\n` +
+            `🕒 <b>Tarix:</b> ${formattedDate}`;
+
+          fetch('/api/notify/telegram', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message,
+              imageUrl: productToAdd.imageUrl || null,
+              type: 'product',
+              chatIds: productChatIds
+            })
+          }).catch(err => console.error('Product telegram notify error:', err));
         }
       } catch (err) {
         console.error('Database save error:', err);
@@ -621,6 +661,8 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
   };
 
   const openDetailModal = async (product: Product) => {
+    setEditSecurityCode('');
+    setEditSecurityError('');
     // If it's a "light" product (no logs), fetch the full data
     if (!product.logs || product.logs.length === 0) {
       setIsDetailLoading(true);
@@ -653,12 +695,66 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
 
   const handleDeleteProduct = async (id: string) => {
     setIdToDelete(id);
+    setDeleteSecurityCode('');
+    setDeleteSecurityError('');
     setShowDeleteConfirm(true);
   };
 
   const confirmDelete = async () => {
     if (!idToDelete) return;
+    
+    const entered = deleteSecurityCode.trim();
+    const validCodes = [
+      settings.deleteCode?.trim(),
+      settings.adminPassword?.trim()
+    ].filter(Boolean);
+
+    if (validCodes.length > 0 && !validCodes.includes(entered)) {
+      setDeleteSecurityError(entered ? 'Təhlükəsizlik kodu yanlışdır!' : 'Zəhmət olmasa təhlükəsizlik kodunu daxil edin');
+      return;
+    }
+
     const id = idToDelete;
+    const productToDelete = products.find(p => p.id === id);
+
+    // Require Patron/Mudir approval if user is not Patron or Mudir
+    if (user?.role !== 'patron' && user?.role !== 'mudir') {
+      const reason = prompt(`Diqqət: Məhsulun silinməsi üçün Müdirin təsdiqi tələb olunur.\n\nMəhsul: ${productToDelete?.name || ''} (${productToDelete?.code || ''})\n\nZəhmət olmasa silinmə səbəbini qeyd edin:`, 'Bazada artıq qeyd edilmişdi');
+      if (!reason || !reason.trim()) {
+        alert('Silinmə səbəbi daxil edilmədiyi üçün əməliyyat ləğv edildi.');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/approvals/request', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'delete_product',
+            employee_name: user?.fullName || user?.username || 'Personal',
+            employee_username: user?.username || 'personal',
+            product_id: id,
+            product_name: productToDelete?.name || id,
+            product_code: productToDelete?.code || id,
+            product_quantity: `${productToDelete?.weight || 0} gr`,
+            reason: reason.trim(),
+            payload: { productId: id }
+          })
+        });
+        if (res.ok) {
+          alert('Məhsulun silinməsi üçün Müdirə təsdiq sorğusu göndərildi. Müdir təsdiq etdikdə məhsul bazadan silinəcəkdir.');
+        } else {
+          alert('Sorğu göndərilərkən xəta baş verdi');
+        }
+      } catch (e) {
+        alert('Serverlə əlaqə kəsildi');
+      }
+      setShowDeleteConfirm(false);
+      setIdToDelete(null);
+      setDeleteSecurityCode('');
+      setDeleteSecurityError('');
+      return;
+    }
 
     try {
       const res = await fetch(`/api/products/${encodeURIComponent(id)}`, {
@@ -667,7 +763,6 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
 
       if (!res.ok) throw new Error('Failed to delete product from database');
 
-      const productToDelete = products.find(p => p.id === id);
       setProducts(prev => prev.filter(p => p.id !== id));
       if (productToDelete) {
         addLog(`Məhsul silindi: ${productToDelete.code}`, 'PRODUCT', `${productToDelete.name}`);
@@ -675,15 +770,29 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
       showNotification('Məhsul uğurla silindi.');
       setShowDeleteConfirm(false);
       setIdToDelete(null);
+      setDeleteSecurityCode('');
+      setDeleteSecurityError('');
     } catch (err) {
       console.error('Delete product error:', err);
       showNotification('Məhsul silinərkən xəta baş verdi.', 'error');
     }
   };
 
-  const handleUpdateProduct = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleUpdateProduct = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!selectedProduct || !editForm.code || !editForm.name) return;
+
+    const entered = editSecurityCode.trim();
+    const validCodes = [
+      settings.deleteCode?.trim(),
+      settings.adminPassword?.trim()
+    ].filter(Boolean);
+
+    if (validCodes.length > 0 && !validCodes.includes(entered)) {
+      setEditSecurityError(entered ? 'Təhlükəsizlik kodu yanlışdır!' : 'Zəhmət olmasa təhlükəsizlik kodunu daxil edin');
+      setShowEditSecurityModal(true);
+      return;
+    }
 
     // Detect stock changes for logging
     const newWeight = editForm.weight !== undefined ? Number(editForm.weight) : Number(selectedProduct.weight);
@@ -717,6 +826,55 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
       logs: productLogs
     } as Product;
     
+    // Require Patron approval if user is not Patron and critical values changed
+    // Require Patron/Mudir approval if user is staff
+    const isMudirOrPatron = user?.role === 'patron' || user?.role === 'mudir';
+    const isGroupChange = editForm.type && editForm.type !== selectedProduct.type;
+    const isDetailChange = editForm.name !== selectedProduct.name || 
+                           Number(editForm.price) !== Number(selectedProduct.price) || 
+                           newWeight !== oldWeight || 
+                           newCount !== oldCount || 
+                           editForm.carat !== selectedProduct.carat;
+
+    if (!isMudirOrPatron && (isGroupChange || isDetailChange)) {
+      const changeType = isGroupChange ? 'change_group' : 'edit_product';
+      const promptTitle = isGroupChange
+        ? `Diqqət: Məhsul qrupunun (${selectedProduct.type} ➔ ${editForm.type}) dəyişdirilməsi üçün Müdirin təsdiqi tələb olunur.\n\nSəbəbi qeyd edin:`
+        : `Diqqət: Məhsul məlumatlarının dəyişdirilməsi üçün Müdirin təsdiqi tələb olunur.\n\nMəhsul: ${selectedProduct.name} (${selectedProduct.code})\n\nSəbəbi qeyd edin:`;
+      
+      const reason = prompt(promptTitle, isGroupChange ? 'Kateqoriya tənzimlənməsi' : 'Qiymət və ya çəki tənzimlənməsi');
+      if (!reason || !reason.trim()) {
+        alert('Dəyişiklik səbəbi daxil edilmədiyi üçün əməliyyat ləğv edildi.');
+        return;
+      }
+
+      fetch('/api/approvals/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: changeType,
+          employee_name: user?.fullName || user?.username || 'Personal',
+          employee_username: user?.username || 'personal',
+          product_id: selectedProduct.id,
+          product_name: selectedProduct.name,
+          product_code: selectedProduct.code,
+          product_quantity: isGroupChange 
+            ? `Qrup: ${selectedProduct.type} ➔ ${editForm.type}` 
+            : `Əvvəl: ${oldWeight}gr / ${selectedProduct.price}₼ ➔ Yeni: ${newWeight}gr / ${editForm.price}₼`,
+          reason: reason.trim(),
+          payload: { product: updatedProduct }
+        })
+      })
+        .then(res => res.json())
+        .then(() => {
+          alert('Təsdiq sorğusu Müdirə göndərildi. Müdir təsdiq etdikdə məhsul yenilənəcəkdir.');
+          setShowEditSecurityModal(false);
+          setShowDetailModal(false);
+        })
+        .catch(() => alert('Sorğu göndərilərkən xəta baş verdi'));
+      return;
+    }
+
     // Save to server immediately
     const saveUpdate = async () => {
       try {
@@ -738,6 +896,10 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
     addLog(`Məhsul redaktə edildi: ${updatedProduct.code}`, 'PRODUCT', `Yeni məlumatlar: ${updatedProduct.name}, ${updatedProduct.weight}gr, ${updatedProduct.carat} əyar`);
     setSelectedProduct(updatedProduct);
     showNotification("Məhsul məlumatları uğurla yeniləndi.");
+    setShowEditSecurityModal(false);
+    setShowDetailModal(false);
+    setEditSecurityCode('');
+    setEditSecurityError('');
   };
 
   const handleAddWeight = async (e: React.FormEvent) => {
@@ -1114,6 +1276,13 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                     setNewProduct({...newProduct, type: newType, code: getNextCode(newPrefix)});
                   }} className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 font-bold text-base text-stone-800 outline-none cursor-pointer">{(settings.productGroups || []).map(g => <option key={g.name} value={g.name}>{g.name}</option>)}</select></div>
                   <div className="space-y-1"><label className="text-[9px] font-black text-stone-400 uppercase ml-2">Tədarükçü</label><select value={newProduct.supplier} onChange={(e) => setNewProduct({...newProduct, supplier: e.target.value})} className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 font-bold text-base text-stone-800 outline-none cursor-pointer">{settings.suppliers.map(s => <option key={s}>{s}</option>)}</select></div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-stone-400 uppercase ml-2">Əlavə Edən Əməkdaş</label>
+                    <div className="w-full bg-stone-100 border border-stone-200 rounded-xl py-3 px-4 font-bold text-sm text-stone-800 flex items-center justify-between">
+                      <span className="truncate">{user?.fullName || user?.username || 'Məlahət'}</span>
+                      <span className="text-[9px] bg-stone-200 text-stone-600 px-2 py-0.5 rounded font-bold uppercase shrink-0">Cari Hesab</span>
+                    </div>
+                  </div>
                   <div className="space-y-1 md:col-span-2">
                     <label className="text-[9px] font-black text-stone-400 uppercase ml-2">Əyar</label>
                     <div className="flex gap-2">
@@ -2405,6 +2574,33 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                             </div>
                           )}
                        </div>
+                       <div className="md:col-span-2 flex flex-col space-y-2 bg-amber-50/70 p-5 rounded-2xl border-2 border-amber-200/80">
+                         <div className="flex items-center justify-between">
+                           <label className="text-xs font-black text-amber-950 uppercase flex items-center tracking-wider">
+                             <ShieldCheck size={16} className="text-amber-600 mr-2" />
+                             Təhlükəsizlik Kodu
+                           </label>
+                           <span className="text-[10px] font-bold text-amber-700 bg-amber-100/80 px-2 py-0.5 rounded-md">
+                             Tələb olunur
+                           </span>
+                         </div>
+                         <p className="text-[11px] text-amber-800/80 font-medium">
+                           Məhsul məlumatlarında edilən dəyişiklikləri yadda saxlamaq üçün təhlükəsizlik kodunu daxil edin.
+                         </p>
+                         <input 
+                           type="password" 
+                           value={editSecurityCode} 
+                           onChange={(e) => { setEditSecurityCode(e.target.value); setEditSecurityError(''); }} 
+                           placeholder="Təhlükəsizlik kodunu daxil edin..." 
+                           className="w-full bg-white border-2 border-amber-200 rounded-xl py-3 px-4 text-sm font-black text-stone-800 outline-none focus:border-amber-500 transition-all placeholder:text-stone-300"
+                         />
+                         {editSecurityError && (
+                           <p className="text-xs font-black text-red-600 flex items-center pt-1">
+                             <AlertCircle size={14} className="mr-1.5" />
+                             {editSecurityError}
+                           </p>
+                         )}
+                       </div>
                   </div>
                </form>
             </main>
@@ -2554,6 +2750,59 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
         </div>
       )}
 
+      {showEditSecurityModal && (
+        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm flex items-center justify-center z-[150] p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-[2.5rem] p-8 max-w-md w-full shadow-2xl border border-stone-100 animate-in zoom-in-95 duration-200">
+            <div className="flex flex-col items-center text-center">
+              <div className="p-4 bg-amber-50 rounded-2xl text-amber-600 mb-5">
+                <ShieldCheck size={36} />
+              </div>
+              <h3 className="text-2xl font-black text-stone-900 mb-2 uppercase tracking-tight">Təhlükəsizlik Kodu</h3>
+              <p className="text-stone-500 font-medium text-xs mb-6">
+                <b>{editForm.code || selectedProduct?.code}</b> kodlu məhsulda edilən dəyişiklikləri yadda saxlamaq üçün təhlükəsizlik kodunu daxil edin:
+              </p>
+              
+              <div className="w-full space-y-2 mb-6 text-left">
+                <input 
+                  type="password"
+                  autoFocus
+                  placeholder="Təhlükəsizlik kodunu daxil edin..."
+                  value={editSecurityCode}
+                  onChange={(e) => { setEditSecurityCode(e.target.value); setEditSecurityError(''); }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleUpdateProduct();
+                    }
+                  }}
+                  className="w-full bg-stone-50 border-2 border-stone-200 rounded-xl py-3.5 px-4 text-center text-lg tracking-widest font-black text-stone-800 outline-none focus:border-amber-500 transition-colors"
+                />
+                {editSecurityError && (
+                  <p className="text-xs font-black text-red-600 text-center">{editSecurityError}</p>
+                )}
+              </div>
+
+              <div className="flex space-x-3 w-full">
+                <button 
+                  type="button"
+                  onClick={() => { setShowEditSecurityModal(false); setEditSecurityError(''); }}
+                  className="flex-1 py-4 bg-stone-100 text-stone-600 font-black rounded-2xl hover:bg-stone-200 transition-all uppercase tracking-widest text-xs"
+                >
+                  Ləğv et
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => handleUpdateProduct()}
+                  className="flex-1 py-4 bg-amber-500 text-stone-950 font-black rounded-2xl hover:bg-amber-400 transition-all shadow-lg shadow-amber-200 uppercase tracking-widest text-xs"
+                >
+                  Təsdiq Et
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
           <div className="bg-white rounded-[2.5rem] p-8 max-w-md w-full shadow-2xl border border-stone-100 animate-in zoom-in-95 duration-200">
@@ -2562,11 +2811,31 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                 <Trash2 size={32} />
               </div>
               <h3 className="text-2xl font-black text-stone-900 mb-2 uppercase tracking-tight">Məhsulu Sil?</h3>
-              <p className="text-stone-500 font-medium mb-8">Bu məhsulu silmək istədiyinizə əminsiniz? Bu əməliyyat geri qaytarıla bilməz.</p>
+              <p className="text-stone-500 font-medium mb-4">Bu məhsulu silmək istədiyinizə əminsiniz? Bu əməliyyat geri qaytarıla bilməz.</p>
               
+              <div className="w-full space-y-2 mb-6 text-left">
+                <label className="text-[10px] font-black text-stone-400 uppercase tracking-widest ml-2">Təhlükəsizlik Kodu</label>
+                <input 
+                  type="password"
+                  placeholder="Təhlükəsizlik kodunu daxil edin..."
+                  value={deleteSecurityCode}
+                  onChange={(e) => { setDeleteSecurityCode(e.target.value); setDeleteSecurityError(''); }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      confirmDelete();
+                    }
+                  }}
+                  className="w-full bg-stone-50 border-2 border-stone-200 rounded-xl py-3 px-4 text-center text-base tracking-widest font-black text-stone-800 outline-none focus:border-red-500"
+                />
+                {deleteSecurityError && (
+                  <p className="text-xs font-black text-red-600 ml-2">{deleteSecurityError}</p>
+                )}
+              </div>
+
               <div className="flex space-x-3 w-full">
                 <button 
-                  onClick={() => { setShowDeleteConfirm(false); setIdToDelete(null); }}
+                  onClick={() => { setShowDeleteConfirm(false); setIdToDelete(null); setDeleteSecurityCode(''); setDeleteSecurityError(''); }}
                   className="flex-1 py-4 bg-stone-100 text-stone-600 font-black rounded-2xl hover:bg-stone-200 transition-all uppercase tracking-widest text-xs"
                 >
                   Ləğv et
