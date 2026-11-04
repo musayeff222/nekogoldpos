@@ -55,14 +55,22 @@ interface StockProps {
   addLog: (action: string, category: SystemLog['category'], details?: string) => void;
   user: AuthUser | null;
   isBackgroundLoading?: boolean;
+  onIsAddingNewChange?: (isAdding: boolean) => void;
 }
 
-const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sales, cart, setCart, setCurrentPage, addLog, user, isBackgroundLoading }) => {
+const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sales, cart, setCart, setCurrentPage, addLog, user, isBackgroundLoading, onIsAddingNewChange }) => {
   const [activeFolder, setActiveFolder] = useState<ProductType | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [isAddingNew, setIsAddingNew] = useState(false);
+
+  useEffect(() => {
+    onIsAddingNewChange?.(isAddingNew);
+    return () => {
+      onIsAddingNewChange?.(false);
+    };
+  }, [isAddingNew, onIsAddingNewChange]);
   const [zoomedProductIndex, setZoomedProductIndex] = useState<number | null>(null);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -1137,11 +1145,11 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
   if (isAddingNew) {
     return (
       <div className="flex flex-col animate-in slide-in-from-right duration-300 min-h-full">
-        <div className="bg-white rounded-3xl shadow-2xl border border-stone-100 flex flex-col overflow-hidden max-h-[calc(100vh-48px)]">
-            <div className="flex items-center justify-between p-4 border-b border-stone-50 bg-stone-50/30">
-              <div className="flex items-center space-x-4">
-                  <button onClick={() => { setIsAddingNew(false); resetForm(); }} className="p-2.5 bg-white border border-stone-200 rounded-xl text-stone-400 hover:text-stone-900 transition-all shadow-sm active:scale-95"><ArrowLeft size={18} /></button>
-                  <h2 className="text-lg font-black text-stone-900 uppercase tracking-tighter leading-none">Yeni Məhsul</h2>
+        <div className="bg-white rounded-2xl md:rounded-3xl shadow-2xl border border-stone-100 flex flex-col overflow-hidden min-h-[calc(100vh-16px)] md:max-h-[calc(100vh-48px)]">
+            <div className="flex items-center justify-between p-3 md:p-4 border-b border-stone-50 bg-stone-50/30">
+              <div className="flex items-center space-x-3 md:space-x-4">
+                  <button onClick={() => { setIsAddingNew(false); resetForm(); }} className="px-3 py-2 md:p-2.5 bg-white border border-stone-200 rounded-xl text-stone-600 hover:text-stone-900 transition-all shadow-sm active:scale-95 flex items-center space-x-1.5"><ArrowLeft size={18} /><span className="text-xs font-bold md:hidden">Geri</span></button>
+                  <h2 className="text-base md:text-lg font-black text-stone-900 uppercase tracking-tighter leading-none">Yeni Məhsul</h2>
               </div>
             </div>
 
@@ -1267,7 +1275,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                 )}
 
 
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-4">
                   <div className="space-y-1"><label className="text-[9px] font-black text-stone-400 uppercase ml-2">Məhsul Kodu</label><input type="text" required value={newProduct.code} onChange={(e) => setNewProduct({...newProduct, code: e.target.value})} className={`w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 font-bold text-base text-stone-800 focus:border-amber-400 outline-none ${(duplicateInStock || duplicateInSales) ? 'border-red-300 bg-red-50' : ''}`} placeholder="YZ-101" /></div>
                   <div className="space-y-1"><label className="text-[9px] font-black text-stone-400 uppercase ml-2">Məhsul Adı</label><input type="text" required value={newProduct.name} onChange={(e) => setNewProduct({...newProduct, name: e.target.value})} className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 font-bold text-base text-stone-800 focus:border-amber-400 outline-none" placeholder="Üzük" /></div>
                   <div className="space-y-1"><label className="text-[9px] font-black text-stone-400 uppercase ml-2">Kateqoriya</label><select value={newProduct.type} onChange={(e) => {
@@ -1276,14 +1284,7 @@ const StockModule: React.FC<StockProps> = ({ products, setProducts, settings, sa
                     setNewProduct({...newProduct, type: newType, code: getNextCode(newPrefix)});
                   }} className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 font-bold text-base text-stone-800 outline-none cursor-pointer">{(settings.productGroups || []).map(g => <option key={g.name} value={g.name}>{g.name}</option>)}</select></div>
                   <div className="space-y-1"><label className="text-[9px] font-black text-stone-400 uppercase ml-2">Tədarükçü</label><select value={newProduct.supplier} onChange={(e) => setNewProduct({...newProduct, supplier: e.target.value})} className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3 px-4 font-bold text-base text-stone-800 outline-none cursor-pointer">{settings.suppliers.map(s => <option key={s}>{s}</option>)}</select></div>
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-stone-400 uppercase ml-2">Əlavə Edən Əməkdaş</label>
-                    <div className="w-full bg-stone-100 border border-stone-200 rounded-xl py-3 px-4 font-bold text-sm text-stone-800 flex items-center justify-between">
-                      <span className="truncate">{user?.fullName || user?.username || 'Məlahət'}</span>
-                      <span className="text-[9px] bg-stone-200 text-stone-600 px-2 py-0.5 rounded font-bold uppercase shrink-0">Cari Hesab</span>
-                    </div>
-                  </div>
-                  <div className="space-y-1 md:col-span-2">
+                  <div className="space-y-1 col-span-2 sm:col-span-4">
                     <label className="text-[9px] font-black text-stone-400 uppercase ml-2">Əyar</label>
                     <div className="flex gap-2">
                        {settings.carats.map(c => (

@@ -48,7 +48,14 @@ const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.Sales);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isAddingProductActive, setIsAddingProductActive] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
+
+  useEffect(() => {
+    if (currentPage !== Page.Stock) {
+      setIsAddingProductActive(false);
+    }
+  }, [currentPage]);
   const [isBackgroundLoading, setIsBackgroundLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -982,7 +989,7 @@ const App: React.FC = () => {
           />
         );
       case Page.Sales: return <SalesModule products={products} setProducts={setProducts} sales={sales} setSales={setSales} customers={customers} setCustomers={setCustomers} settings={settings} cart={cart} setCart={setCart} addLog={addLog} user={user} />;
-      case Page.Stock: return <StockModule products={products} setProducts={setProducts} settings={settings} sales={sales} cart={cart} setCart={setCart} setCurrentPage={setCurrentPage} addLog={addLog} user={user} isBackgroundLoading={isBackgroundLoading} />;
+      case Page.Stock: return <StockModule products={products} setProducts={setProducts} settings={settings} sales={sales} cart={cart} setCart={setCart} setCurrentPage={setCurrentPage} addLog={addLog} user={user} isBackgroundLoading={isBackgroundLoading} onIsAddingNewChange={setIsAddingProductActive} />;
       case Page.Customers: return <CustomersModule customers={customers} setCustomers={setCustomers} sales={sales} addLog={addLog} />;
       case Page.SoldProducts: return <SoldProductsModule sales={sales} setSales={setSales} products={products} setProducts={setProducts} addLog={addLog} settings={settings} />;
       case Page.Return: return <ReturnsModule sales={sales} setSales={setSales} products={products} setProducts={setProducts} addLog={addLog} user={user} />;
@@ -1127,39 +1134,41 @@ const App: React.FC = () => {
       </aside>
 
       {/* MOBILE BOTTOM NAV */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-stone-900 border-t border-white/10 z-50 flex justify-around items-center py-2 px-1 no-print safe-bottom-padding">
-        {navItems.slice(0, 4).map((item) => {
-          const active = item.isActive !== undefined ? item.isActive : currentPage === item.id;
-          return (
-            <button
-              key={String(item.id)}
-              onClick={() => {
-                if (item.onClick) item.onClick();
-                else setCurrentPage(item.id as Page);
-                setIsMobileMenuOpen(false);
-              }}
-              className={`flex flex-col items-center p-2 rounded-xl transition-all relative ${active ? 'text-amber-500 bg-white/5 shadow-inner' : 'text-stone-400'}`}
-            >
-              <div className="relative">
-                {React.cloneElement(item.icon as any, { size: 22 })}
-                {item.badge !== undefined && item.badge > 0 && (
-                  <span className="absolute -top-1.5 -right-2 bg-rose-500 text-white text-[9px] font-black min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center animate-pulse shadow-md">
-                    {item.badge > 9 ? '9+' : item.badge}
-                  </span>
-                )}
-              </div>
-              <span className="text-[8px] font-black mt-1 uppercase tracking-wider">{item.label}</span>
-            </button>
-          );
-        })}
-        <button
-          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className={`flex flex-col items-center p-2 rounded-xl transition-all ${isMobileMenuOpen ? 'text-amber-500 bg-white/5' : 'text-stone-400'}`}
-        >
-          <LayoutGrid size={22} />
-          <span className="text-[8px] font-black mt-1 uppercase tracking-wider">Menyu</span>
-        </button>
-      </nav>
+      {!isAddingProductActive && (
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-stone-900 border-t border-white/10 z-50 flex justify-around items-center py-2 px-1 no-print safe-bottom-padding animate-in slide-in-from-bottom duration-300">
+          {navItems.slice(0, 4).map((item) => {
+            const active = item.isActive !== undefined ? item.isActive : currentPage === item.id;
+            return (
+              <button
+                key={String(item.id)}
+                onClick={() => {
+                  if (item.onClick) item.onClick();
+                  else setCurrentPage(item.id as Page);
+                  setIsMobileMenuOpen(false);
+                }}
+                className={`flex flex-col items-center p-2 rounded-xl transition-all relative ${active ? 'text-amber-500 bg-white/5 shadow-inner' : 'text-stone-400'}`}
+              >
+                <div className="relative">
+                  {React.cloneElement(item.icon as any, { size: 22 })}
+                  {item.badge !== undefined && item.badge > 0 && (
+                    <span className="absolute -top-1.5 -right-2 bg-rose-500 text-white text-[9px] font-black min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center animate-pulse shadow-md">
+                      {item.badge > 9 ? '9+' : item.badge}
+                    </span>
+                  )}
+                </div>
+                <span className="text-[8px] font-black mt-1 uppercase tracking-wider">{item.label}</span>
+              </button>
+            );
+          })}
+          <button
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            className={`flex flex-col items-center p-2 rounded-xl transition-all ${isMobileMenuOpen ? 'text-amber-500 bg-white/5' : 'text-stone-400'}`}
+          >
+            <LayoutGrid size={22} />
+            <span className="text-[8px] font-black mt-1 uppercase tracking-wider">Menyu</span>
+          </button>
+        </nav>
+      )}
 
       {/* MOBILE MENU DRAWER */}
       {isMobileMenuOpen && (
@@ -1214,7 +1223,7 @@ const App: React.FC = () => {
       )}
 
       {/* MAIN CONTENT AREA */}
-      <main className="flex-1 h-full overflow-y-auto bg-stone-50 scrollbar-hide pb-24 md:pb-0 no-print">
+      <main className={`flex-1 h-full overflow-y-auto bg-stone-50 scrollbar-hide no-print ${isAddingProductActive ? 'pb-2 md:pb-0' : 'pb-24 md:pb-0'}`}>
         {syncError && (
           <div className="bg-red-600 text-white p-2 text-center text-[10px] font-black uppercase tracking-widest animate-pulse sticky top-0 z-50">
             {syncError}
@@ -1241,7 +1250,7 @@ const App: React.FC = () => {
             </button>
           </div>
         )}
-        <div className="p-4 md:p-8">
+        <div className={isAddingProductActive ? "p-1 sm:p-3 md:p-8" : "p-4 md:p-8"}>
           {renderModule()}
         </div>
       </main>
