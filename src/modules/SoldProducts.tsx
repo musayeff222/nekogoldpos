@@ -922,7 +922,12 @@ const SoldProductsModule: React.FC<SoldProductsProps> = ({ sales, setSales, prod
                                 Hissə: {s.partialName} ({s.soldWeight} gr)
                               </p>
                             )}
-                            <p className="text-[10px] text-stone-500 font-black mt-1.5 uppercase tracking-widest">{s.productCode} | {s.weight} gr</p>
+                            <div className="flex items-center gap-1.5 mt-1.5">
+                              <span className="font-mono font-black text-xs text-emerald-700 bg-emerald-50 border border-emerald-300 px-2 py-0.5 rounded-lg shadow-2xs">
+                                {s.productCode}
+                              </span>
+                              <span className="text-[11px] text-stone-500 font-bold uppercase tracking-wider">{s.weight} gr</span>
+                            </div>
                           </div>
                         </div>
                       </td>

@@ -362,7 +362,16 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({
                     {a.type === 'return' ? 'Geri Qaytarma' : a.type === 'delete_product' ? 'Məhsul Silinməsi' : 'Redaktə'}
                   </td>
                   <td className="py-3 px-4 font-bold">{a.employee_name}</td>
-                  <td className="py-3 px-4">{a.product_name || a.product_code || '-'}</td>
+                  <td className="py-3 px-4">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-stone-900">{a.product_name || 'Məhsul'}</span>
+                      {a.product_code && (
+                        <span className="font-mono font-black text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-300 px-1.5 py-0.5 rounded">
+                          {a.product_code}
+                        </span>
+                      )}
+                    </div>
+                  </td>
                   <td className="py-3 px-4 text-stone-500 max-w-xs truncate">{a.reason}</td>
                   <td className="py-3 px-4 font-mono text-stone-500">
                     {new Date(a.created_at).toLocaleString('az-AZ')}

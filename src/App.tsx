@@ -969,6 +969,10 @@ const App: React.FC = () => {
           <PatronDashboard
             products={products}
             sales={sales}
+            setProducts={setProducts}
+            setSales={setSales}
+            addLog={addLog}
+            user={user}
             setCurrentPage={setCurrentPage}
             pendingApprovals={pendingApprovals}
             onRefreshApprovals={refreshApprovals}
@@ -1018,11 +1022,16 @@ const App: React.FC = () => {
             <PatronDashboard
               products={products}
               sales={sales}
+              setProducts={setProducts}
+              setSales={setSales}
+              addLog={addLog}
+              user={user}
               setCurrentPage={setCurrentPage}
               pendingApprovals={pendingApprovals}
               onRefreshApprovals={refreshApprovals}
               initialTab={patronActiveTab}
               onTabChange={setPatronActiveTab}
+              logs={logs}
             />
           );
         }

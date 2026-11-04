@@ -39,11 +39,15 @@ import {
   ArrowUpDown,
   RefreshCw
 } from 'lucide-react';
-import { Product, Sale, UserAccount, ApprovalRequest, Page, SystemLog } from '@/types';
+import { Product, Sale, UserAccount, ApprovalRequest, Page, SystemLog, AuthUser } from '@/types';
 
 interface PatronDashboardProps {
   products: Product[];
   sales: Sale[];
+  setProducts?: React.Dispatch<React.SetStateAction<Product[]>>;
+  setSales?: React.Dispatch<React.SetStateAction<Sale[]>>;
+  addLog?: (action: string, category: SystemLog['category'], details?: string) => void;
+  user?: AuthUser | null;
   setCurrentPage: (page: Page) => void;
   onSelectProductForDetails?: (product: Product) => void;
   pendingApprovals: ApprovalRequest[];
@@ -56,6 +60,10 @@ interface PatronDashboardProps {
 export const PatronDashboard: React.FC<PatronDashboardProps> = ({
   products,
   sales,
+  setProducts,
+  setSales,
+  addLog,
+  user,
   setCurrentPage,
   pendingApprovals,
   onRefreshApprovals,
@@ -143,6 +151,100 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
   // Sale details view modal & image zoom states
   const [viewingSale, setViewingSale] = useState<Sale | null>(null);
   const [zoomedSaleImage, setZoomedSaleImage] = useState<string | null>(null);
+
+  // Added product details view modal & image zoom states
+  const [viewingProduct, setViewingProduct] = useState<Product | null>(null);
+  const [zoomedProductImage, setZoomedProductImage] = useState<string | null>(null);
+
+  // Return sale modal states and handler for Patron
+  const [returnConfirmModalSale, setReturnConfirmModalSale] = useState<Sale | null>(null);
+  const [returnReasonInput, setReturnReasonInput] = useState<string>('Müdir tərəfindən geri qaytarıldı');
+  const [isReturningSale, setIsReturningSale] = useState<boolean>(false);
+
+  const executeReturnSale = async () => {
+    if (!returnConfirmModalSale) return;
+    const saleToReturn = returnConfirmModalSale;
+    setIsReturningSale(true);
+    try {
+      const reasonText = returnReasonInput.trim() || 'Müdir tərəfindən geri qaytarıldı';
+
+      // 1. Məhsulu bazada tap və stoka qaytar
+      const targetProduct = products.find(p => p.id === saleToReturn.productId || p.code === saleToReturn.productCode);
+      if (targetProduct) {
+        const currentCount = typeof targetProduct.stockCount === 'number' ? targetProduct.stockCount : 0;
+        const updatedProduct: Product = {
+          ...targetProduct,
+          stockCount: currentCount + 1,
+          isReturned: true,
+          returnReason: reasonText,
+          logs: [
+            {
+              date: new Date().toISOString(),
+              action: `Müdir tərəfindən satışdan geri qaytarıldı və stoka bərpa edildi. Səbəb: ${reasonText}`
+            },
+            ...(targetProduct.logs || [])
+          ]
+        };
+
+        try {
+          await fetch(`/api/products/${updatedProduct.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ product: updatedProduct })
+          });
+        } catch (e) {
+          console.error('Failed to update product on server:', e);
+        }
+
+        if (setProducts) {
+          setProducts(prev => prev.map(p => p.id === updatedProduct.id ? updatedProduct : p));
+        }
+      }
+
+      // 2. Satış qeydini returned et və serverdə yenilə
+      const updatedSale: Sale = {
+        ...saleToReturn,
+        status: 'returned',
+        returnNote: reasonText
+      };
+
+      try {
+        await fetch(`/api/data/sales/${saleToReturn.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ item: updatedSale })
+        });
+      } catch (e) {
+        console.error('Failed to update sale on server:', e);
+      }
+
+      if (setSales) {
+        setSales(prev => prev.map(s => s.id === saleToReturn.id ? updatedSale : s));
+      }
+
+      // 3. Jurnal qeydi
+      if (addLog) {
+        addLog(
+          `GERİ QAYTARMA: ${saleToReturn.productCode}`,
+          'SALE',
+          `Müdir tərəfindən qaytarıldı. Məhsul: ${saleToReturn.productName}, Məbləğ: ${saleToReturn.total} AZN, Müştəri: ${saleToReturn.customerName || 'Ümumi'}`
+        );
+      }
+
+      // 4. Cari baxılan modal varsa yenilə
+      if (viewingSale?.id === saleToReturn.id) {
+        setViewingSale(updatedSale);
+      }
+
+      setReturnConfirmModalSale(null);
+      showNotification(`"${saleToReturn.productName}" uğurla geri qaytarıldı və stoka əlavə edildi!`, 'success');
+    } catch (err) {
+      console.error('Return error:', err);
+      showNotification('Geri qaytarılma zamanı xəta baş verdi', 'error');
+    } finally {
+      setIsReturningSale(false);
+    }
+  };
 
   const getSaleDetails = (s: Sale) => {
     const match = products.find(p => p.id === s.productId || p.code === s.productCode);
@@ -289,10 +391,12 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
 
   const todaySales = (Array.isArray(sales) ? sales : []).filter(s => {
     const saleDateStr = new Date(s.date).toISOString().split('T')[0];
-    return saleDateStr === todayStr && s.status !== 'returned';
+    return saleDateStr === todayStr;
   });
 
-  const todayRevenue = todaySales.reduce((acc, s) => acc + (Number(s.total) || 0), 0);
+  const todayRevenue = todaySales
+    .filter(s => s.status !== 'returned')
+    .reduce((acc, s) => acc + (Number(s.total) || 0), 0);
 
   // Helper to reliably get product timestamp prioritizing actual time with hours & minutes
   const getProductTimestamp = (p: Product): string | undefined => {
@@ -718,17 +822,17 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
                     <Eye size={16} />
                   </div>
                   <div className="min-w-0">
-                    <h3 className="text-sm font-black text-stone-950 truncate">Satış Detalları</h3>
+                    <h3 className="text-sm sm:text-base font-black text-stone-950 truncate">Satış Detalları</h3>
                     <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className="font-mono text-[11px] font-bold text-stone-700 bg-stone-200/70 px-1.5 py-0.2 rounded">
+                      <span className="font-mono text-xs sm:text-sm font-black text-emerald-700 bg-emerald-50 border border-emerald-300 px-2 py-0.5 rounded-lg shadow-2xs">
                         {details.productCode}
                       </span>
-                      <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
+                      <span className={`text-[11px] sm:text-xs font-black px-2.5 py-0.5 rounded-lg border shadow-2xs ${
                         viewingSale.status === 'returned'
-                          ? 'bg-rose-100 text-rose-700'
-                          : 'bg-emerald-100 text-emerald-800'
+                          ? 'bg-rose-100 text-rose-700 border-rose-300'
+                          : 'bg-emerald-100 text-emerald-800 border-emerald-300'
                       }`}>
-                        {viewingSale.status === 'returned' ? 'Qaytarılıb' : 'Tamamlanıb'}
+                        {viewingSale.status === 'returned' ? 'GERİ QAYTARILDI' : 'TAMAMLANIB'}
                       </span>
                     </div>
                   </div>
@@ -746,16 +850,16 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
               <div className="p-5 overflow-y-auto space-y-4">
                 {/* 1. MƏHSULUN RƏSMİ (ƏSAS DETAL) */}
                 <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-[11px] font-bold text-stone-600 uppercase tracking-wider">
+                  <div className="flex items-center justify-between text-xs font-bold text-stone-600 uppercase tracking-wider">
                     <span>Satılan Məhsulun Rəsmi</span>
                     {details.imageUrl && (
                       <button
                         type="button"
                         onClick={() => setZoomedSaleImage(details.imageUrl || null)}
-                        className="text-stone-900 hover:underline flex items-center gap-1 text-[11px] font-bold cursor-pointer"
+                        className="text-stone-900 hover:underline flex items-center gap-1 text-xs font-bold cursor-pointer"
                       >
-                        <ZoomIn size={12} />
-                        <span>Böyüt</span>
+                        <ZoomIn size={14} />
+                        <span>Tam Ölçüdə Bax</span>
                       </button>
                     )}
                   </div>
@@ -775,7 +879,7 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
                         }}
                       />
                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
-                        <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-stone-900/80 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5 shadow-lg backdrop-blur-xs">
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-stone-900/80 text-white text-xs font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5 shadow-lg backdrop-blur-xs">
                           <ZoomIn size={14} />
                           <span>Tam Ölçüdə Bax</span>
                         </div>
@@ -787,7 +891,7 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
                         <ImageIcon size={24} />
                       </div>
                       <p className="text-xs font-bold text-stone-700">Bu məhsul üçün şəkil mövcud deyil</p>
-                      <p className="text-[10px] text-stone-400 mt-0.5">Bazaya daxil edilərkən foto əlavə edilməyib</p>
+                      <p className="text-[11px] text-stone-400 mt-0.5">Bazaya daxil edilərkən foto əlavə edilməyib</p>
                     </div>
                   )}
                 </div>
@@ -795,57 +899,57 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
                 {/* 2. MƏHSUL ADI VƏ ƏSAS GÖSTƏRİCİLƏR */}
                 <div className="bg-stone-50 rounded-2xl p-4 border border-stone-200 space-y-3">
                   <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-stone-500">Məhsulun Adı</span>
-                    <h4 className="text-base font-black text-stone-950 mt-0.5">{details.productName}</h4>
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-stone-500">Məhsulun Adı</span>
+                    <h4 className="text-base sm:text-lg font-black text-stone-950 mt-0.5">{details.productName}</h4>
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-stone-200/80">
-                    <div className="bg-white p-2 rounded-xl border border-stone-200/60 text-center">
-                      <span className="text-[9px] font-bold uppercase text-stone-500 block">Qızıl Əyarı</span>
-                      <span className="text-xs font-black text-stone-900">{details.carat ? `${details.carat} K` : '—'}</span>
+                    <div className="bg-white p-2.5 rounded-xl border border-stone-200/60 text-center">
+                      <span className="text-[10px] font-bold uppercase text-stone-500 block">Qızıl Əyarı</span>
+                      <span className="text-xs sm:text-sm font-black text-stone-900">{details.carat ? `${details.carat} K` : '—'}</span>
                     </div>
-                    <div className="bg-white p-2 rounded-xl border border-stone-200/60 text-center">
-                      <span className="text-[9px] font-bold uppercase text-stone-500 block">Satılan Çəki</span>
-                      <span className="text-xs font-black text-stone-900">
+                    <div className="bg-white p-2.5 rounded-xl border border-stone-200/60 text-center">
+                      <span className="text-[10px] font-bold uppercase text-stone-500 block">Satılan Çəki</span>
+                      <span className="text-xs sm:text-sm font-black text-stone-900">
                         {details.weight ? `${details.weight} gr` : (viewingSale.weight ? `${viewingSale.weight} gr` : '1 əd')}
                       </span>
                     </div>
-                    <div className="bg-white p-2 rounded-xl border border-stone-200/60 text-center">
-                      <span className="text-[9px] font-bold uppercase text-stone-500 block">Növ</span>
-                      <span className="text-xs font-black text-stone-900 truncate block">{details.category}</span>
+                    <div className="bg-white p-2.5 rounded-xl border border-stone-200/60 text-center">
+                      <span className="text-[10px] font-bold uppercase text-stone-500 block">Növ</span>
+                      <span className="text-xs sm:text-sm font-black text-stone-900 truncate block">{details.category}</span>
                     </div>
-                    <div className="bg-white p-2 rounded-xl border border-stone-200/60 text-center">
-                      <span className="text-[9px] font-bold uppercase text-stone-500 block">Tədarükçü</span>
-                      <span className="text-xs font-black text-stone-900 truncate block">{details.supplier || '—'}</span>
+                    <div className="bg-white p-2.5 rounded-xl border border-stone-200/60 text-center">
+                      <span className="text-[10px] font-bold uppercase text-stone-500 block">Tədarükçü</span>
+                      <span className="text-xs sm:text-sm font-black text-stone-900 truncate block">{details.supplier || '—'}</span>
                     </div>
                   </div>
                 </div>
 
                 {/* 3. İŞTİRAKÇILAR: ALICI VƏ SATICI */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <div className="bg-stone-50 p-3 rounded-2xl border border-stone-200">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-stone-500 block mb-1">
+                  <div className="bg-stone-50 p-3.5 rounded-2xl border border-stone-200">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-stone-500 block mb-1">
                       Alıcı (Müştəri)
                     </span>
-                    <p className="text-sm font-black text-stone-950 truncate">
+                    <p className="text-sm sm:text-base font-black text-stone-950 truncate">
                       {viewingSale.customerName || 'Ümumi Müştəri'}
                     </p>
-                    <span className="text-[10px] text-stone-500 mt-0.5 block">Müştəri adı</span>
+                    <span className="text-[11px] text-stone-500 mt-0.5 block">Müştəri adı</span>
                   </div>
 
-                  <div className="bg-stone-50 p-3 rounded-2xl border border-stone-200">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-stone-500 block mb-1">
+                  <div className="bg-stone-50 p-3.5 rounded-2xl border border-stone-200">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-stone-500 block mb-1">
                       Satıcı Personal
                     </span>
                     <div className="flex items-center gap-1.5">
-                      <span className="text-sm font-black text-stone-950 truncate">
+                      <span className="text-sm sm:text-base font-black text-stone-950 truncate">
                         {formatSellerDisplay(viewingSale.sellerName)}
                       </span>
                       <span className="bg-stone-200 text-stone-800 text-[10px] font-bold px-1.5 py-0.2 rounded">
                         İcraçı
                       </span>
                     </div>
-                    <span className="text-[10px] text-stone-500 mt-0.5 block">Satışı qeydə alan əməkdaş</span>
+                    <span className="text-[11px] text-stone-500 mt-0.5 block">Satışı qeydə alan əməkdaş</span>
                   </div>
                 </div>
 
@@ -853,7 +957,7 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
                 <div className="bg-stone-900 text-white rounded-2xl p-4 space-y-2">
                   <div className="flex items-baseline justify-between">
                     <div>
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400 block">
+                      <span className="text-[11px] font-bold uppercase tracking-widest text-stone-400 block">
                         Yekun Satış Məbləği
                       </span>
                       <div className="text-2xl sm:text-3xl font-black text-white mt-0.5">
@@ -861,13 +965,13 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
                       </div>
                     </div>
                     {viewingSale.discount > 0 && (
-                      <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[11px] font-bold px-2 py-1 rounded-lg">
+                      <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold px-2 py-1 rounded-lg">
                         {Number(viewingSale.discount).toLocaleString()} ₼ Endirim
                       </span>
                     )}
                   </div>
 
-                  <div className="pt-2 border-t border-stone-800 flex items-center justify-between text-[11px] text-stone-300 font-mono">
+                  <div className="pt-2 border-t border-stone-800 flex items-center justify-between text-xs text-stone-300 font-mono">
                     <span>Tarix: {new Date(viewingSale.date).toLocaleDateString('az-AZ')}</span>
                     <span>Saat: {new Date(viewingSale.date).toLocaleTimeString('az-AZ')}</span>
                   </div>
@@ -880,14 +984,59 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
                     {viewingSale.returnNote}
                   </div>
                 )}
+
+                {/* GERİ QAYTARMA STATUSU VƏ YA MƏHSULU GERİ QAYTAR BUTONU */}
+                {viewingSale.status === 'returned' ? (
+                  <div className="p-4 bg-rose-50 border-2 border-rose-200 rounded-2xl flex items-center gap-3 text-rose-900 shadow-2xs">
+                    <div className="w-10 h-10 rounded-xl bg-rose-100 border border-rose-300 flex items-center justify-center shrink-0 text-rose-600">
+                      <RotateCcw size={20} />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="font-black text-xs sm:text-sm block text-rose-800">
+                        Bu məhsul geri qaytarılıb
+                      </span>
+                      <span className="text-[11px] text-rose-700 block">
+                        Məhsul təkrar stoka/bazaya bərpa edilib. {viewingSale.returnNote ? `(${viewingSale.returnNote})` : ''}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReturnReasonInput('Müdir tərəfindən geri qaytarıldı');
+                        setReturnConfirmModalSale(viewingSale);
+                      }}
+                      className="w-full py-3.5 px-4 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white text-xs sm:text-sm font-black rounded-2xl transition-all active:scale-[0.98] cursor-pointer shadow-md flex items-center justify-center gap-2 border border-rose-700"
+                    >
+                      <RotateCcw size={16} />
+                      <span>Məhsulu Geri Qaytar (Stoka Qaytar)</span>
+                    </button>
+                    <p className="text-[11px] text-stone-500 text-center mt-1.5 font-medium">
+                      Bu düyməyə basdıqda məhsul bazaya/stoka geri qaytarılacaq və satış qaytarıldı kimi qeyd olunacaq.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* MODAL AYAĞI */}
-              <div className="p-3.5 border-t border-stone-200 bg-stone-50 flex items-center justify-end shrink-0">
+              <div className="p-3.5 border-t border-stone-200 bg-stone-50 flex items-center justify-between gap-2 shrink-0">
+                <span className="text-[11px] font-bold text-stone-500">
+                  {viewingSale.status === 'returned' ? (
+                    <span className="text-rose-600 flex items-center gap-1 font-black">
+                      <RotateCcw size={12} /> Status: Geri qaytarılıb
+                    </span>
+                  ) : (
+                    <span className="text-emerald-700 flex items-center gap-1 font-black">
+                      <CheckCircle2 size={12} /> Status: Aktiv Satış
+                    </span>
+                  )}
+                </span>
                 <button
                   type="button"
                   onClick={() => setViewingSale(null)}
-                  className="w-full sm:w-auto px-6 py-2 bg-stone-900 hover:bg-stone-800 text-white text-xs font-bold rounded-xl transition-all active:scale-95 cursor-pointer shadow-xs"
+                  className="px-6 py-2.5 bg-stone-900 hover:bg-stone-800 text-white text-xs font-bold rounded-xl transition-all active:scale-95 cursor-pointer shadow-xs"
                 >
                   Pəncərəni Bağla
                 </button>
@@ -897,26 +1046,280 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
         );
       })()}
 
-      {/* ŞƏKİL TAM EKRAN BÖYÜTMƏ MODALI */}
-      {zoomedSaleImage && (
+      {/* DETALLI BAZAYA ƏLAVƏ EDİLƏN MƏHSUL VƏ RƏSM MODALI */}
+      {viewingProduct && (() => {
+        const adder = getStaffAdder(viewingProduct);
+        const additionTime = formatProductTime(viewingProduct);
+        return (
+          <div className="fixed inset-0 z-[170] flex items-center justify-center bg-black/70 backdrop-blur-xs p-3 sm:p-5 overflow-y-auto animate-in fade-in duration-150">
+            <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-stone-200 text-stone-900 overflow-hidden my-auto animate-in zoom-in-95 duration-150 flex flex-col max-h-[92vh]">
+              {/* MODAL BAŞLIĞI */}
+              <div className="flex items-center justify-between px-5 py-3.5 border-b border-stone-200 bg-stone-50/80 shrink-0">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <Package size={16} />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-sm sm:text-base font-black text-stone-950 truncate">Bazaya Əlavə Edilən Mal</h3>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="font-mono text-xs sm:text-sm font-black text-emerald-700 bg-emerald-50 border border-emerald-300 px-2.5 py-0.5 rounded-lg shadow-2xs">
+                        {viewingProduct.code}
+                      </span>
+                      <span className="text-[10px] font-bold bg-stone-200 text-stone-800 px-2 py-0.5 rounded-md">
+                        {viewingProduct.type || 'Qızıl'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setViewingProduct(null)}
+                  className="w-8 h-8 rounded-full bg-stone-200/70 hover:bg-stone-300 text-stone-700 flex items-center justify-center transition-colors cursor-pointer"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* MODAL MƏZMUNU */}
+              <div className="p-5 overflow-y-auto space-y-4">
+                {/* 1. MƏHSULUN RƏSMİ */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs font-bold text-stone-600 uppercase tracking-wider">
+                    <span>Məhsulun Rəsmi</span>
+                    {viewingProduct.imageUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setZoomedProductImage(viewingProduct.imageUrl || null)}
+                        className="text-stone-900 hover:underline flex items-center gap-1 text-xs font-bold cursor-pointer"
+                      >
+                        <ZoomIn size={14} />
+                        <span>Tam Ölçüdə Bax</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {viewingProduct.imageUrl ? (
+                    <div 
+                      onClick={() => setZoomedProductImage(viewingProduct.imageUrl || null)}
+                      className="relative bg-gradient-to-b from-stone-100/80 to-stone-200/50 rounded-2xl border border-stone-200/80 overflow-hidden flex items-center justify-center p-4 cursor-pointer group min-h-[180px] max-h-[260px]"
+                    >
+                      <img
+                        src={viewingProduct.imageUrl}
+                        alt={viewingProduct.name}
+                        referrerPolicy="no-referrer"
+                        className="max-h-[220px] w-auto max-w-full object-contain drop-shadow-md rounded-xl transition-transform group-hover:scale-105 duration-200"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-stone-900/80 text-white text-xs font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5 shadow-lg backdrop-blur-xs">
+                          <ZoomIn size={14} />
+                          <span>Tam Ölçüdə Bax</span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-stone-50 rounded-2xl border border-dashed border-stone-300 p-8 flex flex-col items-center justify-center text-center">
+                      <div className="w-12 h-12 rounded-2xl bg-stone-200/70 text-stone-400 flex items-center justify-center mb-2">
+                        <ImageIcon size={24} />
+                      </div>
+                      <p className="text-xs font-bold text-stone-700">Bu məhsul üçün foto əlavə edilməyib</p>
+                      <p className="text-[11px] text-stone-400 mt-0.5">Bazaya daxil edilərkən şəkil çəkilməyib</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. MƏHSUL ADI VƏ GÖSTƏRİCİLƏR */}
+                <div className="bg-stone-50 rounded-2xl p-4 border border-stone-200 space-y-3">
+                  <div>
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-stone-500">Məhsulun Adı</span>
+                    <h4 className="text-base sm:text-lg font-black text-stone-950 mt-0.5">{viewingProduct.name}</h4>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-stone-200/80">
+                    <div className="bg-white p-2.5 rounded-xl border border-stone-200/60 text-center">
+                      <span className="text-[10px] font-bold uppercase text-stone-500 block">Qızıl Əyarı</span>
+                      <span className="text-xs sm:text-sm font-black text-stone-900">{viewingProduct.carat ? `${viewingProduct.carat} K` : '—'}</span>
+                    </div>
+                    <div className="bg-white p-2.5 rounded-xl border border-stone-200/60 text-center">
+                      <span className="text-[10px] font-bold uppercase text-stone-500 block">Çəki / Ədəd</span>
+                      <span className="text-xs sm:text-sm font-black text-stone-900">
+                        {viewingProduct.weight ? `${viewingProduct.weight} gr` : `${viewingProduct.stockCount || 1} ədəd`}
+                      </span>
+                    </div>
+                    <div className="bg-white p-2.5 rounded-xl border border-stone-200/60 text-center">
+                      <span className="text-[10px] font-bold uppercase text-stone-500 block">Növ</span>
+                      <span className="text-xs sm:text-sm font-black text-stone-900 truncate block">{viewingProduct.type || '—'}</span>
+                    </div>
+                    <div className="bg-white p-2.5 rounded-xl border border-stone-200/60 text-center">
+                      <span className="text-[10px] font-bold uppercase text-stone-500 block">Tədarükçü</span>
+                      <span className="text-xs sm:text-sm font-black text-stone-900 truncate block">{viewingProduct.supplier || '—'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. İŞTİRAKÇI VƏ ƏLAVƏ EDİLMƏ ZAMANI */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="bg-stone-50 p-3.5 rounded-2xl border border-stone-200">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-stone-500 block mb-1">
+                      Əlavə Edən Əməkdaş
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-stone-900 text-white font-black text-xs flex items-center justify-center">
+                        {adder.replace(/^@/, '').slice(0, 2).toUpperCase()}
+                      </div>
+                      <span className="text-sm sm:text-base font-black text-stone-950 truncate">
+                        {adder}
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-stone-500 mt-1 block">Malı bazaya qeyd edən şəxs</span>
+                  </div>
+
+                  <div className="bg-stone-50 p-3.5 rounded-2xl border border-stone-200">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-stone-500 block mb-1">
+                      Əlavə Edilmə Zamanı
+                    </span>
+                    <div className="flex items-center gap-1.5 font-mono text-xs sm:text-sm font-black text-stone-900">
+                      <Clock size={15} className="text-emerald-600 shrink-0" />
+                      <span>{additionTime}</span>
+                    </div>
+                    <span className="text-[11px] text-stone-500 mt-1 block">Dəqiq tarix və saat</span>
+                  </div>
+                </div>
+
+                {/* 4. SATIŞ QİYMƏTİ */}
+                <div className="bg-stone-900 text-white rounded-2xl p-4 space-y-1">
+                  <span className="text-[11px] font-bold uppercase tracking-widest text-stone-400 block">
+                    Təyin Edilmiş Satış Qiyməti
+                  </span>
+                  <div className="text-2xl sm:text-3xl font-black text-white">
+                    {viewingProduct.price ? `${Number(viewingProduct.price).toLocaleString()} ₼` : 'Təyin edilməyib'}
+                  </div>
+                </div>
+              </div>
+
+              {/* MODAL AYAĞI */}
+              <div className="p-3.5 border-t border-stone-200 bg-stone-50 flex items-center justify-end shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setViewingProduct(null)}
+                  className="w-full sm:w-auto px-6 py-2.5 bg-stone-900 hover:bg-stone-800 text-white text-xs font-bold rounded-xl transition-all active:scale-95 cursor-pointer shadow-xs"
+                >
+                  Pəncərəni Bağla
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ŞƏKİL TAM EKRAN BÖYÜTMƏ MODALLARI */}
+      {(zoomedSaleImage || zoomedProductImage) && (
         <div 
-          onClick={() => setZoomedSaleImage(null)}
+          onClick={() => {
+            setZoomedSaleImage(null);
+            setZoomedProductImage(null);
+          }}
           className="fixed inset-0 z-[190] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 cursor-zoom-out animate-in fade-in duration-150"
         >
           <div className="relative max-w-4xl max-h-[90vh] flex flex-col items-center">
             <button
               type="button"
-              onClick={() => setZoomedSaleImage(null)}
+              onClick={() => {
+                setZoomedSaleImage(null);
+                setZoomedProductImage(null);
+              }}
               className="absolute -top-12 right-0 bg-white/20 hover:bg-white/40 text-white rounded-full p-2 cursor-pointer transition-colors"
             >
               <X size={20} />
             </button>
             <img
-              src={zoomedSaleImage}
+              src={zoomedSaleImage || zoomedProductImage || ''}
               alt="Məhsulun Tam Ölçülü Şəkli"
               referrerPolicy="no-referrer"
               className="max-h-[85vh] max-w-full object-contain rounded-2xl shadow-2xl border border-white/20"
             />
+          </div>
+        </div>
+      )}
+
+      {/* RETURN CONFIRMATION MODAL */}
+      {returnConfirmModalSale && (
+        <div className="fixed inset-0 z-[180] flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl border border-stone-200 text-stone-900 animate-in zoom-in-95 duration-150 space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto border border-rose-200 shadow-2xs">
+              <RotateCcw size={24} />
+            </div>
+            
+            <div className="text-center">
+              <h3 className="text-base sm:text-lg font-black text-stone-950">
+                Məhsulu Geri Qaytarmaq
+              </h3>
+              <p className="text-xs text-stone-500 mt-1">
+                Bu məhsul satılanlar siyahısında <strong className="text-rose-600 font-bold">GERİ QAYTARILDI</strong> kimi qeyd ediləcək və təkrar <strong className="text-emerald-700 font-bold">stoka/bazaya əlavə olunacaq</strong>.
+              </p>
+            </div>
+
+            <div className="bg-stone-50 border border-stone-200 rounded-2xl p-3.5 space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-stone-500 font-semibold">Məhsul:</span>
+                <span className="font-black text-stone-950 truncate max-w-[200px]">{returnConfirmModalSale.productName}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-stone-500 font-semibold">Kod:</span>
+                <span className="font-mono font-black text-emerald-700 bg-emerald-50 border border-emerald-300 px-2 py-0.5 rounded-md">
+                  {returnConfirmModalSale.productCode}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-stone-500 font-semibold">Müştəri:</span>
+                <span className="font-bold text-stone-900">{returnConfirmModalSale.customerName || 'Ümumi Müştəri'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-stone-500 font-semibold">Məbləğ:</span>
+                <span className="font-black text-stone-950">{Number(returnConfirmModalSale.total).toLocaleString()} ₼</span>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-bold text-stone-600 uppercase tracking-wider block">
+                Geri Qaytarma Səbəbi / Qeyd:
+              </label>
+              <input
+                type="text"
+                value={returnReasonInput}
+                onChange={(e) => setReturnReasonInput(e.target.value)}
+                placeholder="Səbəbi daxil edin..."
+                className="w-full bg-stone-50 border border-stone-300 rounded-xl px-3 py-2 text-xs font-semibold text-stone-900 focus:outline-none focus:ring-2 focus:ring-rose-500"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5 pt-2">
+              <button
+                type="button"
+                disabled={isReturningSale}
+                onClick={() => setReturnConfirmModalSale(null)}
+                className="py-2.5 px-4 rounded-xl border border-stone-200 text-xs font-bold text-stone-700 hover:bg-stone-50 transition-colors cursor-pointer"
+              >
+                İmtina Et
+              </button>
+              <button
+                type="button"
+                disabled={isReturningSale}
+                onClick={executeReturnSale}
+                className="py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-xs font-black text-white shadow-md flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer active:scale-95"
+              >
+                {isReturningSale ? (
+                  <span>Qaytarılır...</span>
+                ) : (
+                  <>
+                    <RotateCcw size={14} />
+                    <span>Bəli, Geri Qaytar</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1026,9 +1429,10 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
       );
     });
 
-    // Summary calculations
-    const totalSalesAmount = filteredSales.reduce((acc, s) => acc + (Number(s.total) || 0), 0);
-    const totalSalesWeight = filteredSales.reduce((acc, s) => acc + (Number(s.soldWeight || s.weight) || 0), 0);
+    // Summary calculations (excluding returned sales from revenue)
+    const activeStaffSales = filteredSales.filter(s => s.status !== 'returned');
+    const totalSalesAmount = activeStaffSales.reduce((acc, s) => acc + (Number(s.total) || 0), 0);
+    const totalSalesWeight = activeStaffSales.reduce((acc, s) => acc + (Number(s.soldWeight || s.weight) || 0), 0);
     const totalAddedWeight = filteredAdded.reduce((acc, p) => acc + (Number(p.weight) || 0), 0);
     const totalAddedRevenue = filteredAdded.reduce((acc, p) => acc + (Number(p.price) || 0), 0);
 
@@ -1426,71 +1830,102 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
                   return (
                     <div
                       key={item.id}
-                      className="bg-white border border-stone-200 hover:border-stone-300 rounded-2xl p-3 shadow-2xs transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
+                      onClick={() => {
+                        if (item.kind === 'sale' && item.sale) setViewingSale(item.sale);
+                        if (item.kind === 'product_add' && item.product) setViewingProduct(item.product);
+                      }}
+                      className="bg-white border-2 border-stone-200/90 hover:border-stone-400 rounded-2xl p-4 shadow-xs transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer"
                     >
                       <div className="flex items-start sm:items-center gap-3 min-w-0">
                         {/* Solda İkon / Baxış Düyməsi */}
                         {item.kind === 'sale' && item.sale ? (
                           <button
                             type="button"
-                            onClick={() => setViewingSale(item.sale!)}
-                            className="w-9 h-9 rounded-xl bg-stone-900 hover:bg-stone-800 text-white flex items-center justify-center shrink-0 cursor-pointer shadow-xs active:scale-95 transition-all"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setViewingSale(item.sale!);
+                            }}
+                            className="w-10 h-10 rounded-xl bg-stone-900 hover:bg-stone-800 text-white flex items-center justify-center shrink-0 cursor-pointer shadow-xs active:scale-95 transition-all"
                             title="Satışın Detallarına və Rəsminə Bax"
                           >
-                            <Eye size={15} />
+                            <Eye size={16} />
                           </button>
-                        ) : item.kind === 'product_add' ? (
-                          <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 flex items-center justify-center shrink-0">
-                            <Package size={16} />
-                          </div>
+                        ) : item.kind === 'product_add' && item.product ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setViewingProduct(item.product!);
+                            }}
+                            className="w-10 h-10 rounded-xl bg-emerald-50 hover:bg-emerald-600 text-emerald-800 hover:text-white border border-emerald-300 flex items-center justify-center shrink-0 cursor-pointer shadow-xs active:scale-95 transition-all"
+                            title="Məhsulun Rəsminə və Detallarına Bax"
+                          >
+                            <Eye size={16} />
+                          </button>
                         ) : (
-                          <div className="w-9 h-9 rounded-xl bg-stone-100 text-stone-700 border border-stone-200 flex items-center justify-center shrink-0">
-                            <Activity size={16} />
+                          <div className="w-10 h-10 rounded-xl bg-stone-100 text-stone-700 border border-stone-200 flex items-center justify-center shrink-0">
+                            <Activity size={18} />
                           </div>
                         )}
 
                         <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${item.badgeColor}`}>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={`text-[11px] font-black px-2 py-0.5 rounded-lg border ${item.badgeColor}`}>
                               {item.badgeText}
                             </span>
-                            <span className="font-bold text-stone-950 text-xs sm:text-sm truncate">
+                            <span className="font-black text-stone-950 text-sm sm:text-base truncate">
                               {item.title}
                             </span>
                           </div>
-                          <p className="text-[11px] text-stone-500 truncate mt-0.5">
+                          <p className="text-xs text-stone-600 font-medium truncate mt-1">
                             {item.subtitle}
                           </p>
                         </div>
                       </div>
 
                       {/* Sağda Məbləğ / Çəki və Tarix */}
-                      <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-stone-100">
+                      <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-stone-100">
                         <div className="text-left sm:text-right">
                           {item.amount !== undefined && item.amount > 0 && (
-                            <span className="font-black text-stone-950 text-xs sm:text-sm block">
+                            <span className="font-black text-stone-950 text-sm sm:text-base block">
                               {item.amount.toLocaleString()} ₼
                             </span>
                           )}
                           {item.weight !== undefined && item.weight > 0 && (
-                            <span className="text-[10px] text-stone-500 font-medium block">
+                            <span className="text-xs text-stone-600 font-bold block">
                               {item.weight.toFixed(2)} gr
                             </span>
                           )}
                         </div>
 
-                        <div className="text-right font-mono text-[11px] text-stone-500 bg-stone-50 border border-stone-200/80 rounded-xl px-2.5 py-1">
-                          <div className="font-bold text-stone-800">{dateFormatted}</div>
-                          <div className="text-[10px] text-stone-400">{timeFormatted}</div>
+                        <div className="text-right font-mono text-xs text-stone-600 bg-stone-50 border border-stone-200/90 rounded-xl px-2.5 py-1">
+                          <div className="font-bold text-stone-900">{dateFormatted}</div>
+                          <div className="text-[11px] text-stone-500">{timeFormatted}</div>
                         </div>
 
                         {item.kind === 'sale' && item.sale && (
                           <button
                             type="button"
-                            onClick={() => setViewingSale(item.sale!)}
-                            className="hidden sm:flex items-center gap-1 px-2.5 py-1 bg-stone-100 hover:bg-stone-900 hover:text-white text-stone-700 rounded-xl text-xs font-bold transition-all cursor-pointer border border-stone-200 shadow-2xs"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setViewingSale(item.sale!);
+                            }}
+                            className="hidden sm:flex items-center gap-1 px-3 py-1.5 bg-stone-100 hover:bg-stone-900 hover:text-white text-stone-800 rounded-xl text-xs font-bold transition-all cursor-pointer border border-stone-200 shadow-2xs"
                           >
-                            <Eye size={12} />
+                            <Eye size={13} />
+                            <span>Bax</span>
+                          </button>
+                        )}
+                        {item.kind === 'product_add' && item.product && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setViewingProduct(item.product!);
+                            }}
+                            className="hidden sm:flex items-center gap-1 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-800 rounded-xl text-xs font-bold transition-all cursor-pointer border border-emerald-300 shadow-2xs"
+                          >
+                            <Eye size={13} />
                             <span>Bax</span>
                           </button>
                         )}
@@ -1512,61 +1947,99 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
               </div>
             ) : (
               <>
-                {/* Mobil Görünüş */}
-                <div className="block sm:hidden space-y-2">
+                {/* Mobil Görünüş (Genişləndirilmiş və Standart Ölçülü Kartlar) */}
+                <div className="block sm:hidden space-y-3">
                   {filteredSales.map((s) => {
                     const details = getSaleDetails(s);
+                    const isRet = s.status === 'returned';
                     return (
-                      <div key={s.id} className="bg-white border border-stone-200 rounded-xl p-3 shadow-2xs space-y-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <button
-                              type="button"
-                              onClick={() => setViewingSale(s)}
-                              className="w-8 h-8 rounded-xl bg-stone-900 hover:bg-stone-800 text-white flex items-center justify-center shrink-0 cursor-pointer shadow-xs active:scale-95 transition-all"
-                              title="Detallı Baxış"
-                            >
-                              <Eye size={15} />
-                            </button>
+                      <div 
+                        key={s.id} 
+                        onClick={() => setViewingSale(s)}
+                        className={`border-2 rounded-2xl p-4 shadow-xs space-y-3 transition-all cursor-pointer active:scale-[0.99] group ${
+                          isRet
+                            ? 'bg-rose-50/40 border-rose-300 hover:border-rose-400'
+                            : 'bg-white border-stone-200/90 hover:border-stone-400'
+                        }`}
+                      >
+                        {/* 1. ÜST SƏTİR: ŞƏKİL, AD, KOD VƏ MƏBLƏĞ */}
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-3 min-w-0">
                             {details.imageUrl ? (
-                              <img
-                                src={details.imageUrl}
-                                alt=""
-                                onClick={() => setViewingSale(s)}
-                                className="w-8 h-8 rounded-lg object-cover border border-stone-200 shrink-0 cursor-pointer"
-                              />
+                              <div className="relative w-12 h-12 rounded-xl overflow-hidden border border-stone-200 shrink-0 bg-stone-100 shadow-2xs group-hover:border-stone-400 transition-colors">
+                                <img
+                                  src={details.imageUrl}
+                                  alt=""
+                                  referrerPolicy="no-referrer"
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    (e.target as HTMLElement).style.display = 'none';
+                                  }}
+                                />
+                              </div>
                             ) : (
-                              <div className="w-8 h-8 rounded-lg bg-stone-100 text-stone-400 flex items-center justify-center border border-stone-200 shrink-0">
-                                <ImageIcon size={14} />
+                              <div className="w-12 h-12 rounded-xl bg-stone-100 text-stone-400 flex items-center justify-center border border-stone-200 shrink-0">
+                                <ImageIcon size={20} />
                               </div>
                             )}
                             <div className="min-w-0">
-                              <span className="text-xs font-bold text-stone-950 truncate block">{s.productName}</span>
-                              <span className="font-mono text-[10px] text-amber-700 font-bold">{s.productCode}</span>
+                              <span className="font-black text-stone-950 text-sm sm:text-base truncate block">
+                                {s.productName}
+                              </span>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className="font-mono font-black text-xs sm:text-sm text-emerald-700 bg-emerald-50 border border-emerald-300 px-2 py-0.5 rounded-lg shadow-2xs">
+                                  {s.productCode}
+                                </span>
+                                <span className="text-[10px] font-bold text-stone-500 bg-stone-100 px-2 py-0.5 rounded-md">
+                                  {s.soldWeight ? `${s.soldWeight} gr` : (s.weight ? `${s.weight} gr` : '1 əd')}
+                                </span>
+                              </div>
                             </div>
                           </div>
                           <div className="text-right shrink-0">
-                            <span className="text-xs font-black text-stone-950 block">
-                              {Number(s.total).toLocaleString()} ₼
-                            </span>
-                            <span className="text-[10px] text-stone-500 font-medium">
-                              {s.soldWeight ? `${s.soldWeight} gr` : (s.weight ? `${s.weight} gr` : '1 əd')}
+                            {isRet ? (
+                              <div className="space-y-1">
+                                <span className="text-[10px] sm:text-xs font-black uppercase text-rose-700 bg-rose-100 border border-rose-300 px-2 py-0.5 rounded-lg block text-center shadow-2xs">
+                                  GERİ QAYTARILDI
+                                </span>
+                                <span className="font-bold text-rose-600 line-through text-xs sm:text-sm block">
+                                  {Number(s.total).toLocaleString()} ₼
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="font-black text-stone-950 text-base sm:text-lg block bg-stone-100 px-2.5 py-1 rounded-xl border border-stone-200/80">
+                                {Number(s.total).toLocaleString()} ₼
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* 2. ORTA SƏTİR: ALICI VƏ SATICI MƏLUMATI */}
+                        <div className="grid grid-cols-2 gap-2 bg-stone-50/80 rounded-xl p-2.5 border border-stone-200/70 text-xs text-stone-700">
+                          <div className="truncate">
+                            <span className="text-[10px] uppercase font-bold text-stone-400 block">Alıcı (Müştəri)</span>
+                            <strong className="text-stone-950 font-black text-xs sm:text-sm truncate block">
+                              {s.customerName || 'Ümumi Müştəri'}
+                            </strong>
+                          </div>
+                          <div className="text-right truncate">
+                            <span className="text-[10px] uppercase font-bold text-stone-400 block">Satıcı</span>
+                            <span className="inline-block bg-stone-100 text-stone-900 px-2 py-0.5 rounded-lg font-black text-xs border border-stone-200 truncate">
+                              {formatSellerDisplay(s.sellerName || selectedStaff.full_name || selectedStaff.username)}
                             </span>
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-1 text-[11px] pt-1.5 border-t border-stone-100">
-                          <div className="text-stone-600 truncate">
-                            Alıcı: <strong className="text-stone-950">{s.customerName || 'Ümumi Müştəri'}</strong>
-                          </div>
-                          <div className="text-stone-600 text-right truncate">
-                            Satıcı: <span className="bg-stone-100 text-stone-900 px-1.5 py-0.5 rounded font-bold text-[10px] border border-stone-200/80">{formatSellerDisplay(s.sellerName || selectedStaff.full_name || selectedStaff.username)}</span>
-                          </div>
-                        </div>
-
-                        <div className="flex justify-between items-center text-[10px] text-stone-400 font-mono pt-0.5">
-                          <span>{new Date(s.date).toLocaleDateString('az-AZ')}</span>
-                          <span>{new Date(s.date).toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit' })}</span>
+                        {/* 3. ALT SƏTİR: TARİX VƏ SAAT */}
+                        <div className="flex items-center justify-between text-xs font-mono font-bold text-stone-600 pt-2 border-t border-stone-100">
+                          <span className="flex items-center gap-1.5">
+                            <Calendar size={13} className="text-stone-400" />
+                            {new Date(s.date).toLocaleDateString('az-AZ')}
+                          </span>
+                          <span className="flex items-center gap-1.5 bg-stone-50 border border-stone-200 px-2 py-0.5 rounded-lg">
+                            <Clock size={13} className="text-stone-400" />
+                            {new Date(s.date).toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
                         </div>
                       </div>
                     );
@@ -1591,8 +2064,9 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
                     <tbody className="divide-y divide-stone-100 font-medium text-stone-800">
                       {filteredSales.map((s) => {
                         const details = getSaleDetails(s);
+                        const isRet = s.status === 'returned';
                         return (
-                          <tr key={s.id} className="hover:bg-stone-50/80 transition-colors">
+                          <tr key={s.id} className={`transition-colors ${isRet ? 'bg-rose-50/60 hover:bg-rose-100/60' : 'hover:bg-stone-50/80'}`}>
                             <td className="py-2.5 px-3 text-center">
                               <button
                                 type="button"
@@ -1604,7 +2078,7 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
                                 <span className="hidden xl:inline">Bax</span>
                               </button>
                             </td>
-                            <td className="py-2.5 px-4 font-mono font-bold text-stone-900">{s.productCode}</td>
+                            <td className="py-2.5 px-4 font-mono font-black text-emerald-700 bg-emerald-50/50">{s.productCode}</td>
                             <td className="py-2.5 px-4 font-bold text-stone-950">
                               <div className="flex items-center gap-2">
                                 {details.imageUrl ? (
@@ -1619,7 +2093,14 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
                                     <ImageIcon size={14} />
                                   </div>
                                 )}
-                                <span className="truncate max-w-[170px]">{s.productName}</span>
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <span className="truncate max-w-[170px]">{s.productName}</span>
+                                  {isRet && (
+                                    <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-rose-100 text-rose-700 border border-rose-300 uppercase shrink-0 shadow-2xs">
+                                      GERİ QAYTARILDI
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </td>
                             <td className="py-2.5 px-4 text-stone-900 font-bold">{s.customerName || 'Ümumi Müştəri'}</td>
@@ -1632,8 +2113,21 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
                             <td className="py-2.5 px-4 font-mono text-stone-600">
                               {new Date(s.date).toLocaleDateString('az-AZ')} {new Date(s.date).toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit' })}
                             </td>
-                            <td className="py-2.5 px-4 text-right font-black text-stone-950">
-                              {Number(s.total).toLocaleString()} ₼
+                            <td className="py-2.5 px-4 text-right">
+                              {isRet ? (
+                                <div>
+                                  <span className="font-bold text-rose-600 line-through text-xs block">
+                                    {Number(s.total).toLocaleString()} ₼
+                                  </span>
+                                  <span className="text-[10px] font-black text-rose-700 block uppercase">
+                                    Qaytarılıb
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="font-black text-stone-950">
+                                  {Number(s.total).toLocaleString()} ₼
+                                </span>
+                              )}
                             </td>
                           </tr>
                         );
@@ -1655,27 +2149,85 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
               </div>
             ) : (
               <>
-                {/* Mobil Görünüş */}
-                <div className="block sm:hidden space-y-2">
+                {/* Mobil Görünüş (Genişləndirilmiş və Standart Ölçülü Kartlar) */}
+                <div className="block sm:hidden space-y-3">
                   {filteredAdded.map((p) => {
                     const pTimeFormatted = formatProductTime(p);
+                    const currentAdder = getStaffAdder(p);
                     return (
-                      <div key={p.id} className="bg-white border border-stone-200 rounded-xl p-3 shadow-2xs space-y-1.5">
-                        <div className="flex justify-between items-start font-bold text-stone-950">
-                          <div>
-                            <span className="text-xs">{p.name}</span>
-                            <div className="font-mono text-[10px] text-amber-700 font-bold">{p.code}</div>
+                      <div 
+                        key={p.id} 
+                        onClick={() => setViewingProduct(p)}
+                        className="bg-white border-2 border-stone-200/90 hover:border-emerald-500/70 rounded-2xl p-4 shadow-xs space-y-3 transition-all cursor-pointer active:scale-[0.99] group"
+                      >
+                        {/* 1. ÜST SƏTİR: ŞƏKİL, AD, KOD VƏ QİYMƏT */}
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            {p.imageUrl ? (
+                              <div className="relative w-12 h-12 rounded-xl overflow-hidden border border-stone-200 shrink-0 bg-stone-100 shadow-2xs group-hover:border-emerald-400 transition-colors">
+                                <img
+                                  src={p.imageUrl}
+                                  alt=""
+                                  referrerPolicy="no-referrer"
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    (e.target as HTMLElement).style.display = 'none';
+                                  }}
+                                />
+                              </div>
+                            ) : (
+                              <div className="w-12 h-12 rounded-xl bg-stone-100 text-stone-400 flex items-center justify-center border border-stone-200 shrink-0">
+                                <ImageIcon size={20} />
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <span className="font-black text-stone-950 text-sm sm:text-base truncate block">
+                                {p.name}
+                              </span>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className="font-mono font-black text-xs sm:text-sm text-emerald-700 bg-emerald-50 border border-emerald-300 px-2 py-0.5 rounded-lg shadow-2xs">
+                                  {p.code}
+                                </span>
+                                <span className="text-[10px] font-bold text-stone-500 bg-stone-100 px-2 py-0.5 rounded-md">
+                                  {p.type || 'Qızıl'}
+                                </span>
+                              </div>
+                            </div>
                           </div>
-                          <span className="text-xs font-black bg-stone-100 px-2 py-0.5 rounded-md">
-                            {p.price ? `${Number(p.price).toLocaleString()} ₼` : '-'}
-                          </span>
+                          <div className="text-right shrink-0">
+                            <span className="font-black text-stone-950 text-sm sm:text-base block bg-stone-100 px-2.5 py-1 rounded-xl border border-stone-200/80">
+                              {p.price ? `${Number(p.price).toLocaleString()} ₼` : '—'}
+                            </span>
+                          </div>
                         </div>
-                        <div className="flex justify-between text-[11px] text-stone-600 pt-1 border-t border-stone-100">
-                          <span>Əyar: {p.carat || '-'}</span>
-                          <span>Çəki: {p.weight} {p.saleType === 'count' ? 'ədəd' : 'gr'}</span>
-                          <span className="font-mono text-stone-500 font-bold">
-                            {pTimeFormatted}
-                          </span>
+
+                        {/* 2. ORTA SƏTİR: ƏYAR VƏ ÇƏKİ */}
+                        <div className="grid grid-cols-2 gap-2 bg-stone-50/80 rounded-xl p-2.5 border border-stone-200/70 text-xs font-semibold text-stone-800">
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-stone-500 block">Qızıl Əyarı</span>
+                            <span className="font-black text-stone-900">{p.carat ? `${p.carat} Əyar` : '—'}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[10px] uppercase font-bold text-stone-500 block">Çəki / Miqdar</span>
+                            <span className="font-black text-stone-900">
+                              {p.weight ? `${p.weight} gr` : `${p.stockCount || 1} ədəd`}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* 3. ALT SƏTİR: ƏLAVƏ EDƏN VƏ ƏLAVƏ EDİLMƏ ZAMANI */}
+                        <div className="flex items-center justify-between gap-2 pt-2 border-t border-stone-100 text-xs">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="text-[11px] text-stone-500 font-bold shrink-0">Əlavə edən:</span>
+                            <span className="inline-flex items-center gap-1 bg-stone-100 text-stone-950 font-black text-xs px-2.5 py-1 rounded-lg border border-stone-200 truncate">
+                              <Users size={12} className="text-stone-500 shrink-0" />
+                              <span className="truncate">{currentAdder}</span>
+                            </span>
+                          </div>
+                          <div className="font-mono text-emerald-900 bg-emerald-50/70 border border-emerald-200 px-2.5 py-1 rounded-lg flex items-center gap-1.5 text-xs font-bold shrink-0 shadow-2xs">
+                            <Clock size={13} className="text-emerald-700 shrink-0" />
+                            <span>{pTimeFormatted}</span>
+                          </div>
                         </div>
                       </div>
                     );
@@ -1687,6 +2239,7 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
                   <table className="w-full text-left text-xs">
                     <thead className="bg-stone-100/70 border-b border-stone-200 text-stone-600 uppercase text-[10px] font-black tracking-wider">
                       <tr>
+                        <th className="py-2.5 px-3 w-14 text-center">Baxış</th>
                         <th className="py-2.5 px-4">Kod</th>
                         <th className="py-2.5 px-4">Məhsulun Adı</th>
                         <th className="py-2.5 px-4">Əyar</th>
@@ -1699,8 +2252,26 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
                       {filteredAdded.map((p) => {
                         const pTimeFormatted = formatProductTime(p);
                         return (
-                          <tr key={p.id} className="hover:bg-stone-50/80 transition-colors">
-                            <td className="py-2.5 px-4 font-mono font-bold text-stone-900">{p.code}</td>
+                          <tr 
+                            key={p.id} 
+                            onClick={() => setViewingProduct(p)}
+                            className="hover:bg-stone-50/80 transition-colors cursor-pointer"
+                          >
+                            <td className="py-2.5 px-3 text-center">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setViewingProduct(p);
+                                }}
+                                className="p-1.5 bg-stone-100 hover:bg-stone-900 hover:text-white text-stone-700 rounded-xl transition-all cursor-pointer shadow-2xs inline-flex items-center gap-1 font-bold text-[11px] active:scale-95"
+                                title="Şəklə və Detallara Bax"
+                              >
+                                <Eye size={14} />
+                                <span className="hidden xl:inline">Bax</span>
+                              </button>
+                            </td>
+                            <td className="py-2.5 px-4 font-mono font-black text-emerald-700 bg-emerald-50/50">{p.code}</td>
                             <td className="py-2.5 px-4 font-bold text-stone-950">{p.name}</td>
                             <td className="py-2.5 px-4">{p.carat || '-'}</td>
                             <td className="py-2.5 px-4 font-semibold text-stone-900">{p.weight} {p.saleType === 'count' ? 'əd' : 'gr'}</td>
@@ -1788,11 +2359,13 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
         const matchCustomer = (s.customerName || '').toLowerCase().includes(q);
         if (!matchCode && !matchName && !matchCustomer) return false;
       }
-      return s.status !== 'returned';
+      return true; // Bütün satışlar, o cümlədən geri qaytarılanlar göstərilir
     });
 
-    const totalSoldAmount = filteredSales.reduce((acc, s) => acc + (Number(s.total) || 0), 0);
-    const totalSoldWeight = filteredSales.reduce((acc, s) => acc + (Number(s.soldWeight || s.weight) || 0), 0);
+    const activeSales = filteredSales.filter(s => s.status !== 'returned');
+    const returnedSalesCount = filteredSales.filter(s => s.status === 'returned').length;
+    const totalSoldAmount = activeSales.reduce((acc, s) => acc + (Number(s.total) || 0), 0);
+    const totalSoldWeight = activeSales.reduce((acc, s) => acc + (Number(s.soldWeight || s.weight) || 0), 0);
 
     return (
       <div className="px-3 py-3 sm:px-6 md:px-8 space-y-4 max-w-7xl mx-auto bg-white min-h-[calc(100vh-4.5rem)] sm:rounded-3xl sm:border sm:border-stone-200/80 shadow-xs text-stone-900 animate-in fade-in duration-150">
@@ -1814,6 +2387,11 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
               <span className="text-[11px] font-bold text-stone-600 bg-stone-100 px-2 py-0.5 rounded-lg border border-stone-200 shrink-0">
                 {filteredSales.length} satış
               </span>
+              {returnedSalesCount > 0 && (
+                <span className="text-[11px] font-black text-rose-700 bg-rose-100 px-2 py-0.5 rounded-lg border border-rose-300 shrink-0 shadow-2xs">
+                  {returnedSalesCount} qaytarılıb
+                </span>
+              )}
             </div>
           </div>
 
@@ -1878,63 +2456,103 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
           </div>
         </div>
 
-        {/* MOBİL GÖRÜNÜŞ (İPHONE KARTLAR) */}
-        <div className="block md:hidden space-y-2">
+        {/* MOBİL GÖRÜNÜŞ (GENİŞLƏNDİRİLMİŞ VƏ STANDART ÖLÇÜLÜ KARTLAR) */}
+        <div className="block md:hidden space-y-3">
           {filteredSales.length === 0 ? (
-            <div className="bg-stone-50 rounded-2xl p-8 text-center border border-stone-200 text-stone-400 text-xs font-semibold">
+            <div className="bg-stone-50 rounded-2xl p-8 text-center border-2 border-stone-200 text-stone-500 text-xs sm:text-sm font-semibold">
               Seçilmiş tarixdə satış qeydə alınmayıb.
             </div>
           ) : (
             filteredSales.map(s => {
               const details = getSaleDetails(s);
               return (
-                <div key={s.id} className="bg-white border border-stone-200 rounded-xl p-3 shadow-2xs space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <button
-                        type="button"
-                        onClick={() => setViewingSale(s)}
-                        className="w-8 h-8 rounded-xl bg-stone-900 hover:bg-stone-800 text-white flex items-center justify-center shrink-0 cursor-pointer shadow-xs active:scale-95 transition-all"
-                        title="Detallı Baxış"
-                      >
-                        <Eye size={15} />
-                      </button>
+                <div 
+                  key={s.id} 
+                  onClick={() => setViewingSale(s)}
+                  className={`border-2 rounded-2xl p-4 shadow-xs space-y-3 transition-all cursor-pointer active:scale-[0.99] group ${
+                    s.status === 'returned'
+                      ? 'bg-rose-50/40 border-rose-300 hover:border-rose-400'
+                      : 'bg-white border-stone-200/90 hover:border-stone-400'
+                  }`}
+                >
+                  {/* 1. ÜST SƏTİR: ŞƏKİL, AD, KOD VƏ MƏBLƏĞ */}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
                       {details.imageUrl ? (
-                        <img
-                          src={details.imageUrl}
-                          alt=""
-                          onClick={() => setViewingSale(s)}
-                          className="w-8 h-8 rounded-lg object-cover border border-stone-200 shrink-0 cursor-pointer"
-                        />
+                        <div className="relative w-12 h-12 rounded-xl overflow-hidden border border-stone-200 shrink-0 bg-stone-100 shadow-2xs group-hover:border-stone-400 transition-colors">
+                          <img
+                            src={details.imageUrl}
+                            alt=""
+                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.display = 'none';
+                            }}
+                          />
+                        </div>
                       ) : (
-                        <div className="w-8 h-8 rounded-lg bg-stone-100 text-stone-400 flex items-center justify-center border border-stone-200 shrink-0">
-                          <ImageIcon size={14} />
+                        <div className="w-12 h-12 rounded-xl bg-stone-100 text-stone-400 flex items-center justify-center border border-stone-200 shrink-0">
+                          <ImageIcon size={20} />
                         </div>
                       )}
                       <div className="min-w-0">
-                        <span className="font-bold text-stone-900 text-xs truncate block">{s.productName}</span>
-                        <span className="font-mono font-bold text-stone-600 text-[10px]">{s.productCode}</span>
+                        <span className="font-black text-stone-950 text-sm sm:text-base truncate block">
+                          {s.productName}
+                        </span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="font-mono font-black text-xs sm:text-sm text-emerald-700 bg-emerald-50 border border-emerald-300 px-2 py-0.5 rounded-lg shadow-2xs">
+                            {s.productCode}
+                          </span>
+                          <span className="text-[10px] font-bold text-stone-500 bg-stone-100 px-2 py-0.5 rounded-md">
+                            {s.soldWeight ? `${s.soldWeight} gr` : (s.weight ? `${s.weight} gr` : '1 əd')}
+                          </span>
+                        </div>
                       </div>
                     </div>
                     <div className="text-right shrink-0">
-                      <span className="font-black text-stone-950 text-xs block">{Number(s.total).toLocaleString()} ₼</span>
-                      <span className="text-[10px] text-stone-500 font-medium">{s.soldWeight ? `${s.soldWeight} gr` : (s.weight ? `${s.weight} gr` : '1 əd')}</span>
+                      {s.status === 'returned' ? (
+                        <div className="space-y-1">
+                          <span className="text-[10px] sm:text-xs font-black uppercase text-rose-700 bg-rose-100 border border-rose-300 px-2 py-0.5 rounded-lg block text-center shadow-2xs">
+                            GERİ QAYTARILDI
+                          </span>
+                          <span className="font-bold text-rose-600 line-through text-xs sm:text-sm block">
+                            {Number(s.total).toLocaleString()} ₼
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="font-black text-stone-950 text-base sm:text-lg block bg-stone-100 px-2.5 py-1 rounded-xl border border-stone-200/80">
+                          {Number(s.total).toLocaleString()} ₼
+                        </span>
+                      )}
                     </div>
                   </div>
 
-                  {/* ALICI VƏ SATICI MƏLUMATI */}
-                  <div className="grid grid-cols-2 gap-1 text-[11px] pt-1.5 border-t border-stone-100">
-                    <div className="text-stone-600 truncate">
-                      Alıcı: <strong className="text-stone-950">{s.customerName || 'Ümumi Müştəri'}</strong>
+                  {/* 2. ORTA SƏTİR: ALICI VƏ SATICI MƏLUMATI */}
+                  <div className="grid grid-cols-2 gap-2 bg-stone-50/80 rounded-xl p-2.5 border border-stone-200/70 text-xs text-stone-700">
+                    <div className="truncate">
+                      <span className="text-[10px] uppercase font-bold text-stone-400 block">Alıcı (Müştəri)</span>
+                      <strong className="text-stone-950 font-black text-xs sm:text-sm truncate block">
+                        {s.customerName || 'Ümumi Müştəri'}
+                      </strong>
                     </div>
-                    <div className="text-stone-600 text-right truncate">
-                      Satıcı: <span className="bg-stone-100 text-stone-900 px-1.5 py-0.5 rounded font-bold text-[10px] border border-stone-200/80">{formatSellerDisplay(s.sellerName)}</span>
+                    <div className="text-right truncate">
+                      <span className="text-[10px] uppercase font-bold text-stone-400 block">Satıcı Personal</span>
+                      <span className="inline-block bg-stone-100 text-stone-900 px-2 py-0.5 rounded-lg font-black text-xs border border-stone-200 truncate">
+                        {formatSellerDisplay(s.sellerName)}
+                      </span>
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between text-[10px] text-stone-400 font-mono pt-1">
-                    <span>{new Date(s.date).toLocaleDateString('az-AZ')}</span>
-                    <span>{new Date(s.date).toLocaleTimeString('az-AZ')}</span>
+                  {/* 3. ALT SƏTİR: TARİX VƏ SAAT */}
+                  <div className="flex items-center justify-between text-xs font-mono font-bold text-stone-600 pt-2 border-t border-stone-100">
+                    <span className="flex items-center gap-1.5">
+                      <Calendar size={13} className="text-stone-400" />
+                      {new Date(s.date).toLocaleDateString('az-AZ')}
+                    </span>
+                    <span className="flex items-center gap-1.5 bg-stone-50 border border-stone-200 px-2 py-0.5 rounded-lg">
+                      <Clock size={13} className="text-stone-400" />
+                      {new Date(s.date).toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
                   </div>
                 </div>
               );
@@ -1962,8 +2580,9 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
               <tbody className="divide-y divide-stone-100 font-medium text-stone-800">
                 {filteredSales.map(s => {
                   const details = getSaleDetails(s);
+                  const isRet = s.status === 'returned';
                   return (
-                    <tr key={s.id} className="hover:bg-stone-50 transition-colors">
+                    <tr key={s.id} className={`transition-colors ${isRet ? 'bg-rose-50/60 hover:bg-rose-100/60' : 'hover:bg-stone-50'}`}>
                       <td className="py-2.5 px-3 text-center">
                         <button
                           type="button"
@@ -1975,7 +2594,7 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
                           <span className="hidden xl:inline">Bax</span>
                         </button>
                       </td>
-                      <td className="py-2.5 px-3 font-mono font-bold text-stone-900">{s.productCode}</td>
+                      <td className="py-2.5 px-3 font-mono font-black text-emerald-700 bg-emerald-50/50">{s.productCode}</td>
                       <td className="py-2.5 px-3 font-bold text-stone-950">
                         <div className="flex items-center gap-2">
                           {details.imageUrl ? (
@@ -1990,7 +2609,14 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
                               <ImageIcon size={14} />
                             </div>
                           )}
-                          <span className="truncate max-w-[170px]">{s.productName}</span>
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="truncate max-w-[170px]">{s.productName}</span>
+                            {isRet && (
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-rose-100 text-rose-700 border border-rose-300 uppercase shrink-0 shadow-2xs">
+                                GERİ QAYTARILDI
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td className="py-2.5 px-3 font-bold text-stone-900">{s.customerName || 'Ümumi Müştəri'}</td>
@@ -2004,8 +2630,21 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
                       <td className="py-2.5 px-3 font-mono text-stone-600">
                         {new Date(s.date).toLocaleDateString('az-AZ')} {new Date(s.date).toLocaleTimeString('az-AZ')}
                       </td>
-                      <td className="py-2.5 px-3 text-right font-black text-stone-950">
-                        {Number(s.total).toLocaleString()} ₼
+                      <td className="py-2.5 px-3 text-right">
+                        {isRet ? (
+                          <div>
+                            <span className="font-bold text-rose-600 line-through text-xs block">
+                              {Number(s.total).toLocaleString()} ₼
+                            </span>
+                            <span className="text-[10px] font-black text-rose-700 block uppercase">
+                              Qaytarılıb
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="font-black text-stone-950">
+                            {Number(s.total).toLocaleString()} ₼
+                          </span>
+                        )}
                       </td>
                     </tr>
                   );
@@ -2134,46 +2773,90 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
           </div>
         </div>
 
-        {/* MOBİL GÖRÜNÜŞ (İPHONE KARTLAR) */}
-        <div className="block md:hidden space-y-2">
+        {/* MOBİL GÖRÜNÜŞ (GENİŞLƏNDİRİLMİŞ VƏ STANDART ÖLÇÜLÜ KARTLAR) */}
+        <div className="block md:hidden space-y-3">
           {filteredAdded.length === 0 ? (
-            <div className="bg-stone-50 rounded-2xl p-8 text-center border border-stone-200 text-stone-400 text-xs font-semibold">
+            <div className="bg-stone-50 rounded-2xl p-8 text-center border-2 border-stone-200 text-stone-500 text-xs sm:text-sm font-semibold">
               Seçilmiş tarixdə bazaya yeni mal əlavə edilməyib.
             </div>
           ) : (
             filteredAdded.map(p => {
-              const timeStr = formatProductTimeOnly(p);
+              const fullTimeStr = formatProductTime(p);
               const currentAdder = getStaffAdder(p);
               return (
-                <div key={p.id} className="bg-white border border-stone-200 rounded-xl p-3 shadow-2xs space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-stone-900 text-xs truncate max-w-[65%]">{p.name}</span>
-                    <span className="font-black text-stone-900 text-xs shrink-0">
-                      {p.price ? `${Number(p.price).toLocaleString()} ₼` : '-'}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between text-[11px] text-stone-500">
-                    <span className="font-mono font-bold text-stone-800 bg-stone-100 px-1.5 py-0.5 rounded text-[10px]">
-                      {p.code}
-                    </span>
-                    <span className="font-medium text-stone-600">
-                      {p.carat ? `${p.carat} əyar • ` : ''}{p.weight ? `${p.weight} gr` : `${p.stockCount} ədəd`}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between text-[11px] text-stone-600 pt-1.5 border-t border-stone-100">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="text-[10px] text-stone-400 font-bold shrink-0">Əlavə edən:</span>
-                      <span className="inline-flex items-center gap-1 bg-stone-100 text-stone-900 font-black text-xs px-2 py-0.5 rounded-lg border border-stone-200">
-                        <Users size={11} className="text-stone-500" />
-                        <span>{currentAdder}</span>
+                <div 
+                  key={p.id} 
+                  onClick={() => setViewingProduct(p)}
+                  className="bg-white border-2 border-stone-200/90 hover:border-emerald-500/70 rounded-2xl p-4 shadow-xs space-y-3 transition-all cursor-pointer active:scale-[0.99] group"
+                >
+                  {/* 1. ÜST SƏTİR: ŞƏKİL, AD, KOD VƏ QİYMƏT */}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      {p.imageUrl ? (
+                        <div className="relative w-12 h-12 rounded-xl overflow-hidden border border-stone-200 shrink-0 bg-stone-100 shadow-2xs group-hover:border-emerald-400 transition-colors">
+                          <img
+                            src={p.imageUrl}
+                            alt=""
+                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.display = 'none';
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-12 h-12 rounded-xl bg-stone-100 text-stone-400 flex items-center justify-center border border-stone-200 shrink-0">
+                          <ImageIcon size={20} />
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <span className="font-black text-stone-950 text-sm sm:text-base truncate block">
+                          {p.name}
+                        </span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="font-mono font-black text-xs sm:text-sm text-emerald-700 bg-emerald-50 border border-emerald-300 px-2 py-0.5 rounded-lg shadow-2xs">
+                            {p.code}
+                          </span>
+                          <span className="text-[10px] font-bold text-stone-500 bg-stone-100 px-2 py-0.5 rounded-md">
+                            {p.type || 'Qızıl'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="font-black text-stone-950 text-sm sm:text-base block bg-stone-100 px-2.5 py-1 rounded-xl border border-stone-200/80">
+                        {p.price ? `${Number(p.price).toLocaleString()} ₼` : '—'}
                       </span>
                     </div>
-                    <span className="font-mono text-stone-500 flex items-center gap-1 text-[10px] shrink-0 font-bold">
-                      <Clock size={11} className="text-stone-400" />
-                      {timeStr}
-                    </span>
+                  </div>
+
+                  {/* 2. ORTA SƏTİR: ƏYAR VƏ ÇƏKİ */}
+                  <div className="grid grid-cols-2 gap-2 bg-stone-50/80 rounded-xl p-2.5 border border-stone-200/70 text-xs font-semibold text-stone-800">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-stone-500 block">Qızıl Əyarı</span>
+                      <span className="font-black text-stone-900">{p.carat ? `${p.carat} Əyar` : '—'}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[10px] uppercase font-bold text-stone-500 block">Çəki / Miqdar</span>
+                      <span className="font-black text-stone-900">
+                        {p.weight ? `${p.weight} gr` : `${p.stockCount || 1} ədəd`}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 3. ALT SƏTİR: ƏLAVƏ EDƏN VƏ ƏLAVƏ EDİLMƏ ZAMANI */}
+                  <div className="flex items-center justify-between gap-2 pt-2 border-t border-stone-100 text-xs">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-[11px] text-stone-500 font-bold shrink-0">Əlavə edən:</span>
+                      <span className="inline-flex items-center gap-1 bg-stone-100 text-stone-950 font-black text-xs px-2.5 py-1 rounded-lg border border-stone-200 truncate">
+                        <Users size={12} className="text-stone-500 shrink-0" />
+                        <span className="truncate">{currentAdder}</span>
+                      </span>
+                    </div>
+                    <div className="font-mono text-emerald-900 bg-emerald-50/70 border border-emerald-200 px-2.5 py-1 rounded-lg flex items-center gap-1.5 text-xs font-bold shrink-0 shadow-2xs">
+                      <Clock size={13} className="text-emerald-700 shrink-0" />
+                      <span>{fullTimeStr}</span>
+                    </div>
                   </div>
                 </div>
               );
@@ -2187,6 +2870,7 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
             <table className="w-full text-left text-xs">
               <thead className="bg-stone-50 border-b border-stone-200 text-stone-500 uppercase text-[10px] font-bold tracking-wider">
                 <tr>
+                  <th className="py-2.5 px-3 w-14 text-center">Baxış</th>
                   <th className="py-2.5 px-3">Kod</th>
                   <th className="py-2.5 px-3">Məhsul</th>
                   <th className="py-2.5 px-3">Kateqoriya / Əyar</th>
@@ -2201,18 +2885,53 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
                   const timeStr = formatProductTime(p);
                   const currentAdder = getStaffAdder(p);
                   return (
-                    <tr key={p.id} className="hover:bg-stone-50 transition-colors">
-                      <td className="py-2.5 px-3 font-mono font-bold text-stone-900">{p.code}</td>
-                      <td className="py-2.5 px-3 font-bold text-stone-950">{p.name}</td>
+                    <tr 
+                      key={p.id} 
+                      onClick={() => setViewingProduct(p)}
+                      className="hover:bg-stone-50 transition-colors cursor-pointer"
+                    >
+                      <td className="py-2.5 px-3 text-center">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setViewingProduct(p);
+                          }}
+                          className="p-1.5 bg-stone-100 hover:bg-stone-900 hover:text-white text-stone-700 rounded-xl transition-all cursor-pointer shadow-2xs inline-flex items-center gap-1 font-bold text-[11px] active:scale-95"
+                          title="Şəklə və Detallara Bax"
+                        >
+                          <Eye size={14} />
+                          <span className="hidden xl:inline">Bax</span>
+                        </button>
+                      </td>
+                      <td className="py-2.5 px-3 font-mono font-black text-emerald-700 bg-emerald-50/50">
+                        {p.code}
+                      </td>
+                      <td className="py-2.5 px-3 font-bold text-stone-950">
+                        <div className="flex items-center gap-2">
+                          {p.imageUrl ? (
+                            <img
+                              src={p.imageUrl}
+                              alt=""
+                              className="w-8 h-8 rounded-lg object-cover border border-stone-200 shrink-0"
+                            />
+                          ) : (
+                            <div className="w-8 h-8 rounded-lg bg-stone-100 text-stone-400 flex items-center justify-center border border-stone-200 shrink-0">
+                              <ImageIcon size={14} />
+                            </div>
+                          )}
+                          <span className="truncate max-w-[170px]">{p.name}</span>
+                        </div>
+                      </td>
                       <td className="py-2.5 px-3 text-stone-500">{p.type} {p.carat ? `(${p.carat})` : ''}</td>
-                      <td className="py-2.5 px-3">{p.weight ? `${p.weight} gr` : `${p.stockCount} ədəd`}</td>
+                      <td className="py-2.5 px-3 font-bold text-stone-900">{p.weight ? `${p.weight} gr` : `${p.stockCount || 1} ədəd`}</td>
                       <td className="py-2.5 px-3">
                         <span className="inline-flex items-center gap-1.5 bg-stone-100 text-stone-900 font-black px-2.5 py-1 rounded-lg text-xs border border-stone-200">
                           <Users size={12} className="text-stone-500" />
                           <span>{currentAdder}</span>
                         </span>
                       </td>
-                      <td className="py-2.5 px-3 font-mono text-stone-600 font-bold">{timeStr}</td>
+                      <td className="py-2.5 px-3 font-mono text-stone-700 font-bold">{timeStr}</td>
                       <td className="py-2.5 px-3 text-right font-black text-stone-950">
                         {p.price ? `${Number(p.price).toLocaleString()} ₼` : '-'}
                       </td>
@@ -2292,50 +3011,50 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
           </div>
         </div>
 
-        {/* PERSONAL KARTLARI */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5 sm:gap-3">
+        {/* PERSONAL KARTLARI (STANDART ÖLÇÜLÜ VƏ OXUNAQLI) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
           {staffMembers.map((staff) => {
             const stats = getStaffStats(staff, staffDateFilter);
             return (
               <div
                 key={staff.id}
-                className="bg-white border border-stone-200 hover:border-stone-300 rounded-2xl p-3.5 shadow-2xs transition-all flex flex-col justify-between"
+                className="bg-white border-2 border-stone-200/90 hover:border-stone-400 rounded-2xl p-4 shadow-xs transition-all flex flex-col justify-between space-y-3"
               >
                 <div>
-                  <div className="flex items-center gap-2.5 mb-2.5">
-                    <div className="w-10 h-10 rounded-xl bg-stone-100 text-stone-800 font-bold text-xs flex items-center justify-center border border-stone-200 shrink-0">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-11 h-11 rounded-xl bg-stone-900 text-white font-black text-sm flex items-center justify-center shrink-0 shadow-2xs">
                       {(staff.full_name || staff.username).slice(0, 2).toUpperCase()}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <h4 className="text-sm font-bold text-stone-900 truncate">
+                      <h4 className="text-sm sm:text-base font-black text-stone-950 truncate">
                         {staff.full_name || staff.username}
                       </h4>
                       <div className="flex items-center gap-1.5 mt-0.5">
-                        <span className="text-[9px] font-bold uppercase bg-stone-100 text-stone-600 px-1.5 py-0.2 rounded">
-                          {staff.role === 'shop' ? 'Mağaza' : 'İşçi'}
+                        <span className="text-[10px] font-bold uppercase bg-stone-100 text-stone-700 px-2 py-0.5 rounded-md border border-stone-200">
+                          {staff.role === 'shop' ? 'Mağaza' : 'Personal'}
                         </span>
-                        <span className="text-[10px] text-stone-400 font-mono truncate">@{staff.username}</span>
+                        <span className="text-xs text-stone-500 font-mono font-bold truncate">@{staff.username}</span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-1 bg-stone-50 rounded-xl p-2 border border-stone-100 text-center">
+                  <div className="grid grid-cols-3 gap-1.5 bg-stone-50 rounded-xl p-2.5 border border-stone-200/80 text-center">
                     <div>
-                      <span className="text-[9px] text-stone-500 uppercase block font-semibold">Satış</span>
-                      <span className="font-bold text-stone-900 text-xs">{stats.sales.length}</span>
+                      <span className="text-[10px] text-stone-500 uppercase block font-bold">Satış</span>
+                      <span className="font-black text-stone-950 text-xs sm:text-sm">{stats.sales.length}</span>
                     </div>
-                    <div className="border-x border-stone-200/60 px-1">
-                      <span className="text-[9px] text-stone-500 uppercase block font-semibold">Məbləğ</span>
-                      <span className="font-bold text-stone-900 text-xs">{stats.totalSoldAmount.toLocaleString()} ₼</span>
+                    <div className="border-x border-stone-200 px-1">
+                      <span className="text-[10px] text-stone-500 uppercase block font-bold">Məbləğ</span>
+                      <span className="font-black text-stone-950 text-xs sm:text-sm">{stats.totalSoldAmount.toLocaleString()} ₼</span>
                     </div>
                     <div>
-                      <span className="text-[9px] text-stone-500 uppercase block font-semibold">Əlavə</span>
-                      <span className="font-bold text-stone-900 text-xs">{stats.addedProducts.length}</span>
+                      <span className="text-[10px] text-stone-500 uppercase block font-bold">Əlavə</span>
+                      <span className="font-black text-stone-950 text-xs sm:text-sm">{stats.addedProducts.length}</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="mt-3 pt-2 border-t border-stone-100 space-y-1.5">
+                <div className="pt-2 border-t border-stone-100 space-y-2">
                   <button
                     type="button"
                     onClick={() => {
@@ -2343,9 +3062,9 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
                       setStaffTimeMode('today');
                       setStaffActiveView('timeline');
                     }}
-                    className="w-full bg-stone-900 hover:bg-stone-800 text-white font-bold text-xs py-2 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-2xs active:scale-98 cursor-pointer"
+                    className="w-full bg-stone-900 hover:bg-stone-800 text-white font-black text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-xs active:scale-98 cursor-pointer"
                   >
-                    <Eye size={13} />
+                    <Eye size={14} />
                     <span>Gündəlik Əməliyyatlar (Bugün)</span>
                   </button>
 
@@ -2356,13 +3075,13 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
                       setStaffTimeMode('all');
                       setStaffActiveView('timeline');
                     }}
-                    className="w-full bg-stone-100 hover:bg-stone-200 text-stone-900 font-bold text-xs py-2 rounded-xl flex items-center justify-center gap-1.5 transition-all border border-stone-300 shadow-2xs active:scale-98 cursor-pointer"
+                    className="w-full bg-stone-100 hover:bg-stone-200 text-stone-900 font-black text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all border border-stone-300 shadow-2xs active:scale-98 cursor-pointer"
                   >
-                    <History size={13} className="text-stone-700" />
+                    <History size={14} className="text-stone-700" />
                     <span>🕒 Bütün Keçmiş Hərəkətlər</span>
                   </button>
 
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-2 pt-0.5">
                     <button
                       type="button"
                       onClick={() => { setShowResetModal(staff); setResetPasswordInput(''); }}
@@ -2460,57 +3179,104 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
           </div>
         </div>
 
-        {/* İPHONE MOBİL KARTLAR */}
-        <div className="block md:hidden space-y-2">
+        {/* MOBİL GÖRÜNÜŞ (GENİŞLƏNDİRİLMİŞ VƏ STANDART ÖLÇÜLÜ KARTLAR) */}
+        <div className="block md:hidden space-y-3">
           {todaySales.length === 0 ? (
-            <div className="py-12 text-center text-stone-400 text-xs font-semibold bg-stone-50 rounded-2xl border border-stone-200">
+            <div className="py-12 text-center text-stone-500 text-xs sm:text-sm font-semibold bg-stone-50 rounded-2xl border-2 border-stone-200">
               Bu gün hələ satış yoxdur.
             </div>
           ) : (
             todaySales.map(s => {
               const details = getSaleDetails(s);
+              const isRet = s.status === 'returned';
               return (
-                <div key={s.id} className="bg-white border border-stone-200 rounded-xl p-3 shadow-2xs space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <button
-                        type="button"
-                        onClick={() => setViewingSale(s)}
-                        className="w-8 h-8 rounded-xl bg-stone-900 hover:bg-stone-800 text-white flex items-center justify-center shrink-0 cursor-pointer shadow-xs active:scale-95 transition-all"
-                        title="Detallı Baxış"
-                      >
-                        <Eye size={15} />
-                      </button>
+                <div 
+                  key={s.id} 
+                  onClick={() => setViewingSale(s)}
+                  className={`border-2 rounded-2xl p-4 shadow-xs space-y-3 transition-all cursor-pointer active:scale-[0.99] group ${
+                    isRet
+                      ? 'bg-rose-50/40 border-rose-300 hover:border-rose-400'
+                      : 'bg-white border-stone-200/90 hover:border-stone-400'
+                  }`}
+                >
+                  {/* 1. ÜST SƏTİR: ŞƏKİL, AD, KOD VƏ MƏBLƏĞ */}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
                       {details.imageUrl ? (
-                        <img
-                          src={details.imageUrl}
-                          alt=""
-                          onClick={() => setViewingSale(s)}
-                          className="w-8 h-8 rounded-lg object-cover border border-stone-200 shrink-0 cursor-pointer"
-                        />
+                        <div className="relative w-12 h-12 rounded-xl overflow-hidden border border-stone-200 shrink-0 bg-stone-100 shadow-2xs group-hover:border-stone-400 transition-colors">
+                          <img
+                            src={details.imageUrl}
+                            alt=""
+                            referrerPolicy="no-referrer"
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.display = 'none';
+                            }}
+                          />
+                        </div>
                       ) : (
-                        <div className="w-8 h-8 rounded-lg bg-stone-100 text-stone-400 flex items-center justify-center border border-stone-200 shrink-0">
-                          <ImageIcon size={14} />
+                        <div className="w-12 h-12 rounded-xl bg-stone-100 text-stone-400 flex items-center justify-center border border-stone-200 shrink-0">
+                          <ImageIcon size={20} />
                         </div>
                       )}
                       <div className="min-w-0">
-                        <span className="font-bold text-stone-900 text-xs truncate block">{s.productName}</span>
-                        <span className="font-mono text-stone-600 font-bold text-[10px]">{s.productCode}</span>
+                        <span className="font-black text-stone-950 text-sm sm:text-base truncate block">
+                          {s.productName}
+                        </span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="font-mono font-black text-xs sm:text-sm text-emerald-700 bg-emerald-50 border border-emerald-300 px-2 py-0.5 rounded-lg shadow-2xs">
+                            {s.productCode}
+                          </span>
+                          <span className="text-[10px] font-bold text-stone-500 bg-stone-100 px-2 py-0.5 rounded-md">
+                            {s.soldWeight ? `${s.soldWeight} gr` : (s.weight ? `${s.weight} gr` : '1 əd')}
+                          </span>
+                        </div>
                       </div>
                     </div>
                     <div className="text-right shrink-0">
-                      <span className="font-black text-stone-950 text-xs block">{Number(s.total).toLocaleString()} ₼</span>
-                      <span className="font-mono text-[10px] text-stone-500">{new Date(s.date).toLocaleTimeString('az-AZ')}</span>
+                      {isRet ? (
+                        <div className="space-y-1">
+                          <span className="text-[10px] sm:text-xs font-black uppercase text-rose-700 bg-rose-100 border border-rose-300 px-2 py-0.5 rounded-lg block text-center shadow-2xs">
+                            GERİ QAYTARILDI
+                          </span>
+                          <span className="font-bold text-rose-600 line-through text-xs sm:text-sm block">
+                            {Number(s.total).toLocaleString()} ₼
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="font-black text-stone-950 text-base sm:text-lg block bg-stone-100 px-2.5 py-1 rounded-xl border border-stone-200/80">
+                          {Number(s.total).toLocaleString()} ₼
+                        </span>
+                      )}
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-1 text-[11px] pt-1.5 border-t border-stone-100">
-                    <div className="text-stone-600 truncate">
-                      Alıcı: <strong className="text-stone-950">{s.customerName || 'Ümumi Müştəri'}</strong>
+                  {/* 2. ORTA SƏTİR: ALICI VƏ SATICI MƏLUMATI */}
+                  <div className="grid grid-cols-2 gap-2 bg-stone-50/80 rounded-xl p-2.5 border border-stone-200/70 text-xs text-stone-700">
+                    <div className="truncate">
+                      <span className="text-[10px] uppercase font-bold text-stone-400 block">Alıcı (Müştəri)</span>
+                      <strong className="text-stone-950 font-black text-xs sm:text-sm truncate block">
+                        {s.customerName || 'Ümumi Müştəri'}
+                      </strong>
                     </div>
-                    <div className="text-stone-600 text-right truncate">
-                      Satıcı: <span className="bg-stone-100 text-stone-900 px-1.5 py-0.5 rounded font-bold text-[10px] border border-stone-200/80">{formatSellerDisplay(s.sellerName)}</span>
+                    <div className="text-right truncate">
+                      <span className="text-[10px] uppercase font-bold text-stone-400 block">Satıcı</span>
+                      <span className="inline-block bg-stone-100 text-stone-900 px-2 py-0.5 rounded-lg font-black text-xs border border-stone-200 truncate">
+                        {formatSellerDisplay(s.sellerName)}
+                      </span>
                     </div>
+                  </div>
+
+                  {/* 3. ALT SƏTİR: SAAT */}
+                  <div className="flex items-center justify-between text-xs font-mono font-bold text-stone-600 pt-2 border-t border-stone-100">
+                    <span className="flex items-center gap-1.5">
+                      <Calendar size={13} className="text-stone-400" />
+                      Bugün
+                    </span>
+                    <span className="flex items-center gap-1.5 bg-stone-50 border border-stone-200 px-2 py-0.5 rounded-lg">
+                      <Clock size={13} className="text-stone-400" />
+                      {new Date(s.date).toLocaleTimeString('az-AZ', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
                   </div>
                 </div>
               );
@@ -2536,8 +3302,9 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
               <tbody className="divide-y divide-stone-100 font-medium text-stone-800">
                 {todaySales.map(s => {
                   const details = getSaleDetails(s);
+                  const isRet = s.status === 'returned';
                   return (
-                    <tr key={s.id} className="hover:bg-stone-50 transition-colors">
+                    <tr key={s.id} className={`transition-colors ${isRet ? 'bg-rose-50/60 hover:bg-rose-100/60' : 'hover:bg-stone-50'}`}>
                       <td className="py-2.5 px-3 text-center">
                         <button
                           type="button"
@@ -2549,7 +3316,7 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
                           <span className="hidden xl:inline">Bax</span>
                         </button>
                       </td>
-                      <td className="py-2.5 px-3 font-mono font-bold text-stone-900">{s.productCode}</td>
+                      <td className="py-2.5 px-3 font-mono font-black text-emerald-700 bg-emerald-50/50">{s.productCode}</td>
                       <td className="py-2.5 px-3 font-bold text-stone-950">
                         <div className="flex items-center gap-2">
                           {details.imageUrl ? (
@@ -2564,7 +3331,14 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
                               <ImageIcon size={14} />
                             </div>
                           )}
-                          <span className="truncate max-w-[170px]">{s.productName}</span>
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="truncate max-w-[170px]">{s.productName}</span>
+                            {isRet && (
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-rose-100 text-rose-700 border border-rose-300 uppercase shrink-0 shadow-2xs">
+                                GERİ QAYTARILDI
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td className="py-2.5 px-3 font-bold text-stone-900">{s.customerName || 'Ümumi Müştəri'}</td>
@@ -2576,8 +3350,21 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
                       <td className="py-2.5 px-3 font-mono text-stone-500">
                         {new Date(s.date).toLocaleTimeString('az-AZ')}
                       </td>
-                      <td className="py-2.5 px-3 text-right font-black text-stone-900">
-                        {Number(s.total).toLocaleString()} ₼
+                      <td className="py-2.5 px-3 text-right">
+                        {isRet ? (
+                          <div>
+                            <span className="font-bold text-rose-600 line-through text-xs block">
+                              {Number(s.total).toLocaleString()} ₼
+                            </span>
+                            <span className="text-[10px] font-black text-rose-700 block uppercase">
+                              Qaytarılıb
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="font-black text-stone-900">
+                            {Number(s.total).toLocaleString()} ₼
+                          </span>
+                        )}
                       </td>
                     </tr>
                   );
@@ -2648,8 +3435,8 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
         </div>
       </div>
 
-      {/* 4 ƏSAS KART (HƏR BİRİNƏ DOKUNDUQDA MÜVAFİQ BÖLMƏ TƏK SƏHİFƏ FUL EKRAN MODUNDA AÇILIR) */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+      {/* 4 ƏSAS KART (STANDART ÖLÇÜLÜ VƏ BÖYÜDÜLMÜŞ OXUNAQLI ŞRİFTLƏR) */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3.5">
         {/* 1. Bugünkü Satış Kartı */}
         <button
           type="button"
@@ -2659,22 +3446,22 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
             setSoldSellerFilter('all');
             setSoldSearchQuery('');
           }}
-          className="text-left p-2.5 sm:p-3 rounded-2xl border border-stone-200/90 bg-stone-50/90 hover:bg-stone-100 hover:border-stone-400 transition-all active:scale-[0.98] cursor-pointer flex flex-col justify-between group shadow-2xs"
+          className="text-left p-3.5 sm:p-4 rounded-2xl border-2 border-stone-200/90 bg-stone-50/90 hover:bg-stone-100 hover:border-stone-400 transition-all active:scale-[0.98] cursor-pointer flex flex-col justify-between group shadow-xs"
         >
           <div className="flex items-center justify-between w-full">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-stone-500 group-hover:text-stone-900">
+            <p className="text-xs font-bold uppercase tracking-wider text-stone-600 group-hover:text-stone-950">
               Bugünkü Satış
             </p>
-            <ArrowRight size={13} className="text-stone-400 transition-transform group-hover:translate-x-0.5 group-hover:text-stone-900" />
+            <ArrowRight size={14} className="text-stone-400 transition-transform group-hover:translate-x-0.5 group-hover:text-stone-950" />
           </div>
-          <p className="text-base sm:text-xl font-black text-stone-950 mt-1">
+          <p className="text-lg sm:text-2xl font-black text-stone-950 mt-1.5">
             {todayRevenue.toLocaleString()} ₼
           </p>
-          <div className="flex items-center justify-between w-full mt-0.5">
-            <span className="text-[10px] font-medium text-stone-500">
+          <div className="flex items-center justify-between w-full mt-1">
+            <span className="text-xs font-semibold text-stone-500">
               {todaySales.length} əməliyyat
             </span>
-            <span className="text-[9px] font-bold underline text-stone-700 group-hover:text-stone-950">
+            <span className="text-xs font-black underline text-stone-800 group-hover:text-stone-950">
               Bax →
             </span>
           </div>
@@ -2689,22 +3476,22 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
             setAddedFilterStaff('all');
             setAddedSearchQuery('');
           }}
-          className="text-left p-2.5 sm:p-3 rounded-2xl border border-stone-200/90 bg-stone-50/90 hover:bg-stone-100 hover:border-stone-400 transition-all active:scale-[0.98] cursor-pointer flex flex-col justify-between group shadow-2xs"
+          className="text-left p-3.5 sm:p-4 rounded-2xl border-2 border-stone-200/90 bg-stone-50/90 hover:bg-stone-100 hover:border-stone-400 transition-all active:scale-[0.98] cursor-pointer flex flex-col justify-between group shadow-xs"
         >
           <div className="flex items-center justify-between w-full">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-stone-500 group-hover:text-stone-900">
+            <p className="text-xs font-bold uppercase tracking-wider text-stone-600 group-hover:text-stone-950">
               Bazaya Əlavə
             </p>
-            <ArrowRight size={13} className="text-stone-400 transition-transform group-hover:translate-x-0.5 group-hover:text-stone-900" />
+            <ArrowRight size={14} className="text-stone-400 transition-transform group-hover:translate-x-0.5 group-hover:text-stone-950" />
           </div>
-          <p className="text-base sm:text-xl font-black text-stone-950 mt-1">
+          <p className="text-lg sm:text-2xl font-black text-stone-950 mt-1.5">
             {todayAddedProducts.length} ədəd
           </p>
-          <div className="flex items-center justify-between w-full mt-0.5">
-            <span className="text-[10px] font-medium text-stone-500">
+          <div className="flex items-center justify-between w-full mt-1">
+            <span className="text-xs font-semibold text-stone-500">
               Bugün daxil olan
             </span>
-            <span className="text-[9px] font-bold underline text-stone-700 group-hover:text-stone-950">
+            <span className="text-xs font-black underline text-stone-800 group-hover:text-stone-950">
               Bax →
             </span>
           </div>
@@ -2714,22 +3501,22 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
         <button
           type="button"
           onClick={() => handleTabChange('staff')}
-          className="text-left p-2.5 sm:p-3 rounded-2xl border border-stone-200/90 bg-stone-50/90 hover:bg-stone-100 hover:border-stone-400 transition-all active:scale-[0.98] cursor-pointer flex flex-col justify-between group shadow-2xs"
+          className="text-left p-3.5 sm:p-4 rounded-2xl border-2 border-stone-200/90 bg-stone-50/90 hover:bg-stone-100 hover:border-stone-400 transition-all active:scale-[0.98] cursor-pointer flex flex-col justify-between group shadow-xs"
         >
           <div className="flex items-center justify-between w-full">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-stone-500 group-hover:text-stone-900">
+            <p className="text-xs font-bold uppercase tracking-wider text-stone-600 group-hover:text-stone-950">
               Personallar
             </p>
-            <ArrowRight size={13} className="text-stone-400 transition-transform group-hover:translate-x-0.5 group-hover:text-stone-900" />
+            <ArrowRight size={14} className="text-stone-400 transition-transform group-hover:translate-x-0.5 group-hover:text-stone-950" />
           </div>
-          <p className="text-base sm:text-xl font-black text-stone-950 mt-1">
+          <p className="text-lg sm:text-2xl font-black text-stone-950 mt-1.5">
             {staffMembers.length} nəfər
           </p>
-          <div className="flex items-center justify-between w-full mt-0.5">
-            <span className="text-[10px] font-medium text-stone-500">
+          <div className="flex items-center justify-between w-full mt-1">
+            <span className="text-xs font-semibold text-stone-500">
               Aktiv heyət
             </span>
-            <span className="text-[9px] font-bold underline text-stone-700 group-hover:text-stone-950">
+            <span className="text-xs font-black underline text-stone-800 group-hover:text-stone-950">
               Bax →
             </span>
           </div>
@@ -2739,35 +3526,35 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
         <button
           type="button"
           onClick={() => setCurrentPage(Page.Approvals)}
-          className={`text-left p-2.5 sm:p-3 rounded-2xl border transition-all active:scale-[0.98] cursor-pointer flex flex-col justify-between group shadow-2xs ${
+          className={`text-left p-3.5 sm:p-4 rounded-2xl border-2 transition-all active:scale-[0.98] cursor-pointer flex flex-col justify-between group shadow-xs ${
             pendingCount > 0
-              ? 'bg-rose-50/80 border-rose-300 text-rose-950 hover:bg-rose-100/80'
+              ? 'bg-rose-50/80 border-rose-400 text-rose-950 hover:bg-rose-100/80'
               : 'bg-stone-50/90 hover:bg-stone-100 hover:border-stone-400 border-stone-200/90 text-stone-900'
           }`}
         >
           <div className="flex items-center justify-between w-full">
-            <p className={`text-[10px] font-bold uppercase tracking-wider ${
-              pendingCount > 0 ? 'text-rose-700 font-black' : 'text-stone-500 group-hover:text-stone-900'
+            <p className={`text-xs font-bold uppercase tracking-wider ${
+              pendingCount > 0 ? 'text-rose-700 font-black' : 'text-stone-600 group-hover:text-stone-950'
             }`}>
               Təsdiq Gözləyən
             </p>
-            <ArrowRight size={13} className={`transition-transform group-hover:translate-x-0.5 ${
-              pendingCount > 0 ? 'text-rose-600' : 'text-stone-400 group-hover:text-stone-900'
+            <ArrowRight size={14} className={`transition-transform group-hover:translate-x-0.5 ${
+              pendingCount > 0 ? 'text-rose-600' : 'text-stone-400 group-hover:text-stone-950'
             }`} />
           </div>
-          <p className={`text-base sm:text-xl font-black mt-1 ${
+          <p className={`text-lg sm:text-2xl font-black mt-1.5 ${
             pendingCount > 0 ? 'text-rose-700' : 'text-stone-950'
           }`}>
             {pendingCount} sorğu
           </p>
-          <div className="flex items-center justify-between w-full mt-0.5">
-            <span className={`text-[10px] font-medium ${
-              pendingCount > 0 ? 'text-rose-700 font-semibold' : 'text-stone-500'
+          <div className="flex items-center justify-between w-full mt-1">
+            <span className={`text-xs font-semibold ${
+              pendingCount > 0 ? 'text-rose-700' : 'text-stone-500'
             }`}>
               {pendingCount > 0 ? 'Təcili baxış' : 'Qaytarma / silmə'}
             </span>
-            <span className={`text-[9px] font-bold underline ${
-              pendingCount > 0 ? 'text-rose-800' : 'text-stone-700 group-hover:text-stone-950'
+            <span className={`text-xs font-black underline ${
+              pendingCount > 0 ? 'text-rose-800' : 'text-stone-800 group-hover:text-stone-950'
             }`}>
               Bax →
             </span>
@@ -2779,15 +3566,15 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
       {pendingCount > 0 && (
         <div 
           onClick={() => setCurrentPage(Page.Approvals)}
-          className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 flex items-center justify-between gap-2 text-xs text-amber-900 cursor-pointer active:bg-amber-100 transition-colors shadow-2xs"
+          className="bg-amber-50 border border-amber-300 rounded-xl px-3.5 py-2.5 flex items-center justify-between gap-2 text-xs text-amber-950 cursor-pointer active:bg-amber-100 transition-colors shadow-2xs"
         >
           <div className="flex items-center gap-2 min-w-0">
-            <AlertTriangle size={15} className="text-amber-600 shrink-0" />
-            <span className="font-bold text-[11px] sm:text-xs truncate">
+            <AlertTriangle size={16} className="text-amber-600 shrink-0" />
+            <span className="font-bold text-xs sm:text-sm truncate">
               {pendingCount} əməliyyat sizin təsdiqinizi gözləyir
             </span>
           </div>
-          <span className="text-[11px] font-black text-amber-700 underline shrink-0">
+          <span className="text-xs font-black text-amber-800 underline shrink-0">
             Bax →
           </span>
         </div>
@@ -2803,22 +3590,22 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
             setSoldSellerFilter('all');
             setSoldSearchQuery('');
           }}
-          className="bg-white border border-stone-200 hover:border-stone-400 rounded-2xl p-4 shadow-2xs transition-all cursor-pointer flex flex-col justify-between group"
+          className="bg-white border-2 border-stone-200/90 hover:border-stone-400 rounded-2xl p-4 shadow-xs transition-all cursor-pointer flex flex-col justify-between group"
         >
           <div>
             <div className="flex items-center justify-between mb-2">
               <div className="w-9 h-9 rounded-xl bg-stone-100 text-stone-800 flex items-center justify-center border border-stone-200">
                 <ShoppingBag size={18} />
               </div>
-              <span className="text-[10px] font-bold text-stone-500 uppercase bg-stone-100 px-2 py-0.5 rounded">
+              <span className="text-xs font-bold text-stone-600 uppercase bg-stone-100 px-2 py-0.5 rounded">
                 Bugünkü Satış
               </span>
             </div>
-            <h3 className="text-lg font-black text-stone-900">{todayRevenue.toLocaleString()} ₼</h3>
+            <h3 className="text-xl font-black text-stone-950">{todayRevenue.toLocaleString()} ₼</h3>
             <p className="text-xs text-stone-500 mt-1">{todaySales.length} əməliyyat qeydə alınıb</p>
 
             {todaySales.length > 0 && (
-              <div className="mt-3 pt-2.5 border-t border-stone-100 space-y-1">
+              <div className="mt-3 pt-2.5 border-t border-stone-100 space-y-1.5">
                 {todaySales.slice(0, 3).map(s => (
                   <div 
                     key={s.id} 
@@ -2826,14 +3613,14 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
                       e.stopPropagation();
                       setViewingSale(s);
                     }}
-                    className="flex items-center justify-between text-[11px] text-stone-600 hover:text-stone-950 p-1 rounded-lg hover:bg-stone-50 transition-colors cursor-pointer"
+                    className="flex items-center justify-between text-xs text-stone-700 hover:text-stone-950 p-1.5 rounded-lg hover:bg-stone-50 transition-colors cursor-pointer"
                     title="Detallara bax"
                   >
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <Eye size={12} className="text-stone-400 shrink-0" />
-                      <span className="truncate max-w-[120px] font-medium">{s.productName}</span>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Eye size={13} className="text-stone-400 shrink-0" />
+                      <span className="truncate max-w-[130px] font-bold text-stone-900">{s.productName}</span>
                     </div>
-                    <span className="font-bold text-stone-900 shrink-0">{Number(s.total).toLocaleString()} ₼</span>
+                    <span className="font-black text-stone-950 shrink-0">{Number(s.total).toLocaleString()} ₼</span>
                   </div>
                 ))}
               </div>
@@ -2854,26 +3641,39 @@ export const PatronDashboard: React.FC<PatronDashboardProps> = ({
             setAddedFilterStaff('all');
             setAddedSearchQuery('');
           }}
-          className="bg-white border border-stone-200 hover:border-stone-400 rounded-2xl p-4 shadow-2xs transition-all cursor-pointer flex flex-col justify-between group"
+          className="bg-white border-2 border-stone-200/90 hover:border-stone-400 rounded-2xl p-4 shadow-xs transition-all cursor-pointer flex flex-col justify-between group"
         >
           <div>
             <div className="flex items-center justify-between mb-2">
               <div className="w-9 h-9 rounded-xl bg-stone-100 text-stone-800 flex items-center justify-center border border-stone-200">
                 <Package size={18} />
               </div>
-              <span className="text-[10px] font-bold text-stone-500 uppercase bg-stone-100 px-2 py-0.5 rounded">
+              <span className="text-xs font-bold text-stone-600 uppercase bg-stone-100 px-2 py-0.5 rounded">
                 Bazaya Əlavə
               </span>
             </div>
-            <h3 className="text-lg font-black text-stone-900">{todayAddedProducts.length} ədəd</h3>
+            <h3 className="text-xl font-black text-stone-950">{todayAddedProducts.length} ədəd</h3>
             <p className="text-xs text-stone-500 mt-1">Bugün daxil olan mallar ({todayAddedWeight.toFixed(1)} gr)</p>
 
             {todayAddedProducts.length > 0 && (
-              <div className="mt-3 pt-2.5 border-t border-stone-100 space-y-1">
+              <div className="mt-3 pt-2.5 border-t border-stone-100 space-y-1.5">
                 {todayAddedProducts.slice(0, 3).map(p => (
-                  <div key={p.id} className="flex justify-between text-[11px] text-stone-600">
-                    <span className="truncate max-w-[65%] font-medium">{p.name}</span>
-                    <span className="font-bold text-stone-900 font-mono">{p.code}</span>
+                  <div 
+                    key={p.id} 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setViewingProduct(p);
+                    }}
+                    className="flex justify-between items-center text-xs text-stone-700 hover:text-stone-950 p-1.5 rounded-lg hover:bg-stone-50 transition-colors cursor-pointer"
+                    title="Detallara və Şəklə Bax"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Eye size={13} className="text-stone-400 shrink-0" />
+                      <span className="truncate max-w-[140px] font-bold text-stone-900">{p.name}</span>
+                    </div>
+                    <span className="font-mono font-black text-xs text-emerald-700 bg-emerald-50 border border-emerald-300 px-2 py-0.5 rounded-md shrink-0">
+                      {p.code}
+                    </span>
                   </div>
                 ))}
               </div>

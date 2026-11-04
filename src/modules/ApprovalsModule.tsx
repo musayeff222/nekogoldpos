@@ -253,7 +253,7 @@ export const ApprovalsModule: React.FC<ApprovalsModuleProps> = ({
                 <span className="text-[10px] font-black uppercase tracking-wider text-stone-400 block mb-0.5">
                   Barkod / Kod:
                 </span>
-                <span className="font-mono font-bold text-stone-900 bg-stone-200/90 px-2 py-0.5 rounded text-xs">
+                <span className="font-mono font-black text-xs sm:text-sm text-emerald-700 bg-emerald-50 border border-emerald-300 px-2 py-0.5 rounded-lg shadow-2xs">
                   {currentApproval.product_code || '-'}
                 </span>
               </div>
@@ -613,34 +613,36 @@ export const ApprovalsModule: React.FC<ApprovalsModuleProps> = ({
               <div
                 key={item.id}
                 onClick={() => setSelectedApprovalId(item.id)}
-                className={`bg-white rounded-2xl p-3.5 sm:p-4 border transition-all cursor-pointer group shadow-2xs hover:shadow-md hover:border-stone-900 ${
+                className={`bg-white rounded-2xl p-4 border-2 transition-all cursor-pointer group shadow-xs hover:shadow-md hover:border-stone-900 ${
                   isPending
                     ? 'border-stone-900/80 bg-stone-50/20'
-                    : 'border-stone-200 hover:border-stone-400'
+                    : 'border-stone-200/90 hover:border-stone-400'
                 }`}
               >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-8 h-8 rounded-xl bg-stone-100 group-hover:bg-stone-900 group-hover:text-white transition-colors flex items-center justify-center shrink-0">
-                      <TypeIcon size={16} />
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-xl bg-stone-100 group-hover:bg-stone-900 group-hover:text-white transition-colors flex items-center justify-center shrink-0 shadow-2xs">
+                      <TypeIcon size={18} />
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs sm:text-sm font-black text-stone-950 truncate">
+                        <span className="text-sm sm:text-base font-black text-stone-950 truncate">
                           {item.product_name || item.product_code || 'Məhsul'}
                         </span>
-                        <span className="font-mono text-[10px] text-stone-500 bg-stone-100 px-1.5 py-0.5 rounded shrink-0">
-                          {item.product_code || '-'}
-                        </span>
+                        {item.product_code && (
+                          <span className="font-mono font-black text-xs text-emerald-700 bg-emerald-50 border border-emerald-300 px-2 py-0.5 rounded-lg shadow-2xs shrink-0">
+                            {item.product_code}
+                          </span>
+                        )}
                       </div>
-                      <p className="text-[11px] text-stone-500 font-medium truncate mt-0.5">
-                        <strong className="text-stone-800">{item.employee_name}</strong> • {typeLabel}
+                      <p className="text-xs text-stone-600 font-medium truncate mt-0.5">
+                        <strong className="text-stone-900 font-bold">{item.employee_name}</strong> • {typeLabel}
                       </p>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider border ${
+                    <span className={`px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider border ${
                       isPending
                         ? 'bg-amber-50 text-amber-900 border-amber-300'
                         : isApproved
@@ -650,9 +652,9 @@ export const ApprovalsModule: React.FC<ApprovalsModuleProps> = ({
                       {isPending ? '⏳ Gözləyir' : isApproved ? '✅ Təsdiqlənib' : '❌ İmtina'}
                     </span>
 
-                    <span className="px-2.5 py-1 bg-stone-900 group-hover:bg-black text-white text-[11px] font-bold rounded-xl flex items-center gap-1 transition-all shadow-2xs">
-                      <span>Aç</span>
-                      <ChevronRight size={13} className="transition-transform group-hover:translate-x-0.5" />
+                    <span className="px-3 py-1.5 bg-stone-900 group-hover:bg-black text-white text-xs font-black rounded-xl flex items-center gap-1 transition-all shadow-2xs">
+                      <span>Bax</span>
+                      <ChevronRight size={14} className="transition-transform group-hover:translate-x-0.5" />
                     </span>
                   </div>
                 </div>
